@@ -1,0 +1,286 @@
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const { pool } = require('../db');
+
+const router = express.Router();
+const JWT_SECRET = 'game-secret-key-change-in-production';
+
+function auth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: '인증 토큰이 필요합니다.' });
+  }
+  try {
+    req.user = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
+  }
+}
+
+const SLOT_NAMES = {
+  helmet: '투구',
+  chest: '갑옷',
+  boots: '장화',
+  weapon: '무기',
+  shield: '방패',
+  ring: '반지',
+  necklace: '목걸이',
+};
+
+// 장비 슬롯 + 인벤토리 조회
+router.get('/info', auth, async (req, res) => {
+  try {
+    const [chars] = await pool.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    if (chars.length === 0) return res.json({ equipped: {}, inventory: [] });
+
+    const charId = chars[0].id;
+
+    // 장착 중인 장비
+    const [equipped] = await pool.query(
+      `SELECT e.slot, e.item_id, it.*
+       FROM equipment e
+       JOIN items it ON e.item_id = it.id
+       WHERE e.character_id = ?`,
+      [charId]
+    );
+
+    const equippedMap = {};
+    equipped.forEach((e) => {
+      equippedMap[e.slot] = {
+        item_id: e.item_id,
+        name: e.name,
+        type: e.type,
+        slot: e.slot,
+        weapon_hand: e.weapon_hand,
+        description: e.description,
+        effect_hp: e.effect_hp,
+        effect_mp: e.effect_mp,
+        effect_attack: e.effect_attack,
+        effect_defense: e.effect_defense,
+        effect_phys_attack: e.effect_phys_attack || 0,
+        effect_phys_defense: e.effect_phys_defense || 0,
+        effect_mag_attack: e.effect_mag_attack || 0,
+        effect_mag_defense: e.effect_mag_defense || 0,
+        effect_crit_rate: e.effect_crit_rate || 0,
+        effect_evasion: e.effect_evasion || 0,
+      };
+    });
+
+    // 인벤토리 (장비류만, 장착 중인 것 제외)
+    const [inventory] = await pool.query(
+      `SELECT i.*, it.name, it.type, it.slot, it.weapon_hand, it.description, it.price, it.sell_price,
+              it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.required_level, it.class_restriction
+       FROM inventory i
+       JOIN items it ON i.item_id = it.id
+       WHERE i.character_id = ? AND it.type != 'potion'
+       ORDER BY it.type, it.name`,
+      [charId]
+    );
+
+    // 장착 중인 item_id 목록
+    const equippedItemIds = equipped.map((e) => e.item_id);
+
+    // 소환수 장착 아이템 ID
+    const [summonEquipped] = await pool.query(
+      `SELECT se.item_id FROM summon_equipment se
+       JOIN character_summons cs ON se.summon_id = cs.id
+       WHERE cs.character_id = ?`,
+      [charId]
+    );
+    const summonEquippedIds = summonEquipped.map((e) => e.item_id);
+
+    // 인벤토리에서 장착 중인 아이템 + 소환수 장착 아이템 제외
+    const excludeIds = [...equippedItemIds, ...summonEquippedIds];
+    const availableInventory = inventory.filter((inv) => !excludeIds.includes(inv.item_id));
+
+    res.json({ equipped: equippedMap, inventory: availableInventory });
+  } catch (err) {
+    console.error('Equipment info error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 장비 장착
+router.post('/equip', auth, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { itemId, slot } = req.body;
+
+    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
+    const char = chars[0];
+
+    // 아이템 확인
+    const [itemRows] = await conn.query('SELECT * FROM items WHERE id = ?', [itemId]);
+    if (itemRows.length === 0) return res.status(404).json({ message: '아이템을 찾을 수 없습니다.' });
+    const item = itemRows[0];
+
+    // 인벤토리에 있는지 확인
+    const [invRows] = await conn.query(
+      'SELECT * FROM inventory WHERE character_id = ? AND item_id = ?',
+      [char.id, itemId]
+    );
+    if (invRows.length === 0) return res.status(400).json({ message: '보유하지 않은 아이템입니다.' });
+
+    // 슬롯 유효성 검사
+    if (item.slot !== slot) {
+      return res.status(400).json({ message: '해당 슬롯에 장착할 수 없는 아이템입니다.' });
+    }
+
+    // 클래스 제한 검사
+    if (item.class_restriction && item.class_restriction !== char.class_type) {
+      return res.status(400).json({ message: `${item.class_restriction} 전용 아이템입니다.` });
+    }
+
+    // 레벨 제한 검사
+    if (char.level < item.required_level) {
+      return res.status(400).json({ message: `레벨 ${item.required_level} 이상만 장착할 수 있습니다.` });
+    }
+
+    // 방패 장착 시 양손무기 체크
+    if (slot === 'shield') {
+      const [weaponEquip] = await conn.query(
+        `SELECT e.item_id, it.weapon_hand FROM equipment e
+         JOIN items it ON e.item_id = it.id
+         WHERE e.character_id = ? AND e.slot = 'weapon'`,
+        [char.id]
+      );
+      if (weaponEquip.length > 0 && weaponEquip[0].weapon_hand === '2h') {
+        return res.status(400).json({ message: '양손 무기를 장착 중이라 방패를 장착할 수 없습니다.' });
+      }
+    }
+
+    await conn.beginTransaction();
+
+    // 양손 무기 장착 시 방패 자동 해제
+    if (slot === 'weapon' && item.weapon_hand === '2h') {
+      const [shieldEquip] = await conn.query(
+        `SELECT e.item_id, it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense, it.effect_crit_rate, it.effect_evasion, it.name
+         FROM equipment e JOIN items it ON e.item_id = it.id
+         WHERE e.character_id = ? AND e.slot = 'shield'`,
+        [char.id]
+      );
+      if (shieldEquip.length > 0) {
+        const s = shieldEquip[0];
+        await conn.query('DELETE FROM equipment WHERE character_id = ? AND slot = ?', [char.id, 'shield']);
+        await conn.query(
+          'UPDATE characters SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?, phys_attack = phys_attack - ?, phys_defense = phys_defense - ?, mag_attack = mag_attack - ?, mag_defense = mag_defense - ?, crit_rate = crit_rate - ?, evasion = evasion - ? WHERE id = ?',
+          [s.effect_hp, s.effect_mp, s.effect_attack, s.effect_defense, s.effect_phys_attack||0, s.effect_phys_defense||0, s.effect_mag_attack||0, s.effect_mag_defense||0, s.effect_crit_rate||0, s.effect_evasion||0, char.id]
+        );
+      }
+    }
+
+    // 기존 장비 해제
+    const [currentEquip] = await conn.query(
+      `SELECT e.item_id, it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense, it.effect_crit_rate, it.effect_evasion, it.name
+       FROM equipment e JOIN items it ON e.item_id = it.id
+       WHERE e.character_id = ? AND e.slot = ?`,
+      [char.id, slot]
+    );
+
+    if (currentEquip.length > 0) {
+      const old = currentEquip[0];
+      await conn.query('DELETE FROM equipment WHERE character_id = ? AND slot = ?', [char.id, slot]);
+      await conn.query(
+        'UPDATE characters SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?, phys_attack = phys_attack - ?, phys_defense = phys_defense - ?, mag_attack = mag_attack - ?, mag_defense = mag_defense - ?, crit_rate = crit_rate - ?, evasion = evasion - ? WHERE id = ?',
+        [old.effect_hp, old.effect_mp, old.effect_attack, old.effect_defense, old.effect_phys_attack||0, old.effect_phys_defense||0, old.effect_mag_attack||0, old.effect_mag_defense||0, old.effect_crit_rate||0, old.effect_evasion||0, char.id]
+      );
+    }
+
+    // 새 장비 장착
+    await conn.query(
+      'INSERT INTO equipment (character_id, slot, item_id) VALUES (?, ?, ?)',
+      [char.id, slot, itemId]
+    );
+    await conn.query(
+      'UPDATE characters SET hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?, phys_attack = phys_attack + ?, phys_defense = phys_defense + ?, mag_attack = mag_attack + ?, mag_defense = mag_defense + ?, crit_rate = crit_rate + ?, evasion = evasion + ? WHERE id = ?',
+      [item.effect_hp, item.effect_mp, item.effect_attack, item.effect_defense, item.effect_phys_attack||0, item.effect_phys_defense||0, item.effect_mag_attack||0, item.effect_mag_defense||0, item.effect_crit_rate||0, item.effect_evasion||0, char.id]
+    );
+
+    // current_hp, current_mp 보정
+    await conn.query('UPDATE characters SET current_hp = LEAST(current_hp, hp), current_mp = LEAST(current_mp, mp) WHERE id = ?', [char.id]);
+
+    await conn.commit();
+
+    const [updated] = await pool.query('SELECT * FROM characters WHERE id = ?', [char.id]);
+    const c = updated[0];
+
+    let msg = `${item.name}을(를) ${SLOT_NAMES[slot]}에 장착했습니다.`;
+    if (currentEquip.length > 0) {
+      msg = `${currentEquip[0].name} -> ${item.name}(으)로 교체했습니다.`;
+    }
+
+    res.json({
+      message: msg,
+      character: {
+        hp: c.hp, mp: c.mp, attack: c.attack, defense: c.defense,
+        phys_attack: c.phys_attack, phys_defense: c.phys_defense,
+        mag_attack: c.mag_attack, mag_defense: c.mag_defense,
+        crit_rate: c.crit_rate, evasion: c.evasion,
+        current_hp: c.current_hp, current_mp: c.current_mp, gold: c.gold,
+      },
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Equip error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  } finally {
+    conn.release();
+  }
+});
+
+// 장비 해제
+router.post('/unequip', auth, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { slot } = req.body;
+
+    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
+    const char = chars[0];
+
+    const [equipRows] = await conn.query(
+      `SELECT e.item_id, it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense, it.effect_crit_rate, it.effect_evasion, it.name
+       FROM equipment e JOIN items it ON e.item_id = it.id
+       WHERE e.character_id = ? AND e.slot = ?`,
+      [char.id, slot]
+    );
+    if (equipRows.length === 0) return res.status(400).json({ message: '해당 슬롯에 장착된 장비가 없습니다.' });
+
+    const equip = equipRows[0];
+
+    await conn.beginTransaction();
+
+    await conn.query('DELETE FROM equipment WHERE character_id = ? AND slot = ?', [char.id, slot]);
+    await conn.query(
+      'UPDATE characters SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?, phys_attack = phys_attack - ?, phys_defense = phys_defense - ?, mag_attack = mag_attack - ?, mag_defense = mag_defense - ?, crit_rate = crit_rate - ?, evasion = evasion - ? WHERE id = ?',
+      [equip.effect_hp, equip.effect_mp, equip.effect_attack, equip.effect_defense, equip.effect_phys_attack||0, equip.effect_phys_defense||0, equip.effect_mag_attack||0, equip.effect_mag_defense||0, equip.effect_crit_rate||0, equip.effect_evasion||0, char.id]
+    );
+    await conn.query('UPDATE characters SET current_hp = LEAST(current_hp, hp), current_mp = LEAST(current_mp, mp) WHERE id = ?', [char.id]);
+
+    await conn.commit();
+
+    const [updated] = await pool.query('SELECT * FROM characters WHERE id = ?', [char.id]);
+    const c = updated[0];
+
+    res.json({
+      message: `${equip.name}을(를) 해제했습니다.`,
+      character: {
+        hp: c.hp, mp: c.mp, attack: c.attack, defense: c.defense,
+        phys_attack: c.phys_attack, phys_defense: c.phys_defense,
+        mag_attack: c.mag_attack, mag_defense: c.mag_defense,
+        crit_rate: c.crit_rate, evasion: c.evasion,
+        current_hp: c.current_hp, current_mp: c.current_mp, gold: c.gold,
+      },
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Unequip error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  } finally {
+    conn.release();
+  }
+});
+
+module.exports = router;

@@ -1,0 +1,257 @@
+/* Dungeon Area - RPG Theme */
+.dungeon-loading { text-align: center; padding: 40px; color: var(--text-dim); }
+
+/* ===== Dungeon Map Scene ===== */
+.dungeon-scene {
+  position: relative;
+  min-height: 400px;
+  padding: 20px;
+}
+
+.dungeon-map-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.dungeon-map-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.25;
+  filter: blur(1px);
+}
+
+.dungeon-map-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11,14,20,0.7) 0%, rgba(11,14,20,0.4) 40%, rgba(11,14,20,0.7) 100%);
+}
+
+.dungeon-map-title {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 3px;
+  margin-bottom: 20px;
+  text-shadow: 0 2px 12px rgba(212, 168, 67, 0.4);
+}
+
+.dungeon-map-grid {
+  position: relative;
+  z-index: 1;
+}
+
+.dungeon-map-card {
+  background: rgba(30, 37, 56, 0.85);
+  border: 2px solid var(--border-dark);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.3s;
+  overflow: hidden;
+  backdrop-filter: blur(4px);
+}
+
+.dungeon-map-card:hover:not(.locked) {
+  transform: translateY(-5px);
+  border-color: var(--gold-dim);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 16px rgba(212, 168, 67, 0.15);
+}
+
+.dungeon-map-card.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
+.dungeon-map-card.cleared {
+  border-color: var(--green-dim);
+}
+
+.dungeon-map-card-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--bg-darkest);
+}
+
+.dungeon-map-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.dungeon-map-card:hover:not(.locked) .dungeon-map-card-img {
+  transform: scale(1.08);
+}
+
+.dungeon-map-card-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 50%, rgba(11,14,20,0.6) 100%);
+  pointer-events: none;
+}
+
+.dungeon-map-lock-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dungeon-map-lock-icon { font-size: 1.6rem; }
+.dungeon-map-lock-text { font-size: 0.75rem; color: var(--red); font-weight: 700; }
+
+.dungeon-map-clear-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(34, 197, 94, 0.9);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+}
+
+.dungeon-map-card-info {
+  padding: 10px 12px;
+}
+
+.dungeon-map-card-name {
+  font-weight: 700;
+  color: var(--gold);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  font-family: var(--font-title);
+  letter-spacing: 0.5px;
+}
+
+.dungeon-map-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dungeon-map-lv-badge { font-size: 0.65rem !important; }
+
+.dungeon-map-progress {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Dungeon Detail */
+.dungeon-detail { padding: 0; }
+
+.dungeon-back-btn {
+  background: none;
+  border: 1px solid var(--border-dark);
+  color: var(--text-dim);
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: var(--font-ui);
+  margin-bottom: 14px;
+  transition: all 0.2s;
+}
+.dungeon-back-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+.dungeon-detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.dungeon-detail-icon { font-size: 2rem; }
+.dungeon-detail-img {
+  width: 64px; height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-gold);
+}
+.dungeon-detail-header h3 { margin: 0; color: var(--gold); font-family: var(--font-title); }
+.dungeon-detail-header p { margin: 4px 0 0; color: var(--text-muted); font-size: 0.85rem; }
+
+/* Roadmap */
+.dungeon-roadmap {
+  background: linear-gradient(180deg, var(--bg-panel), var(--bg-dark));
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+}
+
+.roadmap-title { font-size: 1rem; font-weight: 700; color: var(--gold); margin-bottom: 4px; font-family: var(--font-title); }
+.roadmap-progress { font-size: 0.8rem; color: var(--accent); margin-bottom: 18px; font-weight: 500; }
+
+.roadmap-track {
+  display: flex; align-items: center; gap: 0;
+  padding: 12px 0; overflow-x: auto; flex-wrap: wrap;
+  justify-content: center; row-gap: 10px;
+}
+
+.roadmap-connector { width: 22px; height: 3px; background: var(--border-dark); flex-shrink: 0; position: relative; border-radius: 2px; }
+.roadmap-connector.cleared { background: linear-gradient(90deg, var(--green-dim), var(--green)); box-shadow: 0 0 8px rgba(34, 197, 94, 0.3); }
+
+.roadmap-node {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; position: relative; transition: all 0.2s;
+  background: var(--bg-card); border: 2px solid var(--border-subtle); flex-shrink: 0;
+}
+.roadmap-node:hover:not(.locked) { transform: scale(1.15); z-index: 2; }
+
+.roadmap-node.cleared { background: linear-gradient(135deg, #166534, #15803d); border-color: var(--green); }
+.roadmap-node.current {
+  background: linear-gradient(135deg, #1e40af, #2563eb); border-color: var(--blue);
+  animation: nodePulse 2s infinite; box-shadow: 0 0 14px rgba(59, 130, 246, 0.4);
+}
+.roadmap-node.locked { background: var(--bg-darkest); border-color: var(--border-dark); cursor: not-allowed; opacity: 0.4; }
+
+.roadmap-node.boss { width: 62px; height: 62px; border-width: 3px; }
+.roadmap-node.boss:not(.cleared):not(.locked) { border-color: var(--red); background: linear-gradient(135deg, #7f1d1d, #991b1b); }
+.roadmap-node.boss.current {
+  border-color: var(--red); background: linear-gradient(135deg, #991b1b, #b91c1c);
+  animation: bossPulse 2s infinite; box-shadow: 0 0 18px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes nodePulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+}
+@keyframes bossPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 24px rgba(239, 68, 68, 0.5); }
+}
+
+.roadmap-node-inner { display: flex; align-items: center; justify-content: center; position: relative; }
+.roadmap-stage-num { font-weight: 700; font-size: 1rem; color: #fff; }
+.roadmap-boss-icon { font-size: 1.3rem; }
+.roadmap-lock { font-size: 0.8rem; position: absolute; top: -2px; right: -4px; }
+.roadmap-check { position: absolute; top: -6px; right: -6px; background: var(--green); color: #fff; width: 16px; height: 16px; border-radius: 50%; font-size: 0.6rem; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+.roadmap-arrow { position: absolute; top: -6px; right: -6px; color: var(--blue); font-size: 0.7rem; }
+.roadmap-node-label { position: absolute; bottom: -18px; font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; }
+.roadmap-boss-tag { position: absolute; top: -12px; background: var(--red); color: #fff; font-size: 0.55rem; padding: 1px 7px; border-radius: 4px; font-weight: 700; letter-spacing: 1px; }
+
+.roadmap-info { margin-top: 30px; border-top: 1px solid var(--border-dark); padding-top: 14px; }
+.roadmap-info-title { font-size: 0.85rem; color: var(--gold); font-weight: 700; margin-bottom: 10px; }
+
+.roadmap-monster-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.roadmap-monster-tag {
+  background: var(--bg-card); border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm); padding: 5px 12px; font-size: 0.75rem;
+  color: var(--text-dim); display: flex; align-items: center; gap: 4px;
+}
+.roadmap-monster-stat { color: var(--text-dark); font-size: 0.65rem; margin-left: 4px; }
+
+.roadmap-summons { margin-top: 18px; border-top: 1px solid var(--border-dark); padding-top: 14px; }
+.roadmap-summon-list { display: flex; flex-wrap: wrap; gap: 6px; }
