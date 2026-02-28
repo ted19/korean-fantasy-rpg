@@ -35,6 +35,7 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
   const [srpgBattle, setSrpgBattle] = useState(false);
   const [battleLocation, setBattleLocation] = useState(null);
   const [battleStage, setBattleStage] = useState(null);
+  const [returnDungeonKey, setReturnDungeonKey] = useState(null);
 
   const loadMySummons = async () => {
     try {
@@ -79,6 +80,7 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
     }
     setBattleLocation(dungeonKey);
     setBattleStage(stage);
+    setReturnDungeonKey(dungeonKey);
     setSrpgBattle(true);
     setFighting(true);
   };
@@ -132,9 +134,11 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
 
     if (result === 'retreat') {
       addLog('전투에서 후퇴했습니다.', 'system');
+      setReturnDungeonKey(null);
       setCurrentLocation('village');
     } else if (result !== 'victory') {
       addLog('SRPG 전투 패배... 마을에서 휴식하세요.', 'damage');
+      setReturnDungeonKey(null);
       setCurrentLocation('village');
     }
   };
@@ -190,6 +194,8 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
             activeSummonIds={activeSummonIds}
             onToggleSummon={toggleSummon}
             onStartBattle={handleStartBattle}
+            returnDungeonKey={returnDungeonKey}
+            onReturnHandled={() => setReturnDungeonKey(null)}
           />
         );
       case 'bestiary':

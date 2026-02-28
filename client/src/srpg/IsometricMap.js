@@ -1376,6 +1376,65 @@ function UnitModelRenderer({ unit }) {
   );
 }
 
+// 2D 빌보드 스프라이트 (캐릭터용)
+const CLASS_SPRITE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
+
+function CharacterBillboard({ unit }) {
+  const { camera } = useThree();
+  const groupRef = useRef();
+  const textureRef = useRef({});
+  const [currentTex, setCurrentTex] = useState(null);
+  const loader = useMemo(() => new THREE.TextureLoader(), []);
+  const classKey = CLASS_SPRITE_MAP[unit.classType] || 'pungsu';
+
+  // 모든 포즈 텍스처 프리로드
+  useEffect(() => {
+    const poses = ['idle', 'attack', 'skill', 'hurt'];
+    poses.forEach(pose => {
+      const url = `${PUB}/characters/battle/${classKey}_${pose}.png`;
+      loader.load(url, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        textureRef.current[pose] = tex;
+        if (pose === 'idle' && !currentTex) setCurrentTex(tex);
+      });
+    });
+  }, [classKey]); // eslint-disable-line
+
+  // 상태에 따라 텍스처 전환
+  useEffect(() => {
+    const pose = unit.spriteState || 'idle';
+    if (textureRef.current[pose]) {
+      setCurrentTex(textureRef.current[pose]);
+    }
+  }, [unit.spriteState]);
+
+  // 빌보드: 항상 카메라를 향함
+  useFrame(() => {
+    if (groupRef.current) {
+      groupRef.current.quaternion.copy(camera.quaternion);
+    }
+  });
+
+  if (!currentTex) return null;
+
+  return (
+    <group ref={groupRef}>
+      <mesh position={[0, 0.75, 0]}>
+        <planeGeometry args={[1.6, 1.6]} />
+        <meshBasicMaterial
+          map={currentTex}
+          transparent={true}
+          alphaTest={0.1}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
 // 유닛 표시
 function UnitMesh({ unit, isActive, mapData }) {
   const ref = useRef();
@@ -1414,10 +1473,16 @@ function UnitMesh({ unit, isActive, mapData }) {
 
   return (
     <group ref={ref} position={[unit.x * TILE_SIZE, y, unit.z * TILE_SIZE]}>
-      {/* 3D 모델 */}
-      <group scale={[2.2, 2.2, 2.2]}>
-        <UnitModelRenderer unit={unit} />
-      </group>
+      {/* 플레이어: 2D 빌보드 스프라이트, 그 외: 3D 모델 */}
+      {unit.id === 'player' ? (
+        <group scale={[2.2, 2.2, 2.2]}>
+          <CharacterBillboard unit={unit} />
+        </group>
+      ) : (
+        <group scale={[2.2, 2.2, 2.2]}>
+          <UnitModelRenderer unit={unit} />
+        </group>
+      )}
       {/* 활성 표시 링 */}
       {isActive && (
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>

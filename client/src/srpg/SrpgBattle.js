@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import IsometricMap from './IsometricMap';
 import { buildMapFromDungeon } from './mapData';
 import {
@@ -79,6 +79,24 @@ export default function SrpgBattle({
     const y = tile ? tile.height * 0.4 : 0;
     setDamagePopups(prev => [...prev.slice(-5), { x, y, z, text, type, time: Date.now() }]);
   };
+
+  // 플레이어 스프라이트 상태 변경 (idle/attack/skill/hurt)
+  const setSpriteState = useCallback((state, duration = 600) => {
+    setUnits(prev => {
+      const updated = prev.map(u => u.id === 'player' ? { ...u, spriteState: state } : u);
+      unitsRef.current = updated;
+      return updated;
+    });
+    if (state !== 'idle') {
+      setTimeout(() => {
+        setUnits(prev => {
+          const updated = prev.map(u => u.id === 'player' ? { ...u, spriteState: 'idle' } : u);
+          unitsRef.current = updated;
+          return updated;
+        });
+      }, duration);
+    }
+  }, []); // eslint-disable-line
 
   // 자동 스크롤
   useEffect(() => {
@@ -426,6 +444,12 @@ export default function SrpgBattle({
           const skill = decision.skill;
           const result = calcDamage(movedUnit, targetUnit, skill, mapRef.current);
           const dmg = result.damage;
+
+          // 플레이어가 피격당하면 hurt 포즈
+          if (decision.target.id === 'player' && !result.evaded) {
+            setSpriteState('hurt');
+          }
+
           setUnits(prev => {
             const updated = prev.map(u => {
               if (u.id === decision.target.id) {
@@ -567,6 +591,7 @@ export default function SrpgBattle({
       if (selectedSkill && selectedSkill.type === 'heal') {
         if (targetUnit && targetUnit.team === 'player') {
           const healAmt = calcHeal(activeUnit, selectedSkill);
+          if (activeUnit.id === 'player') setSpriteState('skill');
           setUnits(prev => {
             const updated = prev.map(u => {
               if (u.id === targetUnit.id) {
@@ -596,6 +621,11 @@ export default function SrpgBattle({
         const skill = selectedSkill;
         const result = calcDamage(activeUnit, targetUnit, skill, mapRef.current);
         const dmg = result.damage;
+
+        // 플레이어 스프라이트: 공격/스킬 포즈
+        if (activeUnit.id === 'player') {
+          setSpriteState(skill ? 'skill' : 'attack');
+        }
 
         setUnits(prev => {
           const updated = prev.map(u => {
@@ -680,6 +710,7 @@ export default function SrpgBattle({
     const range = getSkillRange(skill);
     if (range === 0) {
       // 자기 버프
+      if (activeUnit.id === 'player') setSpriteState('skill');
       setUnits(prev => {
         const updated = prev.map(u => {
           if (u.id === activeUnit.id) {

@@ -9,7 +9,7 @@ function DungeonImg({ keyName, type, fallback, className }) {
   return <img src={`/dungeons/${keyName}_${type}.png`} alt="" className={className} onError={() => setErr(true)} />;
 }
 
-function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, onStartBattle }) {
+function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, onStartBattle, returnDungeonKey, onReturnHandled }) {
   const [dungeons, setDungeons] = useState([]);
   const [selectedDungeon, setSelectedDungeon] = useState(null);
   const [dungeonDetail, setDungeonDetail] = useState(null);
@@ -20,13 +20,26 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
       try {
         const res = await api.get('/dungeon/list');
         setDungeons(res.data.dungeons);
+
+        // 전투 후 복귀: 해당 던전 로드맵 자동 오픈
+        if (returnDungeonKey) {
+          const target = res.data.dungeons.find(d => d.key_name === returnDungeonKey);
+          if (target) {
+            setSelectedDungeon(target);
+            try {
+              const detailRes = await api.get(`/dungeon/${returnDungeonKey}`);
+              setDungeonDetail(detailRes.data);
+            } catch {}
+          }
+          if (onReturnHandled) onReturnHandled();
+        }
       } catch (err) {
         console.error('Failed to load dungeons:', err);
       }
       setLoading(false);
     }
     loadDungeons();
-  }, []);
+  }, []); // eslint-disable-line
 
   const selectDungeon = async (dungeon) => {
     setSelectedDungeon(dungeon);
