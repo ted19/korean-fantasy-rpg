@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert, ProgressBar } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
 import api from '../api';
 
 const ELEMENT_INFO = {
@@ -31,9 +30,9 @@ const CLASS_INFO = {
   },
 };
 
-const statColors = { hp: 'success', mp: 'primary', phys_attack: 'danger', mag_attack: 'info', phys_defense: 'warning', mag_defense: 'secondary', crit_rate: 'danger', evasion: 'success' };
 const statMax = { hp: 120, mp: 120, phys_attack: 12, mag_attack: 12, phys_defense: 11, mag_defense: 5, crit_rate: 10, evasion: 8 };
 const statLabels = { hp: 'HP', mp: 'MP', phys_attack: '물공', mag_attack: '마공', phys_defense: '물방', mag_defense: '마방', crit_rate: '치명', evasion: '회피' };
+const statColors = { hp: '#4ade80', mp: '#60a5fa', phys_attack: '#f87171', mag_attack: '#818cf8', phys_defense: '#fbbf24', mag_defense: '#94a3b8', crit_rate: '#fb923c', evasion: '#2dd4bf' };
 
 function CreateCharacter({ onCharacterCreated, onBack }) {
   const [name, setName] = useState('');
@@ -41,23 +40,20 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
   const [selectedElement, setSelectedElement] = useState(null);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [bgLoaded, setBgLoaded] = useState(false);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setBgLoaded(true);
+    img.src = '/ui/charsel_bg.png';
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
-    if (!name.trim()) {
-      setError('캐릭터 이름을 입력해주세요.');
-      return;
-    }
-    if (!selectedClass) {
-      setError('직업을 선택해주세요.');
-      return;
-    }
-    if (!selectedElement) {
-      setError('속성을 선택해주세요.');
-      return;
-    }
+    if (!name.trim()) { setError('캐릭터 이름을 입력해주세요.'); return; }
+    if (!selectedClass) { setError('직업을 선택해주세요.'); return; }
+    if (!selectedElement) { setError('속성을 선택해주세요.'); return; }
 
     setCreating(true);
     try {
@@ -71,97 +67,140 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
   };
 
   return (
-    <div className="create-char-container">
-      <Container style={{ maxWidth: 900 }}>
-        {onBack && (
-          <Button variant="outline-secondary" size="sm" className="mb-3" onClick={onBack}>
-            &larr; 캐릭터 선택으로
-          </Button>
+    <div className={`create-page ${bgLoaded ? 'loaded' : ''}`}>
+      <div className="auth-bg" style={{ backgroundImage: 'url(/ui/charsel_bg.png)' }} />
+      <div className="auth-bg-overlay" />
+
+      <div className="auth-particles">
+        {Array.from({ length: 15 }).map((_, i) => (
+          <div key={i} className="auth-particle" style={{
+            left: `${Math.random() * 100}%`,
+            animationDelay: `${Math.random() * 8}s`,
+            animationDuration: `${6 + Math.random() * 8}s`,
+            opacity: 0.3 + Math.random() * 0.4,
+            width: `${2 + Math.random() * 3}px`,
+            height: `${2 + Math.random() * 3}px`,
+          }} />
+        ))}
+      </div>
+
+      <div className="create-main">
+        {/* 상단 */}
+        <div className="create-top">
+          {onBack && (
+            <button className="create-back" onClick={onBack}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              <span>캐릭터 선택</span>
+            </button>
+          )}
+          <h1 className="create-title">캐릭터 생성</h1>
+          <p className="create-subtitle">직업과 속성을 선택하고 이름을 지어주세요</p>
+        </div>
+
+        {error && (
+          <div className="auth-error" style={{ maxWidth: 600, margin: '0 auto 20px' }}>
+            <span className="auth-error-icon">!</span>
+            {error}
+          </div>
         )}
-        <h2 className="text-center game-title mb-1">캐릭터 생성</h2>
-        <p className="text-center mb-4" style={{ color: 'var(--text-muted)', fontSize: 14 }}>직업을 선택하고 이름을 지어주세요</p>
 
-        {error && <Alert variant="danger" className="text-center py-2">{error}</Alert>}
-
-        <Row className="g-3 mb-4">
+        {/* 직업 선택 */}
+        <div className="create-section-label">직업 선택</div>
+        <div className="create-class-grid">
           {Object.entries(CLASS_INFO).map(([className, info]) => (
-            <Col xs={12} md={4} key={className}>
-              <Card
-                className={`h-100 text-center class-card ${selectedClass === className ? 'selected' : ''}`}
-                onClick={() => setSelectedClass(className)}
-                style={{ cursor: 'pointer' }}
-              >
-                <Card.Body className="p-3">
-                  <div className="class-icon">
-                    <img src={info.image} alt={className} onError={(e) => { e.target.style.display='none'; e.target.parentNode.textContent = info.icon; }} />
-                  </div>
-                  <div className="class-name">{className}</div>
-                  <div className="class-desc">{info.description}</div>
-                  <div className="d-flex flex-column gap-2 mt-2">
-                    {Object.entries(info.stats).map(([stat, val]) => (
-                      <div key={stat} className="d-flex align-items-center gap-2">
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 30, textAlign: 'right', fontWeight: 500 }}>
-                          {statLabels[stat]}
-                        </span>
-                        <ProgressBar
-                          now={(val / statMax[stat]) * 100}
-                          variant={statColors[stat]}
-                          className="flex-grow-1"
-                          style={{ height: 6 }}
+            <div
+              key={className}
+              className={`create-class-card ${selectedClass === className ? 'selected' : ''}`}
+              onClick={() => setSelectedClass(className)}
+            >
+              <div className="create-class-portrait">
+                <img
+                  src={info.image}
+                  alt={className}
+                  onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = `<span style="font-size:48px">${info.icon}</span>`; }}
+                />
+                {selectedClass === className && <div className="create-class-selected-ring" />}
+              </div>
+              <div className="create-class-info">
+                <div className="create-class-name">{info.icon} {className}</div>
+                <div className="create-class-desc">{info.description}</div>
+                <div className="create-class-stats">
+                  {Object.entries(info.stats).map(([stat, val]) => (
+                    <div key={stat} className="create-stat-row">
+                      <span className="create-stat-label">{statLabels[stat]}</span>
+                      <div className="create-stat-bar-bg">
+                        <div
+                          className="create-stat-bar-fill"
+                          style={{
+                            width: `${(val / statMax[stat]) * 100}%`,
+                            background: statColors[stat],
+                          }}
                         />
-                        <span style={{ fontSize: 11, color: 'var(--text-dim)', width: 26, fontWeight: 500 }}>{val}</span>
                       </div>
-                    ))}
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
+                      <span className="create-stat-val" style={{ color: statColors[stat] }}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           ))}
-        </Row>
+        </div>
 
         {/* 속성 선택 */}
-        <h5 className="text-center mb-3" style={{ color: 'var(--text-muted)', fontSize: 15 }}>속성을 선택하세요</h5>
-        <Row className="g-2 mb-4 justify-content-center" style={{ maxWidth: 700, margin: '0 auto' }}>
+        <div className="create-section-label">속성 선택</div>
+        <div className="create-element-grid">
           {Object.entries(ELEMENT_INFO).map(([key, el]) => (
-            <Col xs={4} sm key={key}>
-              <div
-                className={`element-card ${selectedElement === key ? 'selected' : ''}`}
-                onClick={() => setSelectedElement(key)}
-                style={{
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  padding: '12px 8px',
-                  borderRadius: 10,
-                  border: selectedElement === key ? `2px solid ${el.color}` : '2px solid rgba(255,255,255,0.08)',
-                  background: selectedElement === key ? `${el.color}15` : 'rgba(255,255,255,0.02)',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <div style={{ fontSize: 28 }}>{el.icon}</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: el.color, marginTop: 4 }}>{el.name}</div>
-                <div style={{ fontSize: 10, color: '#888', marginTop: 4, lineHeight: 1.3 }}>{el.desc}</div>
-              </div>
-            </Col>
+            <div
+              key={key}
+              className={`create-element-card ${selectedElement === key ? 'selected' : ''}`}
+              onClick={() => setSelectedElement(key)}
+              style={{
+                borderColor: selectedElement === key ? el.color : undefined,
+                boxShadow: selectedElement === key ? `0 0 20px ${el.color}20, inset 0 0 20px ${el.color}08` : undefined,
+              }}
+            >
+              <div className="create-element-icon">{el.icon}</div>
+              <div className="create-element-name" style={{ color: selectedElement === key ? el.color : '#aaa' }}>{el.name}</div>
+              <div className="create-element-desc">{el.desc}</div>
+            </div>
           ))}
-        </Row>
+        </div>
 
-        <Form onSubmit={handleSubmit} style={{ maxWidth: 420, margin: '0 auto' }}>
-          <Form.Group className="mb-3">
-            <Form.Label>캐릭터 이름</Form.Label>
-            <Form.Control
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="캐릭터 이름을 입력하세요"
-              maxLength={20}
-              required
-            />
-          </Form.Group>
-          <Button type="submit" variant="primary" className="w-100 py-2" disabled={creating}>
-            {creating ? '생성 중...' : '캐릭터 생성'}
-          </Button>
-        </Form>
-      </Container>
+        {/* 이름 입력 + 생성 */}
+        <form onSubmit={handleSubmit} className="create-name-form">
+          <div className="create-name-wrap">
+            <label className="create-name-label">캐릭터 이름</label>
+            <div className="auth-input-wrap">
+              <span className="auth-input-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                </svg>
+              </span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="캐릭터 이름을 입력하세요"
+                maxLength={20}
+                required
+              />
+            </div>
+          </div>
+          <button type="submit" className="auth-submit" disabled={creating} style={{ maxWidth: 440 }}>
+            {creating ? (
+              <span className="auth-submit-loading"><span className="auth-spinner" /> 생성 중...</span>
+            ) : (
+              <><span>캐릭터 생성</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
