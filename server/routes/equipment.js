@@ -31,7 +31,12 @@ const SLOT_NAMES = {
 // 장비 슬롯 + 인벤토리 조회
 router.get('/info', auth, async (req, res) => {
   try {
-    const [chars] = await pool.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ equipped: {}, inventory: [] });
 
     const charId = chars[0].id;
@@ -107,7 +112,12 @@ router.post('/equip', auth, async (req, res) => {
   try {
     const { itemId, slot } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -236,7 +246,12 @@ router.post('/unequip', auth, async (req, res) => {
   try {
     const { slot } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 

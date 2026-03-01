@@ -33,7 +33,7 @@ async function getMonsters() {
   for (const r of rows) {
     if (!grouped[r.location]) grouped[r.location] = [];
     grouped[r.location].push({
-      name: r.name, hp: r.hp, attack: r.attack,
+      id: r.id, name: r.name, hp: r.hp, attack: r.attack,
       exp: r.exp_reward, gold: r.gold_reward,
     });
   }
@@ -55,8 +55,10 @@ router.post('/hunt', auth, async (req, res) => {
 
     // 캐릭터 조회
     const [chars] = await conn.query(
-      'SELECT * FROM characters WHERE user_id = ?',
-      [req.user.id]
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
     );
     if (chars.length === 0) {
       return res.status(404).json({ message: '캐릭터가 없습니다.' });
@@ -354,19 +356,23 @@ router.post('/hunt', auth, async (req, res) => {
           const newSmExp = (sm.exp || 0) + summonExp;
           const expNeededSm = sm.level * 50;
           if (newSmExp >= expNeededSm) {
-            // 레벨업
+            // 레벨업 (성장률 테이블 참조)
             const leftover = newSmExp - expNeededSm;
             const newSmLevel = sm.level + 1;
-            const hpUp = 5 + Math.floor(Math.random() * 4);
-            const mpUp = 2 + Math.floor(Math.random() * 3);
-            const atkUp = 1 + Math.floor(Math.random() * 2);
-            const defUp = 1 + Math.floor(Math.random() * 2);
-            const pAtkUp = 1 + Math.floor(Math.random() * 2);
-            const pDefUp = 1 + Math.floor(Math.random() * 2);
-            const mAtkUp = 1 + Math.floor(Math.random() * 2);
-            const mDefUp = 1 + Math.floor(Math.random() * 2);
-            const critUp = Math.floor(Math.random() * 2);
-            const evaUp = Math.floor(Math.random() * 2);
+            const [sgRows] = await conn.query(
+              'SELECT * FROM summon_growth_rates WHERE summon_type = ?', [sm.summon_type || sm.type]
+            );
+            const sg = sgRows[0] || { hp_per_level: 5, mp_per_level: 2, attack_per_level: 1, defense_per_level: 1, phys_attack_per_level: 1, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
+            const hpUp = Math.floor(sg.hp_per_level);
+            const mpUp = Math.floor(sg.mp_per_level);
+            const atkUp = Math.floor(sg.attack_per_level);
+            const defUp = Math.floor(sg.defense_per_level);
+            const pAtkUp = Math.floor(sg.phys_attack_per_level);
+            const pDefUp = Math.floor(sg.phys_defense_per_level);
+            const mAtkUp = Math.floor(sg.mag_attack_per_level);
+            const mDefUp = Math.floor(sg.mag_defense_per_level);
+            const critUp = newSmLevel % 10 === 0 ? Math.floor(sg.crit_rate_per_10level) : 0;
+            const evaUp = newSmLevel % 10 === 0 ? Math.floor(sg.evasion_per_10level) : 0;
             await conn.query(
               `UPDATE character_summons SET level = ?, exp = ?,
                 hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?,
@@ -395,24 +401,30 @@ router.post('/hunt', auth, async (req, res) => {
         });
       }
 
-      // 레벨업 체크
+      // 레벨업 체크 (성장률 테이블 참조)
       const expNeeded = newLevel * 100;
       if (newExp >= expNeeded) {
         newExp -= expNeeded;
         newLevel++;
-        newMaxHp += 10;
-        newMaxMp += 5;
-        newAtk += 2;
-        newDef += 1;
-        newPhysAtk += 2;
-        newPhysDef += 1;
-        newMagAtk += 2;
-        newMagDef += 1;
-        newCritRate += 1;
-        newEvasion += 1;
+        const [growthRows] = await conn.query(
+          'SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]
+        );
+        const g = growthRows[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
+        newMaxHp += Math.floor(g.hp_per_level);
+        newMaxMp += Math.floor(g.mp_per_level);
+        newAtk += Math.floor(g.attack_per_level);
+        newDef += Math.floor(g.defense_per_level);
+        newPhysAtk += Math.floor(g.phys_attack_per_level);
+        newPhysDef += Math.floor(g.phys_defense_per_level);
+        newMagAtk += Math.floor(g.mag_attack_per_level);
+        newMagDef += Math.floor(g.mag_defense_per_level);
+        if (newLevel % 10 === 0) {
+          newCritRate += Math.floor(g.crit_rate_per_10level);
+          newEvasion += Math.floor(g.evasion_per_10level);
+        }
         playerHp = newMaxHp;
         battleLog.push({
-          text: `레벨 업! Lv.${newLevel} 달성! 모든 능력치가 상승했습니다!`,
+          text: `레벨 업! Lv.${newLevel} 달성! (HP+${Math.floor(g.hp_per_level)} MP+${Math.floor(g.mp_per_level)} ATK+${Math.floor(g.attack_per_level)} DEF+${Math.floor(g.defense_per_level)})`,
           type: 'level',
         });
       }
@@ -491,6 +503,26 @@ router.post('/hunt', auth, async (req, res) => {
       }
     }
 
+    // 재료 드랍 처리
+    let droppedMaterials = [];
+    if (victory && monster.id) {
+      const [drops] = await conn.query(
+        'SELECT md.*, m.name, m.icon FROM monster_drops md JOIN materials m ON md.material_id = m.id WHERE md.monster_id = ?',
+        [monster.id]
+      );
+      for (const drop of drops) {
+        if (Math.random() < drop.drop_rate) {
+          const qty = drop.min_quantity + Math.floor(Math.random() * (drop.max_quantity - drop.min_quantity + 1));
+          await conn.query(
+            `INSERT INTO material_inventory (character_id, material_id, quantity) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
+            [char.id, drop.material_id, qty, qty]
+          );
+          droppedMaterials.push({ name: drop.name, icon: drop.icon, quantity: qty });
+        }
+      }
+    }
+
     // 완료된 퀘스트 수 조회
     const [completedQuests] = await conn.query(
       "SELECT COUNT(*) as cnt FROM character_quests WHERE character_id = ? AND status = 'completed'",
@@ -522,6 +554,7 @@ router.post('/hunt', auth, async (req, res) => {
       monster: monster.name,
       battleLog,
       questCompleted: completedQuests[0].cnt,
+      droppedMaterials,
       character: {
         level: newLevel,
         exp: newExp,
@@ -554,8 +587,10 @@ router.post('/hunt', auth, async (req, res) => {
 router.post('/rest', auth, async (req, res) => {
   try {
     const [chars] = await pool.query(
-      'SELECT * FROM characters WHERE user_id = ?',
-      [req.user.id]
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
     );
     if (chars.length === 0) {
       return res.status(404).json({ message: '캐릭터가 없습니다.' });
@@ -581,8 +616,10 @@ router.post('/rest', auth, async (req, res) => {
 router.get('/history', auth, async (req, res) => {
   try {
     const [chars] = await pool.query(
-      'SELECT id FROM characters WHERE user_id = ?',
-      [req.user.id]
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
     );
     if (chars.length === 0) {
       return res.json({ logs: [] });
@@ -604,9 +641,14 @@ router.get('/history', auth, async (req, res) => {
 router.post('/srpg-result', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { location, victory, monstersDefeated, expGained, goldGained, rounds, activeSummonIds } = req.body;
+    const { location, victory, monstersDefeated, expGained, goldGained, rounds, activeSummonIds, activeMercenaryIds } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -631,21 +673,27 @@ router.post('/srpg-result', auth, async (req, res) => {
       newExp += expGained;
       newGold += goldGained;
 
-      // 레벨업 체크
+      // 레벨업 체크 (성장률 테이블 참조)
+      const [growthRows2] = await conn.query(
+        'SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]
+      );
+      const g2 = growthRows2[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
       let expNeeded = newLevel * 100;
       while (newExp >= expNeeded) {
         newExp -= expNeeded;
         newLevel++;
-        newMaxHp += 10;
-        newMaxMp += 5;
-        newAtk += 2;
-        newDef += 1;
-        newPhysAtk += 2;
-        newPhysDef += 1;
-        newMagAtk += 2;
-        newMagDef += 1;
-        newCritRate += 1;
-        newEvasion += 1;
+        newMaxHp += Math.floor(g2.hp_per_level);
+        newMaxMp += Math.floor(g2.mp_per_level);
+        newAtk += Math.floor(g2.attack_per_level);
+        newDef += Math.floor(g2.defense_per_level);
+        newPhysAtk += Math.floor(g2.phys_attack_per_level);
+        newPhysDef += Math.floor(g2.phys_defense_per_level);
+        newMagAtk += Math.floor(g2.mag_attack_per_level);
+        newMagDef += Math.floor(g2.mag_defense_per_level);
+        if (newLevel % 10 === 0) {
+          newCritRate += Math.floor(g2.crit_rate_per_10level);
+          newEvasion += Math.floor(g2.evasion_per_10level);
+        }
         playerHp = newMaxHp;
         playerMp = newMaxMp;
         expNeeded = newLevel * 100;
@@ -663,16 +711,21 @@ router.post('/srpg-result', auth, async (req, res) => {
           if (newSmExp >= expNeededSm) {
             const leftover = newSmExp - expNeededSm;
             const newSmLevel = sm.level + 1;
-            const hpUp = 5 + Math.floor(Math.random() * 4);
-            const mpUp = 2 + Math.floor(Math.random() * 3);
-            const atkUp = 1 + Math.floor(Math.random() * 2);
-            const defUp = 1 + Math.floor(Math.random() * 2);
-            const pAtkUp = 1 + Math.floor(Math.random() * 2);
-            const pDefUp = 1 + Math.floor(Math.random() * 2);
-            const mAtkUp = 1 + Math.floor(Math.random() * 2);
-            const mDefUp = 1 + Math.floor(Math.random() * 2);
-            const critUp = Math.floor(Math.random() * 2);
-            const evaUp = Math.floor(Math.random() * 2);
+            // 소환수 타입 조회
+            const [smtRows] = await conn.query('SELECT type FROM summon_templates WHERE id = (SELECT template_id FROM character_summons WHERE id = ?)', [sm.id]);
+            const smType = smtRows[0]?.type || '몬스터';
+            const [sg2Rows] = await conn.query('SELECT * FROM summon_growth_rates WHERE summon_type = ?', [smType]);
+            const sg2 = sg2Rows[0] || { hp_per_level: 5, mp_per_level: 2, attack_per_level: 1, defense_per_level: 1, phys_attack_per_level: 1, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
+            const hpUp = Math.floor(sg2.hp_per_level);
+            const mpUp = Math.floor(sg2.mp_per_level);
+            const atkUp = Math.floor(sg2.attack_per_level);
+            const defUp = Math.floor(sg2.defense_per_level);
+            const pAtkUp = Math.floor(sg2.phys_attack_per_level);
+            const pDefUp = Math.floor(sg2.phys_defense_per_level);
+            const mAtkUp = Math.floor(sg2.mag_attack_per_level);
+            const mDefUp = Math.floor(sg2.mag_defense_per_level);
+            const critUp = newSmLevel % 10 === 0 ? Math.floor(sg2.crit_rate_per_10level) : 0;
+            const evaUp = newSmLevel % 10 === 0 ? Math.floor(sg2.evasion_per_10level) : 0;
             await conn.query(
               `UPDATE character_summons SET level = ?, exp = ?,
                 hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?,
@@ -685,6 +738,36 @@ router.post('/srpg-result', auth, async (req, res) => {
             );
           } else {
             await conn.query('UPDATE character_summons SET exp = ? WHERE id = ?', [newSmExp, sm.id]);
+          }
+        }
+      }
+      // 용병 경험치 분배
+      if (activeMercenaryIds && activeMercenaryIds.length > 0) {
+        const mercExp = Math.floor(expGained * 0.5);
+        for (const mId of activeMercenaryIds) {
+          const [mRows] = await conn.query('SELECT * FROM character_mercenaries WHERE id = ? AND character_id = ?', [mId, char.id]);
+          if (mRows.length === 0) continue;
+          const merc = mRows[0];
+          let newMercExp = (merc.exp || 0) + mercExp;
+          const expNeededMerc = merc.level * 50;
+          if (newMercExp >= expNeededMerc) {
+            const leftover = newMercExp - expNeededMerc;
+            const newMercLevel = merc.level + 1;
+            const [mtRows] = await conn.query('SELECT * FROM mercenary_templates WHERE id = ?', [merc.template_id]);
+            const mt = mtRows[0] || { growth_hp: 5, growth_mp: 2, growth_phys_attack: 1, growth_phys_defense: 1, growth_mag_attack: 1, growth_mag_defense: 1 };
+            await conn.query(
+              `UPDATE character_mercenaries SET level = ?, exp = ?,
+                hp = hp + ?, mp = mp + ?,
+                phys_attack = phys_attack + ?, phys_defense = phys_defense + ?,
+                mag_attack = mag_attack + ?, mag_defense = mag_defense + ?
+               WHERE id = ?`,
+              [newMercLevel, leftover,
+               mt.growth_hp, mt.growth_mp,
+               mt.growth_phys_attack, mt.growth_phys_defense,
+               mt.growth_mag_attack, mt.growth_mag_defense, merc.id]
+            );
+          } else {
+            await conn.query('UPDATE character_mercenaries SET exp = ? WHERE id = ?', [newMercExp, merc.id]);
           }
         }
       }
@@ -754,9 +837,61 @@ router.post('/srpg-result', auth, async (req, res) => {
       }
     }
 
+    // SRPG 전투 재료 드랍 처리
+    let droppedMaterials = [];
+    if (victory && monstersDefeated && monstersDefeated.length > 0) {
+      const [monsterRows] = await conn.query(
+        'SELECT id, name FROM monsters WHERE name IN (?)',
+        [monstersDefeated]
+      );
+      for (const mon of monsterRows) {
+        const [drops] = await conn.query(
+          'SELECT md.*, m.name, m.icon FROM monster_drops md JOIN materials m ON md.material_id = m.id WHERE md.monster_id = ?',
+          [mon.id]
+        );
+        for (const drop of drops) {
+          if (Math.random() < drop.drop_rate) {
+            const qty = drop.min_quantity + Math.floor(Math.random() * (drop.max_quantity - drop.min_quantity + 1));
+            await conn.query(
+              `INSERT INTO material_inventory (character_id, material_id, quantity) VALUES (?, ?, ?)
+               ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
+              [char.id, drop.material_id, qty, qty]
+            );
+            const existing = droppedMaterials.find(d => d.name === drop.name);
+            if (existing) existing.quantity += qty;
+            else droppedMaterials.push({ name: drop.name, icon: drop.icon, quantity: qty });
+          }
+        }
+      }
+    }
+
+    // 소환수 최신 정보 조회
+    let summonResults = [];
+    if (victory && activeSummonIds && activeSummonIds.length > 0) {
+      const [smList] = await conn.query(
+        `SELECT cs.id, cs.name, cs.level, cs.exp, st.icon, st.type
+         FROM character_summons cs
+         JOIN summon_templates st ON cs.template_id = st.id
+         WHERE cs.id IN (?) AND cs.character_id = ?`,
+        [activeSummonIds, char.id]
+      );
+      summonResults = smList.map(s => ({
+        id: s.id,
+        name: s.name,
+        level: s.level,
+        exp: s.exp,
+        icon: s.icon,
+        type: s.type,
+        expNeeded: s.level * 50,
+      }));
+    }
+
     await conn.commit();
 
     res.json({
+      droppedMaterials,
+      leveledUp: newLevel > levelBefore,
+      levelBefore,
       character: {
         level: newLevel,
         exp: newExp,
@@ -774,6 +909,7 @@ router.post('/srpg-result', auth, async (req, res) => {
         current_hp: Math.max(0, playerHp),
         current_mp: Math.max(0, playerMp),
       },
+      summonResults,
     });
   } catch (err) {
     await conn.rollback();
@@ -781,6 +917,33 @@ router.post('/srpg-result', auth, async (req, res) => {
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   } finally {
     conn.release();
+  }
+});
+
+// 몬스터 드랍 정보 조회 (전투 시작 시 프리로드)
+router.post('/monster-drops', auth, async (req, res) => {
+  try {
+    const { monsterNames } = req.body;
+    if (!monsterNames || monsterNames.length === 0) return res.json({ drops: {} });
+
+    const [monsterRows] = await pool.query(
+      'SELECT id, name FROM monsters WHERE name IN (?)',
+      [monsterNames]
+    );
+
+    const drops = {};
+    for (const mon of monsterRows) {
+      const [dropRows] = await pool.query(
+        'SELECT md.drop_rate, md.min_quantity, md.max_quantity, m.name, m.icon FROM monster_drops md JOIN materials m ON md.material_id = m.id WHERE md.monster_id = ?',
+        [mon.id]
+      );
+      drops[mon.name] = dropRows;
+    }
+
+    res.json({ drops });
+  } catch (err) {
+    console.error('Monster drops error:', err);
+    res.status(500).json({ message: '서버 오류' });
   }
 });
 

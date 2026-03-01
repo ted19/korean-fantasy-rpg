@@ -1,0 +1,653 @@
+/**
+ * 카드 턴제 전투 엔진
+ * - Darkest Dungeon 스타일: 앞열/뒷열 + 속도 기반 턴 + 방어/수호 시스템
+ * - 좌측: 아군 (최대 6장), 우측: 적 (1~6장)
+ * - 근거리: 앞열만 공격 가능, 원거리/마법: 앞뒷열 모두 공격
+ * - 방어 스킬: 아군 유닛을 대신 피해 흡수
+ */
+
+// ========== 유닛 생성 ==========
+
+const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
+
+export function createCardPlayerUnit(char, skills) {
+  const classInfo = getClassInfo(char.class_type);
+  const classKey = CLASS_IMAGE_MAP[char.class_type] || 'monk';
+  return {
+    id: 'player',
+    name: char.name,
+    team: 'player',
+    classType: char.class_type,
+    level: char.level,
+    hp: char.current_hp ?? char.hp,
+    maxHp: char.hp,
+    mp: char.current_mp ?? char.mp,
+    maxMp: char.mp,
+    attack: char.attack,
+    defense: char.defense,
+    physAttack: char.phys_attack || 0,
+    physDefense: char.phys_defense || 0,
+    magAttack: char.mag_attack || 0,
+    magDefense: char.mag_defense || 0,
+    critRate: char.crit_rate || 5,
+    evasion: char.evasion || 3,
+    speed: char.mag_attack + (char.phys_attack || 0) + (char.evasion || 3),
+    skills: (skills || []).map(s => ({ ...s, currentCooldown: 0 })),
+    row: classInfo.defaultRow,
+    rangeType: classInfo.rangeType,
+    icon: classInfo.icon,
+    imageUrl: `/characters/${classKey}_full.png`,
+    color: '#4fc3f7',
+    isGuarding: false,
+    guardTarget: null,
+    buffs: [],
+    debuffs: [],
+    gridRow: 0,
+    gridCol: 0,
+    element: char.element || 'neutral',
+  };
+}
+
+export function createCardSummonUnit(summon) {
+  const skills = summon.learned_skills || summon.skills || [];
+  const rangeType = summon.range_type || detectRangeType(skills, summon.type);
+  return {
+    id: `summon_${summon.id}`,
+    summonId: summon.id,
+    name: summon.name,
+    team: 'player',
+    classType: 'summon',
+    summonType: summon.type,
+    level: summon.level,
+    hp: summon.hp,
+    maxHp: summon.hp,
+    mp: summon.mp || 0,
+    maxMp: summon.mp || 0,
+    attack: summon.attack,
+    defense: summon.defense,
+    physAttack: summon.phys_attack || summon.physAttack || 0,
+    physDefense: summon.phys_defense || summon.physDefense || 0,
+    magAttack: summon.mag_attack || summon.magAttack || 0,
+    magDefense: summon.mag_defense || summon.magDefense || 0,
+    critRate: summon.crit_rate || summon.critRate || 5,
+    evasion: summon.evasion || 3,
+    speed: (summon.phys_attack || summon.physAttack || 0) + (summon.evasion || 3) + 5,
+    skills: skills.map(s => ({ ...s, currentCooldown: 0 })),
+    row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
+    rangeType,
+    icon: summon.icon || '👻',
+    imageUrl: `/summons/${summon.template_id}_full.png`,
+    color: '#81c784',
+    isGuarding: false,
+    guardTarget: null,
+    buffs: [],
+    debuffs: [],
+    gridRow: 0,
+    gridCol: 0,
+    element: summon.element || 'neutral',
+  };
+}
+
+export function createCardMercenaryUnit(merc) {
+  const weaponType = merc.weapon_type || merc.weaponType || 'sword';
+  const rangeType = merc.range_type || (weaponType === 'bow' ? 'ranged' : weaponType === 'staff' || weaponType === 'talisman' ? 'magic' : 'melee');
+  return {
+    id: `merc_${merc.id}`,
+    mercId: merc.id,
+    name: merc.name,
+    team: 'player',
+    classType: merc.class_type || 'mercenary',
+    level: merc.level,
+    hp: merc.hp,
+    maxHp: merc.hp,
+    mp: merc.mp || 0,
+    maxMp: merc.mp || 0,
+    attack: merc.phys_attack || 0,
+    defense: merc.phys_defense || 0,
+    physAttack: merc.phys_attack || 0,
+    physDefense: merc.phys_defense || 0,
+    magAttack: merc.mag_attack || 0,
+    magDefense: merc.mag_defense || 0,
+    critRate: merc.crit_rate || 5,
+    evasion: merc.evasion || 3,
+    speed: (merc.phys_attack || 0) + (merc.evasion || 3) + 3,
+    skills: [],
+    row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
+    rangeType,
+    icon: '🗡️',
+    imageUrl: `/mercenaries/${merc.template_id}_full.png`,
+    color: '#ffb347',
+    isGuarding: false,
+    guardTarget: null,
+    buffs: [],
+    debuffs: [],
+    gridRow: 0,
+    gridCol: 0,
+    element: merc.element || 'neutral',
+  };
+}
+
+export function createCardMonsterUnit(monster, index) {
+  const rangeType = monster.rangeType || monster.range_type || detectMonsterRangeType(monster);
+  return {
+    id: `monster_${index}`,
+    name: monster.name,
+    team: 'enemy',
+    level: monster.level || 1,
+    hp: monster.hp,
+    maxHp: monster.hp,
+    mp: monster.mp || 0,
+    maxMp: monster.mp || 0,
+    attack: monster.attack,
+    defense: monster.defense || 0,
+    physAttack: monster.phys_attack || monster.physAttack || 0,
+    physDefense: monster.phys_defense || monster.physDefense || 0,
+    magAttack: monster.mag_attack || monster.magAttack || 0,
+    magDefense: monster.mag_defense || monster.magDefense || 0,
+    critRate: monster.crit_rate || monster.critRate || 5,
+    evasion: monster.evasion || 3,
+    speed: (monster.move_range || monster.moveRange || 3) * 5 + (monster.evasion || 3),
+    skills: (monster.skills || []).map(s => ({ ...s, currentCooldown: 0 })),
+    row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
+    rangeType,
+    icon: monster.icon || '👹',
+    imageUrl: `/monsters/${monster.id}_full.png`,
+    color: '#ef5350',
+    expReward: monster.expReward || monster.exp_reward || 0,
+    goldReward: monster.goldReward || monster.gold_reward || 0,
+    aiType: monster.aiType || monster.ai_type || 'aggressive',
+    isGuarding: false,
+    guardTarget: null,
+    buffs: [],
+    debuffs: [],
+    gridRow: 0,
+    gridCol: 0,
+    element: monster.element || 'neutral',
+  };
+}
+
+// ========== 3x3 그리드 배치 (팀당 최대 9명) ==========
+
+export function assignGridPositions(playerTeam, enemyTeam) {
+  // 각 팀: 3x3 그리드 (col 0=뒷열, col 1=중열, col 2=앞열)
+  // 아군: col2=앞열(front), col0=뒷열(back), col1=넘치는 유닛
+  // 적군: col0=앞열(front), col2=뒷열(back), col1=넘치는 유닛
+
+  function placeTeam(units, frontCol, backCol, midCol) {
+    const front = units.filter(u => u.row === 'front');
+    const back = units.filter(u => u.row === 'back');
+
+    // 앞열 배치 (최대 3명)
+    front.slice(0, 3).forEach((u, i) => {
+      u.gridCol = frontCol;
+      u.gridRow = i;
+    });
+    // 뒷열 배치 (최대 3명)
+    back.slice(0, 3).forEach((u, i) => {
+      u.gridCol = backCol;
+      u.gridRow = i;
+    });
+    // 넘치는 유닛은 중간열에 배치
+    const overflow = [...front.slice(3), ...back.slice(3)];
+    overflow.slice(0, 3).forEach((u, i) => {
+      u.gridCol = midCol;
+      u.gridRow = i;
+    });
+  }
+
+  placeTeam(playerTeam, 2, 0, 1);
+  placeTeam(enemyTeam, 0, 2, 1);
+}
+
+// ========== 유틸 ==========
+
+function getClassInfo(classType) {
+  switch (classType) {
+    case '풍수사': return { defaultRow: 'back', rangeType: 'magic', icon: '🧙' };
+    case '무당':  return { defaultRow: 'back', rangeType: 'magic', icon: '🔮' };
+    case '승려':  return { defaultRow: 'front', rangeType: 'melee', icon: '📿' };
+    default:      return { defaultRow: 'front', rangeType: 'melee', icon: '⚔️' };
+  }
+}
+
+function detectRangeType(skills, summonType) {
+  if (summonType === '정령') return 'magic';
+  if (summonType === '귀신') return 'magic';
+  const hasRanged = skills.some(s => (s.range_val || s.range || 1) >= 2);
+  return hasRanged ? 'ranged' : 'melee';
+}
+
+function detectMonsterRangeType(monster) {
+  // DB에서 range_type이 설정된 경우 우선 사용
+  if (monster.range_type === 'magic' || monster.rangeType === 'magic') return 'magic';
+  if (monster.aiType === 'ranged' || monster.ai_type === 'ranged') return 'ranged';
+  if (monster.aiType === 'support' || monster.ai_type === 'support') return 'ranged';
+  const skills = monster.skills || [];
+  const rangedSkills = skills.filter(s => (s.range_val || s.range || 1) >= 2);
+  return rangedSkills.length > skills.length / 2 ? 'ranged' : 'melee';
+}
+
+// ========== 턴 순서 ==========
+
+export function calculateTurnOrder(units) {
+  const alive = units.filter(u => u.hp > 0);
+  return alive
+    .map(u => ({
+      ...u,
+      initiative: u.speed + Math.floor(Math.random() * 8),
+    }))
+    .sort((a, b) => b.initiative - a.initiative)
+    .map(u => u.id);
+}
+
+// ========== 타겟 가능 여부 ==========
+
+export function getValidTargets(attacker, defenders, attackType) {
+  const alive = defenders.filter(u => u.hp > 0);
+  if (alive.length === 0) return [];
+
+  const frontRow = alive.filter(u => u.row === 'front');
+  const backRow = alive.filter(u => u.row === 'back');
+
+  if (attackType === 'ranged' || attackType === 'magic') {
+    return alive; // 원거리/마법: 모두 타겟 가능
+  }
+
+  // 근거리: 앞열 우선, 앞열 없으면 뒷열 타겟 가능
+  if (frontRow.length > 0) return frontRow;
+  return backRow;
+}
+
+export function getHealTargets(healer, allies) {
+  return allies.filter(u => u.hp > 0 && u.hp < u.maxHp);
+}
+
+export function getGuardTargets(guarder, allies) {
+  return allies.filter(u => u.hp > 0 && u.id !== guarder.id);
+}
+
+// ========== 데미지 계산 ==========
+
+export function calculateDamage(attacker, defender, skill = null) {
+  let baseDmg;
+  let isMagic = false;
+
+  if (skill && skill.damage_multiplier) {
+    const mult = skill.damage_multiplier;
+    if (skill.type === 'attack' && (attacker.magAttack > attacker.physAttack || mult >= 1.5)) {
+      baseDmg = attacker.magAttack * mult + attacker.attack * 0.5;
+      isMagic = true;
+    } else {
+      baseDmg = attacker.physAttack * mult + attacker.attack * 0.5;
+    }
+  } else {
+    if (attacker.magAttack > attacker.physAttack) {
+      baseDmg = attacker.magAttack + attacker.attack * 0.5;
+      isMagic = true;
+    } else {
+      baseDmg = attacker.physAttack + attacker.attack * 0.5;
+    }
+  }
+
+  // 버프 적용
+  const atkBuff = (attacker.buffs || [])
+    .filter(b => b.stat === 'attack')
+    .reduce((sum, b) => sum + b.value, 0);
+  baseDmg += atkBuff;
+
+  // 방어
+  const defStat = isMagic ? defender.magDefense : defender.physDefense;
+  const defBuff = (defender.buffs || [])
+    .filter(b => b.stat === 'defense')
+    .reduce((sum, b) => sum + b.value, 0);
+  const totalDef = defStat + defender.defense * 0.3 + defBuff;
+
+  // 랜덤 편차
+  const variance = Math.floor(Math.random() * 5) - 2;
+  let damage = Math.max(1, Math.floor(baseDmg - totalDef * 0.6 + variance));
+
+  // 속성 상성 적용
+  let elementMult = 1.0;
+  let elementLabel = '';
+  if (attacker.element && defender.element && attacker.element !== defender.element) {
+    const ELEMENT_TABLE = {
+      fire:    { fire:1.0, water:0.5, earth:1.5, wind:1.5, neutral:1.0 },
+      water:   { fire:2.0, water:1.0, earth:1.5, wind:0.5, neutral:1.0 },
+      earth:   { fire:0.5, water:0.5, earth:1.0, wind:2.0, neutral:1.0 },
+      wind:    { fire:1.5, water:2.0, earth:0.5, wind:1.0, neutral:1.0 },
+      neutral: { fire:1.0, water:1.0, earth:1.0, wind:1.0, neutral:1.0 },
+    };
+    elementMult = ELEMENT_TABLE[attacker.element]?.[defender.element] ?? 1.0;
+    if (elementMult > 1.0) elementLabel = '효과적!';
+    else if (elementMult < 1.0) elementLabel = '비효과적...';
+    damage = Math.max(1, Math.floor(damage * elementMult));
+  }
+
+  // 크리티컬
+  let isCrit = false;
+  if (Math.random() * 100 < (attacker.critRate || 5)) {
+    damage = Math.floor(damage * 1.5);
+    isCrit = true;
+  }
+
+  // 회피
+  let isEvade = false;
+  if (Math.random() * 100 < (defender.evasion || 3)) {
+    damage = 0;
+    isEvade = true;
+  }
+
+  return { damage, isCrit, isEvade, isMagic, elementMult, elementLabel };
+}
+
+// ========== 스킬 실행 ==========
+
+export function executeSkill(caster, skill, target, allUnits) {
+  const logs = [];
+
+  if (caster.mp < (skill.mp_cost || 0)) {
+    logs.push({ text: `${caster.name}: MP 부족!`, type: 'system' });
+    return { logs, success: false };
+  }
+
+  caster.mp -= (skill.mp_cost || 0);
+  skill.currentCooldown = skill.cooldown || 0;
+
+  switch (skill.type) {
+    case 'attack': {
+      const result = calculateDamage(caster, target, skill);
+
+      // 수호 체크
+      const guardian = findGuardian(target, allUnits);
+      const actualTarget = guardian || target;
+      if (guardian) {
+        logs.push({ text: `${guardian.name}이(가) ${target.name} 대신 방어!`, type: 'system' });
+      }
+
+      if (result.isEvade) {
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${actualTarget.name} 회피!`, type: 'evade' });
+      } else {
+        actualTarget.hp = Math.max(0, actualTarget.hp - result.damage);
+        let dmgText = `${caster.name}의 ${skill.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
+        if (result.isCrit) dmgText += ' (치명타!)';
+        if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
+        logs.push({ text: dmgText, type: 'damage', elementMult: result.elementMult, elementLabel: result.elementLabel });
+
+        // 흡혈
+        if (skill.heal_amount && skill.heal_amount > 0) {
+          const healAmt = Math.min(skill.heal_amount, caster.maxHp - caster.hp);
+          caster.hp += healAmt;
+          logs.push({ text: `${caster.name} HP +${healAmt} 흡수`, type: 'heal' });
+        }
+      }
+
+      if (actualTarget.hp <= 0) {
+        logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill' });
+        promoteBackRow(actualTarget.team, allUnits);
+      }
+      break;
+    }
+
+    case 'aoe': {
+      const enemies = allUnits.filter(u => u.team !== caster.team && u.hp > 0);
+      logs.push({ text: `${caster.name}의 ${skill.name}! (전체 공격)`, type: 'system' });
+      for (const enemy of enemies) {
+        const result = calculateDamage(caster, enemy, skill);
+        if (result.isEvade) {
+          logs.push({ text: `  → ${enemy.name} 회피!`, type: 'evade' });
+        } else {
+          const dmg = Math.floor(result.damage * 0.7); // AOE 감쇄
+          enemy.hp = Math.max(0, enemy.hp - dmg);
+          let aoeText = `  → ${enemy.name}에게 ${dmg} 피해`;
+          if (result.elementLabel) aoeText += ` [${result.elementLabel}]`;
+          logs.push({ text: aoeText, type: 'damage', elementMult: result.elementMult, elementLabel: result.elementLabel });
+          if (enemy.hp <= 0) {
+            logs.push({ text: `  ${enemy.name} 쓰러짐!`, type: 'kill' });
+          }
+        }
+      }
+      promoteBackRow(enemies[0]?.team, allUnits);
+      break;
+    }
+
+    case 'heal': {
+      const healAmt = skill.heal_amount || 30;
+      const actual = Math.min(healAmt, target.maxHp - target.hp);
+      target.hp += actual;
+      logs.push({ text: `${caster.name}의 ${skill.name} → ${target.name} HP +${actual}`, type: 'heal' });
+      break;
+    }
+
+    case 'buff': {
+      const buffTarget = target || caster;
+      const existing = buffTarget.buffs.findIndex(b => b.stat === skill.buff_stat && b.source === caster.id);
+      if (existing >= 0) buffTarget.buffs.splice(existing, 1);
+      buffTarget.buffs.push({
+        stat: skill.buff_stat || 'attack',
+        value: skill.buff_value || 5,
+        duration: skill.buff_duration || 3,
+        source: caster.id,
+        name: skill.name,
+      });
+      logs.push({
+        text: `${caster.name}의 ${skill.name} → ${buffTarget.name} ${skill.buff_stat || 'attack'} +${skill.buff_value || 5} (${skill.buff_duration || 3}턴)`,
+        type: 'buff',
+      });
+      break;
+    }
+
+    case 'debuff': {
+      const existing = target.debuffs.findIndex(b => b.stat === skill.buff_stat && b.source === caster.id);
+      if (existing >= 0) target.debuffs.splice(existing, 1);
+      target.debuffs.push({
+        stat: skill.buff_stat || 'defense',
+        value: skill.buff_value || 3,
+        duration: skill.buff_duration || 3,
+        source: caster.id,
+        name: skill.name,
+      });
+      logs.push({
+        text: `${caster.name}의 ${skill.name} → ${target.name} ${skill.buff_stat || 'defense'} -${skill.buff_value || 3} (${skill.buff_duration || 3}턴)`,
+        type: 'debuff',
+      });
+      break;
+    }
+
+    default:
+      logs.push({ text: `${caster.name}의 ${skill.name} 사용`, type: 'system' });
+  }
+
+  return { logs, success: true };
+}
+
+// ========== 기본 공격 ==========
+
+export function executeAttack(attacker, target, allUnits) {
+  const logs = [];
+  const result = calculateDamage(attacker, target);
+
+  // 수호 체크
+  const guardian = findGuardian(target, allUnits);
+  const actualTarget = guardian || target;
+  if (guardian) {
+    logs.push({ text: `${guardian.name}이(가) ${target.name} 대신 방어!`, type: 'system' });
+  }
+
+  if (result.isEvade) {
+    logs.push({ text: `${attacker.name} → ${actualTarget.name} 회피!`, type: 'evade' });
+  } else {
+    actualTarget.hp = Math.max(0, actualTarget.hp - result.damage);
+    let dmgText = `${attacker.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
+    if (result.isCrit) dmgText += ' (치명타!)';
+    if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
+    logs.push({ text: dmgText, type: 'damage', elementMult: result.elementMult, elementLabel: result.elementLabel });
+  }
+
+  if (actualTarget.hp <= 0) {
+    logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill' });
+    promoteBackRow(actualTarget.team, allUnits);
+  }
+
+  return logs;
+}
+
+// ========== 방어 (수호) ==========
+
+export function executeGuard(guarder, target) {
+  guarder.isGuarding = true;
+  guarder.guardTarget = target.id;
+  return [{ text: `${guarder.name}이(가) ${target.name}을(를) 수호 중!`, type: 'guard' }];
+}
+
+function findGuardian(target, allUnits) {
+  if (!target) return null;
+  const guardian = allUnits.find(u =>
+    u.hp > 0 &&
+    u.team === target.team &&
+    u.isGuarding &&
+    u.guardTarget === target.id &&
+    u.id !== target.id
+  );
+  return guardian || null;
+}
+
+// ========== 열 승진: 앞열이 비면 뒷열이 올라옴 ==========
+
+export function promoteBackRow(team, allUnits) {
+  if (!team) return;
+  const teamAlive = allUnits.filter(u => u.team === team && u.hp > 0);
+  const frontAlive = teamAlive.filter(u => u.row === 'front');
+  if (frontAlive.length === 0) {
+    const backAlive = teamAlive.filter(u => u.row === 'back');
+    if (backAlive.length > 0) {
+      // 가장 방어 높은 유닛을 앞으로
+      backAlive.sort((a, b) => (b.defense + b.physDefense) - (a.defense + a.physDefense));
+      backAlive[0].row = 'front';
+    }
+  }
+}
+
+// ========== 턴 시작 처리 ==========
+
+export function onTurnStart(unit) {
+  // 쿨다운 감소
+  for (const skill of unit.skills) {
+    if (skill.currentCooldown > 0) skill.currentCooldown--;
+  }
+
+  // 버프/디버프 지속시간 감소
+  unit.buffs = (unit.buffs || []).filter(b => {
+    b.duration--;
+    return b.duration > 0;
+  });
+  unit.debuffs = (unit.debuffs || []).filter(b => {
+    b.duration--;
+    return b.duration > 0;
+  });
+
+  // 수호 해제 (매 턴 갱신)
+  unit.isGuarding = false;
+  unit.guardTarget = null;
+}
+
+// ========== AI 행동 결정 ==========
+
+export function decideAIAction(unit, allUnits) {
+  const allies = allUnits.filter(u => u.team === unit.team && u.hp > 0);
+  const enemies = allUnits.filter(u => u.team !== unit.team && u.hp > 0);
+  if (enemies.length === 0) return null;
+
+  const attackType = (unit.rangeType === 'ranged' || unit.rangeType === 'magic') ? unit.rangeType : 'melee';
+  const validTargets = getValidTargets(unit, enemies, attackType);
+
+  // 사용 가능한 스킬
+  const usableSkills = unit.skills.filter(s =>
+    s.currentCooldown <= 0 && (s.mp_cost || 0) <= unit.mp
+  );
+
+  // 지원형: 치유 우선
+  if (unit.aiType === 'support') {
+    const healSkill = usableSkills.find(s => s.type === 'heal');
+    const hurtAlly = allies.find(u => u.hp < u.maxHp * 0.6);
+    if (healSkill && hurtAlly) {
+      return { action: 'skill', skill: healSkill, target: hurtAlly };
+    }
+  }
+
+  // 방어형: 가끔 수호
+  if (unit.aiType === 'defensive' && Math.random() < 0.3) {
+    const weakAlly = allies.find(u => u.hp < u.maxHp * 0.4 && u.id !== unit.id && u.row === 'front');
+    if (weakAlly) {
+      return { action: 'guard', target: weakAlly };
+    }
+  }
+
+  // 보스: 스킬 우선
+  if (unit.aiType === 'boss' && usableSkills.length > 0) {
+    const aoeSkill = usableSkills.find(s => s.type === 'aoe');
+    if (aoeSkill && enemies.length >= 2) {
+      return { action: 'skill', skill: aoeSkill, target: enemies[0] };
+    }
+    const atkSkill = usableSkills.find(s => s.type === 'attack');
+    if (atkSkill && validTargets.length > 0) {
+      const target = validTargets.reduce((a, b) => a.hp < b.hp ? a : b);
+      return { action: 'skill', skill: atkSkill, target };
+    }
+  }
+
+  // 겁쟁이: HP 낮으면 수호/치유
+  if (unit.aiType === 'coward' && unit.hp < unit.maxHp * 0.3) {
+    const healSkill = usableSkills.find(s => s.type === 'heal');
+    if (healSkill) return { action: 'skill', skill: healSkill, target: unit };
+  }
+
+  // 공격형/원거리: 스킬 공격 또는 기본 공격
+  if (usableSkills.length > 0 && Math.random() < 0.5) {
+    const atkSkills = usableSkills.filter(s => s.type === 'attack' || s.type === 'aoe');
+    if (atkSkills.length > 0) {
+      const skill = atkSkills[Math.floor(Math.random() * atkSkills.length)];
+      if (skill.type === 'aoe') {
+        return { action: 'skill', skill, target: enemies[0] };
+      }
+      const target = validTargets[Math.floor(Math.random() * validTargets.length)];
+      return { action: 'skill', skill, target };
+    }
+  }
+
+  // 기본 공격
+  if (validTargets.length > 0) {
+    // 가장 HP 낮은 대상 우선
+    const target = unit.aiType === 'aggressive'
+      ? validTargets.reduce((a, b) => a.hp < b.hp ? a : b)
+      : validTargets[Math.floor(Math.random() * validTargets.length)];
+    return { action: 'attack', target };
+  }
+
+  return { action: 'wait' };
+}
+
+// ========== 전투 종료 체크 ==========
+
+export function checkBattleEnd(allUnits) {
+  const playerAlive = allUnits.filter(u => u.team === 'player' && u.hp > 0);
+  const enemyAlive = allUnits.filter(u => u.team === 'enemy' && u.hp > 0);
+
+  if (enemyAlive.length === 0) return 'victory';
+  if (playerAlive.length === 0) return 'defeat';
+  return null;
+}
+
+// ========== 보상 계산 ==========
+
+export function calculateRewards(allUnits, stage) {
+  const deadEnemies = allUnits.filter(u => u.team === 'enemy' && u.hp <= 0);
+  let baseExp = deadEnemies.reduce((sum, u) => sum + (u.expReward || 10), 0);
+  let baseGold = deadEnemies.reduce((sum, u) => sum + (u.goldReward || 5), 0);
+
+  if (stage) {
+    baseExp += stage.rewardExp || 0;
+    baseGold += stage.rewardGold || 0;
+  }
+
+  return { exp: baseExp, gold: baseGold };
+}

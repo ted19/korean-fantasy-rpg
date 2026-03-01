@@ -1,14 +1,19 @@
-/* Dungeon Area - RPG Theme */
-.dungeon-loading { text-align: center; padding: 40px; color: var(--text-dim); }
+/* ===== Dungeon Area - Premium RPG Design ===== */
+.dg-loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-dim);
+  font-size: 1rem;
+}
 
-/* ===== Dungeon Map Scene ===== */
-.dungeon-scene {
+/* ===== Dungeon Scene (List) ===== */
+.dg-scene {
   position: relative;
   min-height: 400px;
   padding: 20px;
 }
 
-.dungeon-map-bg {
+.dg-scene-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -16,7 +21,7 @@
   overflow: hidden;
 }
 
-.dungeon-map-bg-img {
+.dg-scene-bg-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -24,57 +29,167 @@
   filter: blur(1px);
 }
 
-.dungeon-map-bg-overlay {
+.dg-scene-bg-overlay {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(11,14,20,0.7) 0%, rgba(11,14,20,0.4) 40%, rgba(11,14,20,0.7) 100%);
 }
 
-.dungeon-map-title {
+/* Title */
+.dg-title-area {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.dg-title {
   position: relative;
   z-index: 1;
   text-align: center;
   font-family: var(--font-title);
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--gold);
-  letter-spacing: 3px;
-  margin-bottom: 20px;
-  text-shadow: 0 2px 12px rgba(212, 168, 67, 0.4);
+  letter-spacing: 4px;
+  margin-bottom: 4px;
+  text-shadow: 0 2px 16px rgba(212, 168, 67, 0.5), 0 0 40px rgba(212, 168, 67, 0.15);
 }
 
-.dungeon-map-grid {
+.dg-subtitle {
   position: relative;
   z-index: 1;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  letter-spacing: 1px;
 }
 
-.dungeon-map-card {
+/* ===== Dungeon List Roadmap ===== */
+.dg-list-roadmap {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 16px 0 32px;
+}
+
+.dg-list-path {
+  position: absolute;
+  top: 16px;
+  bottom: 32px;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  z-index: 0;
+}
+.dg-list-path::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--list-progress, 0%);
+  background: linear-gradient(180deg, #166534, #22c55e);
+  border-radius: 2px;
+  transition: height 0.6s ease;
+  box-shadow: 0 0 8px rgba(34,197,94,0.3);
+}
+
+.dg-list-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  z-index: 1;
+}
+.dg-list-row.left {
+  flex-direction: row;
+  padding-left: calc(50% + 24px);
+}
+.dg-list-row.right {
+  flex-direction: row-reverse;
+  padding-right: calc(50% + 24px);
+}
+
+.dg-list-dot {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 3px solid var(--border-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  z-index: 2;
+  transition: all 0.3s;
+}
+.dg-list-dot.complete {
+  border-color: var(--green);
+  background: rgba(20,83,45,0.5);
+  color: var(--green);
+  box-shadow: 0 0 10px rgba(34,197,94,0.3);
+}
+.dg-list-dot.active {
+  border-color: var(--blue);
+  background: rgba(30,58,138,0.4);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(59,130,246,0.3);
+}
+.dg-list-dot.locked {
+  border-color: var(--border-dark);
+  background: rgba(0,0,0,0.3);
+  color: var(--text-dark);
+  font-size: 0.6rem;
+}
+
+/* ===== Dungeon Card ===== */
+
+.dg-card {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
   background: rgba(30, 37, 56, 0.85);
   border: 2px solid var(--border-dark);
-  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.3s;
-  overflow: hidden;
+  transition: all 0.3s ease;
   backdrop-filter: blur(4px);
+  width: 260px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.dungeon-map-card:hover:not(.locked) {
+.dg-card:hover:not(.locked) {
   transform: translateY(-5px);
-  border-color: var(--gold-dim);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 16px rgba(212, 168, 67, 0.15);
+  border-color: var(--dg-accent, var(--gold-dim));
+  box-shadow:
+    0 8px 28px rgba(0,0,0,0.5),
+    0 0 16px rgba(212, 168, 67, 0.15);
 }
 
-.dungeon-map-card.locked {
+.dg-card.locked {
   opacity: 0.5;
   cursor: not-allowed;
   filter: grayscale(0.6);
 }
 
-.dungeon-map-card.cleared {
+.dg-card.complete {
   border-color: var(--green-dim);
 }
 
-.dungeon-map-card-img-wrap {
+/* Card Image */
+.dg-card-img-wrap {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
@@ -82,25 +197,38 @@
   background: var(--bg-darkest);
 }
 
-.dungeon-map-card-img {
+.dg-card-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s;
 }
 
-.dungeon-map-card:hover:not(.locked) .dungeon-map-card-img {
+.dg-card:hover:not(.locked) .dg-card-img {
   transform: scale(1.08);
 }
 
-.dungeon-map-card-glow {
+.dg-card-chapter {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  z-index: 1;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
+.dg-card-glow {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, transparent 50%, rgba(11,14,20,0.6) 100%);
   pointer-events: none;
 }
 
-.dungeon-map-lock-overlay {
+.dg-card-lock-overlay {
   position: absolute;
   inset: 0;
   background: rgba(0,0,0,0.55);
@@ -109,55 +237,96 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
+  z-index: 2;
 }
 
-.dungeon-map-lock-icon { font-size: 1.6rem; }
-.dungeon-map-lock-text { font-size: 0.75rem; color: var(--red); font-weight: 700; }
+.dg-card-lock-icon { font-size: 1.6rem; }
+.dg-card-lock-text { font-size: 0.65rem; color: var(--red); font-weight: 700; text-align: center; padding: 0 4px; }
 
-.dungeon-map-clear-badge {
+.dg-card-complete-badge {
   position: absolute;
   top: 8px;
   right: 8px;
   background: rgba(34, 197, 94, 0.9);
   color: #fff;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 4px;
   letter-spacing: 1px;
+  z-index: 2;
 }
 
-.dungeon-map-card-info {
-  padding: 10px 12px;
+/* Card Info */
+.dg-card-info {
+  padding: 10px 12px 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-.dungeon-map-card-name {
+.dg-card-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.dg-card-name {
+  font-family: var(--font-title);
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--gold);
-  font-size: 0.9rem;
-  margin-bottom: 6px;
-  font-family: var(--font-title);
+  margin-bottom: 3px;
   letter-spacing: 0.5px;
 }
 
-.dungeon-map-card-meta {
+.dg-card-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  line-height: 1.3;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dg-card-meta {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 6px;
 }
 
-.dungeon-map-lv-badge { font-size: 0.65rem !important; }
+.dg-card-lv { font-size: 0.6rem !important; }
 
-.dungeon-map-progress {
+.dg-card-progress-text {
   font-size: 0.75rem;
   color: var(--accent);
   font-weight: 700;
 }
 
-/* Dungeon Detail */
-.dungeon-detail { padding: 0; }
+.dg-card-progress-bar {
+  height: 4px;
+  background: var(--bg-darkest);
+  border-radius: 2px;
+  overflow: hidden;
+}
 
-.dungeon-back-btn {
+.dg-card-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green-dim), var(--green));
+  border-radius: 2px;
+  transition: width 0.5s;
+}
+
+/* ===== Dungeon Detail ===== */
+.dg-detail {
+  padding: 0;
+}
+
+.dg-back-btn {
   background: none;
   border: 1px solid var(--border-dark);
   color: var(--text-dim);
@@ -169,89 +338,903 @@
   margin-bottom: 14px;
   transition: all 0.2s;
 }
-.dungeon-back-btn:hover { border-color: var(--gold); color: var(--gold); }
-
-.dungeon-detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-.dungeon-detail-icon { font-size: 2rem; }
-.dungeon-detail-img {
-  width: 64px; height: 64px;
-  object-fit: cover;
-  border-radius: var(--radius-md);
-  border: 2px solid var(--border-gold);
+.dg-back-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
 }
-.dungeon-detail-header h3 { margin: 0; color: var(--gold); font-family: var(--font-title); }
-.dungeon-detail-header p { margin: 4px 0 0; color: var(--text-muted); font-size: 0.85rem; }
 
-/* Roadmap */
-.dungeon-roadmap {
+/* Detail Header */
+.dg-detail-header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-dark);
+  background: rgba(30, 37, 56, 0.85);
+}
+
+.dg-detail-banner {
+  position: relative;
+  width: 100%;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--bg-darkest);
+}
+
+.dg-detail-banner-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s;
+}
+
+.dg-detail-header:hover .dg-detail-banner-img {
+  transform: scale(1.03);
+}
+
+.dg-detail-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 20%, rgba(0,0,0,0.3) 100%),
+    linear-gradient(180deg, transparent 40%, rgba(30, 37, 56, 0.85) 100%);
+  z-index: 1;
+}
+
+.dg-detail-info {
+  padding: 14px 18px;
+}
+
+.dg-detail-info h3 {
+  margin: 0 0 2px;
+  color: var(--gold);
+  font-family: var(--font-title);
+  font-size: 1.2rem;
+  letter-spacing: 1px;
+}
+
+.dg-detail-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.dg-detail-info p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.dg-detail-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.dg-detail-lv { font-size: 0.6rem !important; }
+
+.dg-detail-progress-text {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.dg-detail-progress-text strong {
+  color: var(--accent);
+}
+
+/* ===== Roadmap ===== */
+.dg-roadmap {
   background: linear-gradient(180deg, var(--bg-panel), var(--bg-dark));
   border: 1px solid var(--border-dark);
   border-radius: var(--radius-lg);
   padding: 18px;
+  overflow: visible;
 }
 
-.roadmap-title { font-size: 1rem; font-weight: 700; color: var(--gold); margin-bottom: 4px; font-family: var(--font-title); }
-.roadmap-progress { font-size: 0.8rem; color: var(--accent); margin-bottom: 18px; font-weight: 500; }
-
-.roadmap-track {
-  display: flex; align-items: center; gap: 0;
-  padding: 12px 0; overflow-x: auto; flex-wrap: wrap;
-  justify-content: center; row-gap: 10px;
+.dg-roadmap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
 
-.roadmap-connector { width: 22px; height: 3px; background: var(--border-dark); flex-shrink: 0; position: relative; border-radius: 2px; }
-.roadmap-connector.cleared { background: linear-gradient(90deg, var(--green-dim), var(--green)); box-shadow: 0 0 8px rgba(34, 197, 94, 0.3); }
-
-.roadmap-node {
-  width: 52px; height: 52px; border-radius: 50%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  cursor: pointer; position: relative; transition: all 0.2s;
-  background: var(--bg-card); border: 2px solid var(--border-subtle); flex-shrink: 0;
-}
-.roadmap-node:hover:not(.locked) { transform: scale(1.15); z-index: 2; }
-
-.roadmap-node.cleared { background: linear-gradient(135deg, #166534, #15803d); border-color: var(--green); }
-.roadmap-node.current {
-  background: linear-gradient(135deg, #1e40af, #2563eb); border-color: var(--blue);
-  animation: nodePulse 2s infinite; box-shadow: 0 0 14px rgba(59, 130, 246, 0.4);
-}
-.roadmap-node.locked { background: var(--bg-darkest); border-color: var(--border-dark); cursor: not-allowed; opacity: 0.4; }
-
-.roadmap-node.boss { width: 62px; height: 62px; border-width: 3px; }
-.roadmap-node.boss:not(.cleared):not(.locked) { border-color: var(--red); background: linear-gradient(135deg, #7f1d1d, #991b1b); }
-.roadmap-node.boss.current {
-  border-color: var(--red); background: linear-gradient(135deg, #991b1b, #b91c1c);
-  animation: bossPulse 2s infinite; box-shadow: 0 0 18px rgba(239, 68, 68, 0.5);
+.dg-roadmap-title-area {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
-@keyframes nodePulse {
+.dg-roadmap-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gold);
+  font-family: var(--font-title);
+}
+
+.dg-roadmap-label {
+  font-size: 0.65rem;
+  color: var(--text-dark);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.dg-roadmap-progress {
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Progress Bar */
+.dg-progress-bar {
+  position: relative;
+  height: 6px;
+  background: var(--bg-darkest);
+  border-radius: 3px;
+  margin-bottom: 22px;
+  overflow: visible;
+}
+
+.dg-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #166534, #22c55e);
+  border-radius: 3px;
+  transition: width 0.5s;
+  position: relative;
+}
+
+.dg-progress-glow {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 12px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--green), 0 0 20px rgba(34, 197, 94, 0.3);
+  transform: translateX(-50%);
+  transition: left 0.5s;
+}
+
+/* ===== Vertical Zigzag Roadmap Track ===== */
+.dg-roadmap-track-v {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 24px 0 32px;
+  overflow: visible;
+}
+
+/* Central path line */
+.dg-roadmap-path-line {
+  position: absolute;
+  top: 24px;
+  bottom: 32px;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  background: var(--border-dark);
+  border-radius: 2px;
+  z-index: 0;
+}
+.dg-roadmap-path-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--path-progress, 0%);
+  background: linear-gradient(180deg, #166534, #22c55e);
+  border-radius: 2px;
+  transition: height 0.6s ease;
+  box-shadow: 0 0 8px rgba(34,197,94,0.3);
+}
+
+/* Row = one stage */
+.dg-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  z-index: 1;
+}
+.dg-row.left {
+  flex-direction: row;
+  padding-left: calc(50% + 20px);
+}
+.dg-row.right {
+  flex-direction: row-reverse;
+  padding-right: calc(50% + 20px);
+}
+
+/* Dot on the central path */
+.dg-path-dot {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 3px solid var(--border-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  z-index: 2;
+  transition: all 0.3s;
+}
+.dg-path-dot.cleared {
+  border-color: var(--green);
+  background: rgba(20,83,45,0.4);
+  color: var(--green);
+  box-shadow: 0 0 8px rgba(34,197,94,0.3);
+}
+.dg-path-dot.current {
+  border-color: var(--blue);
+  background: rgba(30,58,138,0.4);
+  color: #fff;
+  animation: dgDotPulse 2s infinite;
+  box-shadow: 0 0 12px rgba(59,130,246,0.4);
+}
+.dg-path-dot.boss {
+  width: 34px;
+  height: 34px;
+  font-size: 0.9rem;
+  border-width: 3px;
+}
+.dg-path-dot.boss:not(.cleared) {
+  border-color: var(--red);
+  background: rgba(127,29,29,0.4);
+  box-shadow: 0 0 12px rgba(220,38,38,0.35);
+}
+
+@keyframes dgDotPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(59,130,246,0.3); }
+  50% { box-shadow: 0 0 18px rgba(59,130,246,0.6); }
+}
+
+/* Dungeon Node */
+.dg-node {
+  position: relative;
+  width: 180px;
+  min-height: 100px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  cursor: pointer;
+  transition: all 0.25s;
+  background: var(--bg-card);
+  border: 2px solid var(--border-subtle);
+  flex-shrink: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.dg-node-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.dg-node-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s;
+}
+
+.dg-node-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.8) 100%);
+}
+
+.dg-node:hover:not(.locked) .dg-node-bg-img {
+  transform: scale(1.12);
+}
+
+.dg-node:hover:not(.locked) {
+  transform: translateY(-3px);
+  z-index: 2;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  border-color: var(--dg-accent, var(--gold-dim));
+}
+
+.dg-node.cleared {
+  border-color: var(--green);
+}
+.dg-node.cleared .dg-node-bg-overlay {
+  background: linear-gradient(180deg, rgba(20,83,45,0.3) 0%, rgba(20,83,45,0.5) 50%, rgba(0,0,0,0.75) 100%);
+}
+
+.dg-node.current {
+  border-color: var(--blue);
+  animation: dgNodePulse 2s infinite;
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.4);
+}
+.dg-node.current .dg-node-bg-overlay {
+  background: linear-gradient(180deg, rgba(30,58,138,0.3) 0%, rgba(37,99,235,0.25) 50%, rgba(0,0,0,0.75) 100%);
+}
+
+.dg-node.locked {
+  border-color: var(--border-dark);
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.dg-node.locked .dg-node-bg-img {
+  filter: grayscale(0.8) brightness(0.5);
+}
+
+.dg-node.boss {
+  width: 220px;
+  min-height: 130px;
+  border-width: 3px;
+  border-radius: 12px;
+  z-index: 1;
+}
+.dg-row.boss-row.left { padding-left: calc(50% + 20px); }
+.dg-row.boss-row.right { padding-right: calc(50% + 20px); }
+.dg-node.boss:not(.cleared):not(.locked) {
+  border-color: #dc2626;
+  box-shadow:
+    0 0 16px rgba(220,38,38,0.35),
+    inset 0 0 20px rgba(220,38,38,0.08);
+}
+.dg-node.boss:not(.cleared):not(.locked) .dg-node-bg-overlay {
+  background:
+    radial-gradient(ellipse at center top, rgba(220,38,38,0.2) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(127,29,29,0.25) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.85) 100%);
+}
+.dg-node.boss.current {
+  border-color: #ef4444;
+  animation: dgBossPulse 2s infinite;
+  box-shadow:
+    0 0 24px rgba(239, 68, 68, 0.55),
+    0 0 48px rgba(239, 68, 68, 0.15),
+    inset 0 0 20px rgba(239, 68, 68, 0.1);
+}
+.dg-node.boss.current .dg-node-bg-overlay {
+  background:
+    radial-gradient(ellipse at center top, rgba(239,68,68,0.25) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(153,27,27,0.3) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.85) 100%);
+}
+.dg-node.boss.cleared {
+  border-color: #16a34a;
+  box-shadow: 0 0 14px rgba(22,163,74,0.3);
+}
+
+@keyframes dgNodePulse {
   0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+  50% { box-shadow: 0 0 22px rgba(59, 130, 246, 0.55); }
 }
-@keyframes bossPulse {
+@keyframes dgBossPulse {
   0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
-  50% { box-shadow: 0 0 24px rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 26px rgba(239, 68, 68, 0.55); }
 }
 
-.roadmap-node-inner { display: flex; align-items: center; justify-content: center; position: relative; }
-.roadmap-stage-num { font-weight: 700; font-size: 1rem; color: #fff; }
-.roadmap-boss-icon { font-size: 1.3rem; }
-.roadmap-lock { font-size: 0.8rem; position: absolute; top: -2px; right: -4px; }
-.roadmap-check { position: absolute; top: -6px; right: -6px; background: var(--green); color: #fff; width: 16px; height: 16px; border-radius: 50%; font-size: 0.6rem; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-.roadmap-arrow { position: absolute; top: -6px; right: -6px; color: var(--blue); font-size: 0.7rem; }
-.roadmap-node-label { position: absolute; bottom: -18px; font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; }
-.roadmap-boss-tag { position: absolute; top: -12px; background: var(--red); color: #fff; font-size: 0.55rem; padding: 1px 7px; border-radius: 4px; font-weight: 700; letter-spacing: 1px; }
-
-.roadmap-info { margin-top: 30px; border-top: 1px solid var(--border-dark); padding-top: 14px; }
-.roadmap-info-title { font-size: 0.85rem; color: var(--gold); font-weight: 700; margin-bottom: 10px; }
-
-.roadmap-monster-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.roadmap-monster-tag {
-  background: var(--bg-card); border: 1px solid var(--border-dark);
-  border-radius: var(--radius-sm); padding: 5px 12px; font-size: 0.75rem;
-  color: var(--text-dim); display: flex; align-items: center; gap: 4px;
+.dg-node-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 8px 4px;
+  width: 100%;
 }
-.roadmap-monster-stat { color: var(--text-dark); font-size: 0.65rem; margin-left: 4px; }
 
-.roadmap-summons { margin-top: 18px; border-top: 1px solid var(--border-dark); padding-top: 14px; }
-.roadmap-summon-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-node-number {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
+.dg-node-name {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.9);
+  text-align: center;
+  line-height: 1.2;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  font-weight: 600;
+}
+
+.dg-node-desc {
+  font-size: 0.5rem;
+  color: rgba(255,255,255,0.55);
+  text-align: center;
+  line-height: 1.3;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.dg-node-check {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  z-index: 3;
+  background: var(--green);
+  color: #fff;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.dg-node-arrow {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  z-index: 3;
+  color: var(--blue);
+  font-size: 0.7rem;
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.5));
+}
+
+.dg-node-lock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  font-size: 1.2rem;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7));
+}
+
+.dg-node-rewards {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 2px 4px 5px;
+  width: 100%;
+}
+
+.dg-reward-exp {
+  font-size: 0.5rem;
+  color: #c4b5fd;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.dg-reward-gold {
+  font-size: 0.5rem;
+  color: var(--gold);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+/* Boss Frame */
+.dg-boss-frame {
+  position: absolute;
+  inset: -6px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.dg-boss-tag {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #ef4444, #dc2626, #b91c1c);
+  color: #fff;
+  font-size: 0.55rem;
+  padding: 2px 14px;
+  border-radius: 3px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  box-shadow:
+    0 2px 10px rgba(239, 68, 68, 0.5),
+    0 0 20px rgba(239, 68, 68, 0.2);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  white-space: nowrap;
+}
+
+/* ===== Sections ===== */
+.dg-section-title {
+  font-size: 0.85rem;
+  color: var(--gold);
+  font-weight: 700;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dg-section-icon {
+  font-size: 0.9rem;
+}
+
+.dg-section-count {
+  font-size: 0.7rem;
+  color: var(--text-dark);
+  font-weight: 500;
+}
+
+/* Summons Section */
+.dg-summons {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-dark);
+  padding-top: 16px;
+}
+
+.dg-summon-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dg-summon-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  color: var(--text-dim);
+  font-family: var(--font-ui);
+}
+
+.dg-summon-btn:hover {
+  border-color: var(--gold-dim);
+  background: rgba(255,255,255,0.04);
+}
+
+.dg-summon-btn.active {
+  border-color: var(--green);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.dg-summon-img-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.2);
+}
+
+.dg-summon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dg-summon-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dg-summon-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dg-summon-lv {
+  font-size: 0.6rem;
+  color: var(--text-dark);
+}
+
+.dg-summon-check {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--green);
+  color: #fff;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+/* Monsters Section */
+.dg-monsters {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-dark);
+  padding-top: 16px;
+}
+
+.dg-monster-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dg-monster-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.dg-monster-card:hover {
+  border-color: var(--border-subtle);
+  background: rgba(255,255,255,0.03);
+}
+
+.dg-monster-img-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border-dark);
+}
+
+.dg-monster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dg-monster-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dg-monster-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.dg-monster-stats {
+  display: flex;
+  gap: 8px;
+  font-size: 0.6rem;
+  color: var(--text-dark);
+}
+
+/* ===== Dungeon Stage Popup ===== */
+.dg-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: dgFadeIn 0.2s ease;
+}
+
+@keyframes dgFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dg-popup {
+  position: relative;
+  width: 440px;
+  max-height: 80vh;
+  background: var(--bg-panel, #1e1e2e);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  animation: dgPopIn 0.25s ease;
+}
+
+@keyframes dgPopIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.dg-popup-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: rgba(0,0,0,0.5);
+  border: none;
+  color: #fff;
+  font-size: 1.4rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.dg-popup-close:hover { background: rgba(255,60,60,0.5); }
+
+.dg-popup-banner {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dg-popup-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dg-popup-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--bg-panel, #1e1e2e) 0%, transparent 60%);
+}
+
+.dg-popup-boss-tag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 2px;
+  box-shadow: 0 2px 8px rgba(220,38,38,0.4);
+}
+
+.dg-popup-title-area {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  z-index: 2;
+}
+
+.dg-popup-chapter {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.dg-popup-name {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 2px 0 0;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+}
+
+.dg-popup-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dg-popup-desc {
+  font-size: 13px;
+  color: var(--text-muted, #aaa);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.dg-popup-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.dg-popup-info-item {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.dg-popup-info-label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-dark, #666);
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dg-popup-info-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-bright, #eee);
+}
+
+.dg-popup-exp { color: #fbbf24; }
+.dg-popup-gold { color: #ffa502; }
+
+.dg-popup-start-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #e94560, #c0392b);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 2px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(233,69,96,0.3);
+}
+.dg-popup-start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(233,69,96,0.5);
+  background: linear-gradient(135deg, #ff5a7a, #e74c3c);
+}
+
+/* ===== Mobile ===== */
+@media (max-width: 600px) {
+  /* Dungeon list roadmap */
+  .dg-list-row.left { padding-left: calc(50% + 18px); }
+  .dg-list-row.right { padding-right: calc(50% + 18px); }
+  .dg-list-dot { width: 26px; height: 26px; font-size: 0.6rem; }
+  .dg-card { width: 200px; }
+
+  /* Stage roadmap */
+  .dg-row.left { padding-left: calc(50% + 14px); }
+  .dg-row.right { padding-right: calc(50% + 14px); }
+  .dg-node { width: 140px; min-height: 80px; }
+  .dg-node.boss { width: 155px; min-height: 100px; }
+  .dg-path-dot { width: 22px; height: 22px; font-size: 0.55rem; }
+  .dg-path-dot.boss { width: 28px; height: 28px; }
+  .dg-node-desc { display: none; }
+  .dg-card-desc { display: none; }
+  .dg-detail-banner { height: 100px; }
+  .dg-popup { width: 95vw; max-height: 85vh; }
+  .dg-popup-info-grid { grid-template-columns: 1fr 1fr; }
+}

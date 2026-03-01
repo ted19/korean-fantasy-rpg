@@ -1,23 +1,89 @@
 /* Monster Bestiary - RPG Theme */
 .bestiary-container { padding: 10px 0; }
 
-.bestiary-title {
-  text-align: center;
-  color: var(--gold);
-  margin: 0 0 4px 0;
-  font-size: 1.3rem;
-  font-family: var(--font-title);
-  letter-spacing: 2px;
+/* ---- Banner ---- */
+.bestiary-banner {
+  position: relative;
+  width: 100%;
+  height: 110px;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #0d1525, #1a1230);
+}
+.bestiary-banner-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.5;
+}
+.bestiary-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.3) 50%, rgba(13,15,20,0.85) 100%);
+}
+.bestiary-banner-title {
+  position: absolute;
+  bottom: 12px;
+  left: 18px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+  letter-spacing: 1px;
+  z-index: 1;
 }
 
-.bestiary-count {
+/* ---- Main Tabs (Monster/Equipment) ---- */
+.bestiary-main-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.bestiary-main-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: #777;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.bestiary-main-tab:hover { color: #bbb; background: rgba(255,255,255,0.04); }
+.bestiary-main-tab.active {
+  background: rgba(212, 168, 67, 0.12);
+  color: #fbbf24;
+}
+
+.bestiary-tab-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  object-fit: cover;
+  font-size: 18px;
+}
+
+.bestiary-subtitle {
   text-align: center;
-  color: var(--text-muted);
+  color: #888;
   font-size: 0.85rem;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
-/* Filters */
+/* ---- Filters ---- */
 .bestiary-filters { margin-bottom: 14px; }
 
 .bestiary-filter-row {
@@ -27,6 +93,51 @@
   margin-bottom: 8px;
   align-items: center;
 }
+
+.bestiary-cat-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.bestiary-pill {
+  padding: 5px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #777;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.bestiary-pill:hover { color: #bbb; border-color: rgba(255,255,255,0.15); }
+.bestiary-pill.active { background: rgba(255,255,255,0.08); color: #eee; border-color: rgba(255,255,255,0.2); }
+
+.bestiary-select {
+  width: auto !important;
+  min-width: 100px;
+  background: rgba(0,0,0,0.3) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  color: #ccc !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  padding: 5px 10px !important;
+}
+
+.bestiary-search {
+  flex: 1;
+  min-width: 120px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #ccc;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 5px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.bestiary-search:focus { border-color: rgba(212, 168, 67, 0.4); }
+.bestiary-search::placeholder { color: #666; }
 
 /* Monster Grid */
 .bestiary-grid { padding-right: 4px; }
@@ -88,7 +199,8 @@
 .tier-star.epic { color: var(--accent); text-shadow: 0 0 4px var(--accent-glow); }
 .tier-star.legendary { color: #f59e0b; text-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
 
-.bestiary-card-cat { font-size: 0.65rem; color: var(--text-muted); }
+.bestiary-card-cat { font-size: 0.65rem; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 4px; }
+.bestiary-card-element { font-size: 0.8rem; filter: drop-shadow(0 0 2px currentColor); }
 
 .bestiary-loading, .bestiary-empty { text-align: center; color: var(--text-muted); padding: 40px; font-size: 0.9rem; }
 
@@ -609,4 +721,281 @@
     justify-content: space-between;
     padding: 8px 14px;
   }
+}
+
+/* ===== 드랍 아이템 영역 ===== */
+.bd-drops {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bd-drop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.bd-drop:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bd-drop-icon {
+  font-size: 22px;
+  width: 32px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.bd-drop-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bd-drop-name {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bd-drop-grade {
+  font-size: 10px;
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+.bd-drop-desc {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bd-drop-rate-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.bd-drop-rate-bar {
+  width: 50px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bd-drop-rate-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.bd-drop-rate-text {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 32px;
+  text-align: right;
+}
+
+.bd-drop-rate-text.high { color: #4ade80; }
+.bd-drop-rate-text.mid { color: #fbbf24; }
+.bd-drop-rate-text.low { color: #f87171; }
+
+.bd-drop-qty {
+  font-size: 11px;
+  color: #888;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ===== Element Relations ===== */
+.bd-element-info { display: flex; flex-direction: column; gap: 10px; }
+.bd-element-current {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+}
+.bd-element-icon { font-size: 24px; }
+.bd-element-name { font-size: 15px; font-weight: 700; }
+.bd-element-relations { display: flex; flex-direction: column; gap: 6px; }
+.bd-element-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+}
+.bd-element-rel-name { font-size: 12px; font-weight: 600; min-width: 32px; }
+.bd-element-mults { display: flex; gap: 8px; margin-left: auto; }
+.bd-element-mult {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 4px; background: rgba(255,255,255,0.05); color: #9ca3af;
+}
+.bd-element-mult.strong { color: #4ade80; background: rgba(34,197,94,0.1); }
+.bd-element-mult.weak { color: #f87171; background: rgba(248,113,113,0.1); }
+
+/* =============================================
+   EQUIPMENT BESTIARY TAB
+   ============================================= */
+
+.equip-card { cursor: pointer; }
+
+.equip-card-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.equip-bestiary-icon {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  font-size: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.equip-card-grade {
+  font-size: 0.65rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.equip-class-tag {
+  font-size: 0.6rem;
+  color: #e94560;
+  margin-left: 4px;
+}
+
+/* ---- Equipment Detail Modal ---- */
+.equip-detail-modal {
+  max-width: 520px;
+}
+
+.equip-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  background: linear-gradient(135deg,
+    rgba(15, 19, 32, 0.9),
+    rgba(15, 19, 32, 0.95));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.equip-detail-icon-wrap {
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--grade-color, #9ca3af);
+  background: rgba(0,0,0,0.4);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--grade-color, #9ca3af) 20%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.equip-detail-icon {
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+  font-size: 3rem;
+}
+
+.equip-detail-info { flex: 1; min-width: 0; }
+
+.equip-detail-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.equip-detail-grade {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.equip-detail-desc {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.equip-detail-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ---- Equipment Stats ---- */
+.equip-detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.equip-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+}
+
+.equip-stat-icon { font-size: 1rem; }
+.equip-stat-label { font-size: 0.8rem; color: #94a3b8; flex: 1; }
+.equip-stat-value { font-size: 0.9rem; font-weight: 700; }
+.equip-sv-hp { color: #4ade80; }
+.equip-sv-mp { color: #60a5fa; }
+.equip-sv-atk { color: #f59e0b; }
+.equip-sv-def { color: #2dd4bf; }
+
+/* ---- Trade Info ---- */
+.equip-detail-trade {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.equip-trade-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.025);
+  border-radius: 8px;
+}
+
+.equip-trade-label { font-size: 0.82rem; color: #94a3b8; }
+.equip-trade-value { font-size: 0.9rem; font-weight: 700; }
+.equip-trade-value.gold { color: #ffa502; }
+.equip-trade-value.sell { color: #4ade80; }
+
+/* ---- Responsive ---- */
+@media (max-width: 576px) {
+  .bestiary-banner { height: 80px; }
+  .bestiary-banner-title { font-size: 18px; }
+  .bestiary-main-tab { font-size: 12px; padding: 8px 10px; }
+  .bestiary-tab-icon { width: 20px; height: 20px; }
+  .equip-detail-header { flex-direction: column; align-items: center; text-align: center; }
+  .equip-detail-icon-wrap { width: 80px; height: 80px; }
+  .equip-detail-tags { justify-content: center; }
+  .equip-detail-stats { grid-template-columns: 1fr; }
 }

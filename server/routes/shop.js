@@ -21,7 +21,7 @@ function auth(req, res, next) {
 // 상점 아이템 목록
 router.get('/items', auth, async (req, res) => {
   try {
-    const [items] = await pool.query('SELECT * FROM items ORDER BY type, required_level, price');
+    const [items] = await pool.query("SELECT * FROM items WHERE grade IN ('일반','고급') OR type = 'potion' ORDER BY type, required_level, price");
     res.json({ items });
   } catch (err) {
     console.error('Shop items error:', err);
@@ -32,7 +32,12 @@ router.get('/items', auth, async (req, res) => {
 // 내 인벤토리
 router.get('/inventory', auth, async (req, res) => {
   try {
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ inventory: [] });
 
     const [inventory] = await pool.query(
@@ -58,9 +63,15 @@ router.get('/inventory', auth, async (req, res) => {
 router.post('/buy', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { itemId, quantity = 1 } = req.body;
+    const { itemId, quantity: rawQty = 1 } = req.body;
+    const quantity = Math.max(1, Math.min(99, Math.floor(Number(rawQty) || 1)));
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -134,7 +145,12 @@ router.post('/sell', auth, async (req, res) => {
   try {
     const { itemId, quantity = 1 } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -207,7 +223,12 @@ router.post('/use', auth, async (req, res) => {
   try {
     const { itemId } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 

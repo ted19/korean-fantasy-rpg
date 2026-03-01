@@ -30,7 +30,7 @@ const CLASS_STATS = {
 // 캐릭터 생성
 router.post('/', auth, async (req, res) => {
   try {
-    const { name, classType } = req.body;
+    const { name, classType, element } = req.body;
 
     if (!name || !classType) {
       return res.status(400).json({ message: '캐릭터 이름과 직업을 선택해주세요.' });
@@ -40,13 +40,16 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: '올바른 직업을 선택해주세요.' });
     }
 
-    // 이미 캐릭터가 있는지 확인
+    const validElements = ['fire', 'water', 'earth', 'wind', 'neutral'];
+    const charElement = validElements.includes(element) ? element : 'neutral';
+
+    // 캐릭터 3개까지 생성 가능
     const [existing] = await pool.query(
       'SELECT id FROM characters WHERE user_id = ?',
       [req.user.id]
     );
-    if (existing.length > 0) {
-      return res.status(409).json({ message: '이미 캐릭터가 존재합니다.' });
+    if (existing.length >= 3) {
+      return res.status(409).json({ message: '캐릭터는 최대 3개까지 생성할 수 있습니다.' });
     }
 
     // 캐릭터 이름 중복 확인
@@ -60,8 +63,8 @@ router.post('/', auth, async (req, res) => {
 
     const stats = CLASS_STATS[classType];
     const [result] = await pool.query(
-      'INSERT INTO characters (user_id, name, class_type, hp, mp, attack, defense, phys_attack, phys_defense, mag_attack, mag_defense, crit_rate, evasion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [req.user.id, name, classType, stats.hp, stats.mp, stats.attack, stats.defense, stats.phys_attack, stats.phys_defense, stats.mag_attack, stats.mag_defense, stats.crit_rate, stats.evasion]
+      'INSERT INTO characters (user_id, name, class_type, hp, mp, attack, defense, phys_attack, phys_defense, mag_attack, mag_defense, crit_rate, evasion, element) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.user.id, name, classType, stats.hp, stats.mp, stats.attack, stats.defense, stats.phys_attack, stats.phys_defense, stats.mag_attack, stats.mag_defense, stats.crit_rate, stats.evasion, charElement]
     );
 
     const [chars] = await pool.query('SELECT * FROM characters WHERE id = ?', [result.insertId]);
@@ -73,13 +76,36 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// 내 캐릭터 조회
-router.get('/me', auth, async (req, res) => {
+// 내 캐릭터 목록 조회
+router.get('/list', auth, async (req, res) => {
   try {
     const [chars] = await pool.query(
-      'SELECT * FROM characters WHERE user_id = ?',
+      'SELECT id, name, class_type, level, element FROM characters WHERE user_id = ? ORDER BY id',
       [req.user.id]
     );
+    res.json({ characters: chars });
+  } catch (err) {
+    console.error('List characters error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 현재 선택된 캐릭터 조회 (selectedCharId 쿼리 지원)
+router.get('/me', auth, async (req, res) => {
+  try {
+    const { charId } = req.query;
+    let chars;
+    if (charId) {
+      [chars] = await pool.query(
+        'SELECT * FROM characters WHERE id = ? AND user_id = ?',
+        [charId, req.user.id]
+      );
+    } else {
+      [chars] = await pool.query(
+        'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+        [req.user.id]
+      );
+    }
 
     if (chars.length === 0) {
       return res.json({ character: null });
@@ -95,28 +121,60 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+// 속성 상성표 조회
+router.get('/element-relations', auth, async (req, res) => {
+  try {
+    const [relations] = await pool.query('SELECT attacker, defender, multiplier FROM element_relations');
+    const table = {};
+    for (const r of relations) {
+      if (!table[r.attacker]) table[r.attacker] = {};
+      table[r.attacker][r.defender] = r.multiplier;
+    }
+    res.json({ relations: table });
+  } catch (err) {
+    console.error('Element relations error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
 // 캐릭터 삭제
 router.delete('/me', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [chars] = await conn.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
-    if (chars.length === 0) {
-      await conn.rollback();
-      return res.status(404).json({ message: '캐릭터가 없습니다.' });
+    const { charId: deleteId } = req.query;
+    let charId;
+    if (deleteId) {
+      const [chars] = await conn.query('SELECT id FROM characters WHERE id = ? AND user_id = ?', [deleteId, req.user.id]);
+      if (chars.length === 0) {
+        await conn.rollback();
+        return res.status(404).json({ message: '캐릭터가 없습니다.' });
+      }
+      charId = chars[0].id;
+    } else {
+      const [chars] = await conn.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+      if (chars.length === 0) {
+        await conn.rollback();
+        return res.status(404).json({ message: '캐릭터가 없습니다.' });
+      }
+      charId = chars[0].id;
     }
-    const charId = chars[0].id;
     await conn.query('DELETE FROM equipment WHERE character_id = ?', [charId]);
     await conn.query('DELETE FROM inventory WHERE character_id = ?', [charId]);
+    await conn.query('DELETE FROM material_inventory WHERE character_id = ?', [charId]);
     await conn.query('DELETE FROM character_quests WHERE character_id = ?', [charId]);
     await conn.query('DELETE FROM character_skills WHERE character_id = ?', [charId]);
+    await conn.query('DELETE FROM battle_logs WHERE character_id = ?', [charId]);
+    await conn.query('DELETE FROM character_formations WHERE character_id = ?', [charId]);
+    await conn.query('DELETE FROM character_stage_clear WHERE character_id = ?', [charId]);
+    await conn.query('DELETE FROM character_stage_progress WHERE character_id = ?', [charId]);
     const [summons] = await conn.query('SELECT id FROM character_summons WHERE character_id = ?', [charId]);
     for (const s of summons) {
       await conn.query('DELETE FROM summon_equipment WHERE summon_id = ?', [s.id]);
-      await conn.query('DELETE FROM summon_skills WHERE summon_id = ?', [s.id]);
+      await conn.query('DELETE FROM summon_learned_skills WHERE summon_id = ?', [s.id]);
     }
     await conn.query('DELETE FROM character_summons WHERE character_id = ?', [charId]);
-    await conn.query('DELETE FROM dungeon_progress WHERE character_id = ?', [charId]);
+    await conn.query('DELETE FROM character_mercenaries WHERE character_id = ?', [charId]);
     await conn.query('DELETE FROM characters WHERE id = ?', [charId]);
     await conn.commit();
     res.json({ message: '캐릭터가 삭제되었습니다.' });

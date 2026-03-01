@@ -47,7 +47,12 @@ router.get('/templates', auth, async (req, res) => {
 // 내 소환수 목록
 router.get('/my', auth, async (req, res) => {
   try {
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ summons: [] });
 
     const [summons] = await pool.query(
@@ -56,7 +61,7 @@ router.get('/my', auth, async (req, res) => {
               cs.template_id,
               st.name, st.type, st.icon, st.base_hp, st.base_mp, st.base_attack, st.base_defense,
               st.base_phys_attack, st.base_phys_defense, st.base_mag_attack, st.base_mag_defense, st.base_crit_rate, st.base_evasion,
-              st.sell_price
+              st.sell_price, st.range_type, st.element
        FROM character_summons cs
        JOIN summon_templates st ON cs.template_id = st.id
        WHERE cs.character_id = ?
@@ -94,7 +99,12 @@ router.post('/buy', auth, async (req, res) => {
   try {
     const { templateId } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -152,7 +162,12 @@ router.post('/sell', auth, async (req, res) => {
   try {
     const { summonId } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -195,7 +210,12 @@ router.get('/:summonId/equipment', auth, async (req, res) => {
   try {
     const { summonId } = req.params;
 
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ equipped: {}, inventory: [] });
     const charId = chars[0].id;
 
@@ -287,7 +307,12 @@ router.post('/:summonId/equip', auth, async (req, res) => {
     const { summonId } = req.params;
     const { itemId, slot } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -370,10 +395,12 @@ router.post('/:summonId/equip', auth, async (req, res) => {
         const s = shieldEquip[0];
         await conn.query('DELETE FROM summon_equipment WHERE summon_id = ? AND slot = ?', [summonId, 'shield']);
         await conn.query(
-          `UPDATE character_summons SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?,
-            phys_attack = phys_attack - ?, phys_defense = phys_defense - ?,
-            mag_attack = mag_attack - ?, mag_defense = mag_defense - ?,
-            crit_rate = crit_rate - ?, evasion = evasion - ?
+          `UPDATE character_summons SET
+            hp = GREATEST(1, hp - ?), mp = GREATEST(0, mp - ?),
+            attack = GREATEST(0, attack - ?), defense = GREATEST(0, defense - ?),
+            phys_attack = GREATEST(0, phys_attack - ?), phys_defense = GREATEST(0, phys_defense - ?),
+            mag_attack = GREATEST(0, mag_attack - ?), mag_defense = GREATEST(0, mag_defense - ?),
+            crit_rate = GREATEST(0, crit_rate - ?), evasion = GREATEST(0, evasion - ?)
            WHERE id = ?`,
           [s.effect_hp, s.effect_mp, s.effect_attack, s.effect_defense,
            s.effect_phys_attack, s.effect_phys_defense,
@@ -397,10 +424,12 @@ router.post('/:summonId/equip', auth, async (req, res) => {
       const old = currentEquip[0];
       await conn.query('DELETE FROM summon_equipment WHERE summon_id = ? AND slot = ?', [summonId, slot]);
       await conn.query(
-        `UPDATE character_summons SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?,
-          phys_attack = phys_attack - ?, phys_defense = phys_defense - ?,
-          mag_attack = mag_attack - ?, mag_defense = mag_defense - ?,
-          crit_rate = crit_rate - ?, evasion = evasion - ?
+        `UPDATE character_summons SET
+          hp = GREATEST(1, hp - ?), mp = GREATEST(0, mp - ?),
+          attack = GREATEST(0, attack - ?), defense = GREATEST(0, defense - ?),
+          phys_attack = GREATEST(0, phys_attack - ?), phys_defense = GREATEST(0, phys_defense - ?),
+          mag_attack = GREATEST(0, mag_attack - ?), mag_defense = GREATEST(0, mag_defense - ?),
+          crit_rate = GREATEST(0, crit_rate - ?), evasion = GREATEST(0, evasion - ?)
          WHERE id = ?`,
         [old.effect_hp, old.effect_mp, old.effect_attack, old.effect_defense,
          old.effect_phys_attack, old.effect_phys_defense,
@@ -455,7 +484,12 @@ router.post('/:summonId/unequip', auth, async (req, res) => {
     const { summonId } = req.params;
     const { slot } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -481,10 +515,12 @@ router.post('/:summonId/unequip', auth, async (req, res) => {
 
     await conn.query('DELETE FROM summon_equipment WHERE summon_id = ? AND slot = ?', [summonId, slot]);
     await conn.query(
-      `UPDATE character_summons SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?,
-        phys_attack = phys_attack - ?, phys_defense = phys_defense - ?,
-        mag_attack = mag_attack - ?, mag_defense = mag_defense - ?,
-        crit_rate = crit_rate - ?, evasion = evasion - ?
+      `UPDATE character_summons SET
+        hp = GREATEST(1, hp - ?), mp = GREATEST(0, mp - ?),
+        attack = GREATEST(0, attack - ?), defense = GREATEST(0, defense - ?),
+        phys_attack = GREATEST(0, phys_attack - ?), phys_defense = GREATEST(0, phys_defense - ?),
+        mag_attack = GREATEST(0, mag_attack - ?), mag_defense = GREATEST(0, mag_defense - ?),
+        crit_rate = GREATEST(0, crit_rate - ?), evasion = GREATEST(0, evasion - ?)
        WHERE id = ?`,
       [equip.effect_hp, equip.effect_mp, equip.effect_attack, equip.effect_defense,
        equip.effect_phys_attack, equip.effect_phys_defense,
@@ -514,7 +550,12 @@ router.get('/:summonId/skills', auth, async (req, res) => {
   try {
     const { summonId } = req.params;
 
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ skills: [], learned: [] });
     const charId = chars[0].id;
 
@@ -565,7 +606,12 @@ router.post('/:summonId/learn-skill', auth, async (req, res) => {
     const { summonId } = req.params;
     const { skillId } = req.body;
 
-    const [chars] = await conn.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const charId = chars[0].id;
 

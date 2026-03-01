@@ -3,13 +3,13 @@ import { Row, Col, Card, Badge } from 'react-bootstrap';
 import api from '../api';
 
 const SLOT_CONFIG = [
-  { id: 'helmet', name: '투구', icon: '🪖', row: 1, col: 2 },
-  { id: 'weapon', name: '무기', icon: '⚔️', row: 2, col: 1 },
-  { id: 'chest', name: '갑옷', icon: '🛡️', row: 2, col: 2 },
-  { id: 'shield', name: '방패', icon: '🛡️', row: 2, col: 3 },
-  { id: 'ring', name: '반지', icon: '💍', row: 3, col: 1 },
-  { id: 'boots', name: '장화', icon: '👢', row: 3, col: 2 },
-  { id: 'necklace', name: '목걸이', icon: '📿', row: 3, col: 3 },
+  { id: 'helmet', name: '투구', icon: '🪖', img: '/ui/slot_helmet.png', row: 1, col: 2 },
+  { id: 'weapon', name: '무기', icon: '⚔️', img: '/ui/slot_weapon.png', row: 2, col: 1 },
+  { id: 'chest', name: '갑옷', icon: '🛡️', img: '/ui/slot_chest.png', row: 2, col: 2 },
+  { id: 'shield', name: '방패', icon: '🛡️', img: '/ui/slot_shield.png', row: 2, col: 3 },
+  { id: 'ring', name: '반지', icon: '💍', img: '/ui/slot_ring.png', row: 3, col: 1 },
+  { id: 'boots', name: '장화', icon: '👢', img: '/ui/slot_boots.png', row: 3, col: 2 },
+  { id: 'necklace', name: '목걸이', icon: '📿', img: '/ui/slot_necklace.png', row: 3, col: 3 },
 ];
 
 const TYPE_ICONS = {
@@ -23,6 +23,15 @@ const TYPE_ICONS = {
   potion: '🧪',
 };
 
+const GRADE_COLORS = {
+  '일반': '#aaa',
+  '고급': '#4ade80',
+  '희귀': '#60a5fa',
+  '영웅': '#c084fc',
+  '전설': '#fbbf24',
+  '신화': '#ff6b6b',
+};
+
 function EquipImg({ itemId, fallback, className }) {
   const [err, setErr] = useState(false);
   if (err || !itemId) return <span className={className}>{fallback}</span>;
@@ -32,6 +41,8 @@ function EquipImg({ itemId, fallback, className }) {
 function Equipment({ character, charState, onCharStateUpdate, onLog }) {
   const [equipped, setEquipped] = useState({});
   const [inventory, setInventory] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [invTab, setInvTab] = useState('equip'); // 'equip' or 'materials'
   const [dragItem, setDragItem] = useState(null);
   const [dragOverSlot, setDragOverSlot] = useState(null);
   const [tooltip, setTooltip] = useState(null);
@@ -39,9 +50,13 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
   const loadData = useCallback(async () => {
     try {
-      const res = await api.get('/equipment/info');
-      setEquipped(res.data.equipped);
-      setInventory(res.data.inventory);
+      const [equipRes, matRes] = await Promise.all([
+        api.get('/equipment/info'),
+        api.get('/blacksmith/materials'),
+      ]);
+      setEquipped(equipRes.data.equipped);
+      setInventory(equipRes.data.inventory);
+      setMaterials(matRes.data.materials || []);
     } catch {
       onLog('장비 정보를 불러올 수 없습니다.', 'damage');
     }
@@ -149,7 +164,8 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
     <Row className="equip-container g-3">
       <Col xs={12} lg={4} className="mb-3">
         <Card className="equip-card">
-          <Card.Body>
+          <div className="equip-card-bg" style={{ position:'absolute', inset:0, background:'url(/ui/equip_panel_bg.png) center/cover no-repeat', opacity:0.08, pointerEvents:'none' }} />
+          <Card.Body style={{ position:'relative' }}>
             <div className="equip-panel">
               <div className="equip-panel-title">{character.name}</div>
               <div className="text-center" style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: -10, marginBottom: 14 }}>
@@ -182,7 +198,8 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                         </div>
                       ) : (
                         <div className="equip-slot-empty">
-                          <span className="equip-slot-icon empty">{slot.icon}</span>
+                          <img src={slot.img} alt="" className="equip-slot-placeholder" onError={(e) => { e.target.style.display='none'; e.target.nextSibling && (e.target.nextSibling.style.display=''); }} />
+                          <span className="equip-slot-icon empty" style={{ display: 'none' }}>{slot.icon}</span>
                           <span className="equip-slot-label">
                             {isLocked ? '양손무기' : slot.name}
                           </span>
@@ -253,48 +270,85 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
       <Col xs={12} lg={8} className="mb-3">
         <Card className="equip-inv-card">
-          <Card.Body className="d-flex flex-column">
-            <div className="equip-inv-title">인벤토리 ({inventory.length}/100)</div>
-            <div className="inv-grid-10x10">
-              {Array.from({ length: 100 }, (_, i) => {
-                const item = inventory[i] || null;
-                const isDragging = item && dragItem?.item_id === item.item_id;
-                return (
-                  <div
-                    key={i}
-                    className={`inv-grid-cell ${item ? 'has-item' : ''} ${isDragging ? 'dragging' : ''}`}
-                    draggable={!!item}
-                    onDragStart={(e) => item && onDragStart(e, item)}
-                    onDragEnd={onDragEnd}
-                    onMouseEnter={() => item && setInvTooltip({ ...item, slotName: SLOT_CONFIG.find(s => s.id === item.slot)?.name || item.slot })}
-                    onMouseLeave={() => setInvTooltip(null)}
-                  >
-                    {item ? (
-                      <>
-                        <EquipImg itemId={item.item_id} fallback={TYPE_ICONS[item.type] || TYPE_ICONS[item.slot]} className="inv-cell-img" />
-                        <span className="inv-cell-name">{item.name}</span>
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
+          <div style={{ position:'absolute', inset:0, background:'url(/ui/inventory_bg.png) center/cover no-repeat', opacity:0.06, pointerEvents:'none' }} />
+          <Card.Body className="d-flex flex-column" style={{ position:'relative' }}>
+            <div className="inv-tab-bar">
+              <button className={`inv-tab-btn ${invTab === 'equip' ? 'active' : ''}`} onClick={() => setInvTab('equip')}>
+                🎒 장비 ({inventory.length})
+              </button>
+              <button className={`inv-tab-btn ${invTab === 'materials' ? 'active' : ''}`} onClick={() => setInvTab('materials')}>
+                🧱 재료 ({materials.reduce((s, m) => s + m.quantity, 0)})
+              </button>
             </div>
-            {invTooltip && (
-              <div className="inv-tooltip">
-                <div className="tooltip-name">{invTooltip.name}</div>
-                <div className="tooltip-desc">{invTooltip.description}</div>
-                <div className="tooltip-stats">
-                  {invTooltip.effect_hp !== 0 && <span className="ts hp">HP+{invTooltip.effect_hp}</span>}
-                  {invTooltip.effect_mp !== 0 && <span className="ts mp">MP+{invTooltip.effect_mp}</span>}
-                  {!!invTooltip.effect_phys_attack && <span className="ts atk">물공+{invTooltip.effect_phys_attack}</span>}
-                  {!!invTooltip.effect_mag_attack && <span className="ts atk">마공+{invTooltip.effect_mag_attack}</span>}
-                  {!!invTooltip.effect_phys_defense && <span className="ts def">물방+{invTooltip.effect_phys_defense}</span>}
-                  {!!invTooltip.effect_mag_defense && <span className="ts def">마방+{invTooltip.effect_mag_defense}</span>}
-                  {!!invTooltip.effect_crit_rate && <span className="ts atk">치명+{invTooltip.effect_crit_rate}</span>}
-                  {!!invTooltip.effect_evasion && <span className="ts def">회피+{invTooltip.effect_evasion}</span>}
+
+            {invTab === 'equip' && (
+              <>
+                <div className="inv-grid-10x10">
+                  {Array.from({ length: 100 }, (_, i) => {
+                    const item = inventory[i] || null;
+                    const isDragging = item && dragItem?.item_id === item.item_id;
+                    return (
+                      <div
+                        key={i}
+                        className={`inv-grid-cell ${item ? 'has-item' : ''} ${isDragging ? 'dragging' : ''}`}
+                        draggable={!!item}
+                        onDragStart={(e) => item && onDragStart(e, item)}
+                        onDragEnd={onDragEnd}
+                        onMouseEnter={() => item && setInvTooltip({ ...item, slotName: SLOT_CONFIG.find(s => s.id === item.slot)?.name || item.slot })}
+                        onMouseLeave={() => setInvTooltip(null)}
+                      >
+                        {item ? (
+                          <>
+                            <EquipImg itemId={item.item_id} fallback={TYPE_ICONS[item.type] || TYPE_ICONS[item.slot]} className="inv-cell-img" />
+                            <span className="inv-cell-name">{item.name}</span>
+                          </>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="tooltip-slot">{invTooltip.slotName}</div>
-                {invTooltip.required_level > 1 && <div className="tooltip-lvl">Lv.{invTooltip.required_level} 필요</div>}
+                {invTooltip && (
+                  <div className="inv-tooltip">
+                    <div className="tooltip-name">{invTooltip.name}</div>
+                    <div className="tooltip-desc">{invTooltip.description}</div>
+                    <div className="tooltip-stats">
+                      {invTooltip.effect_hp !== 0 && <span className="ts hp">HP+{invTooltip.effect_hp}</span>}
+                      {invTooltip.effect_mp !== 0 && <span className="ts mp">MP+{invTooltip.effect_mp}</span>}
+                      {!!invTooltip.effect_phys_attack && <span className="ts atk">물공+{invTooltip.effect_phys_attack}</span>}
+                      {!!invTooltip.effect_mag_attack && <span className="ts atk">마공+{invTooltip.effect_mag_attack}</span>}
+                      {!!invTooltip.effect_phys_defense && <span className="ts def">물방+{invTooltip.effect_phys_defense}</span>}
+                      {!!invTooltip.effect_mag_defense && <span className="ts def">마방+{invTooltip.effect_mag_defense}</span>}
+                      {!!invTooltip.effect_crit_rate && <span className="ts atk">치명+{invTooltip.effect_crit_rate}</span>}
+                      {!!invTooltip.effect_evasion && <span className="ts def">회피+{invTooltip.effect_evasion}</span>}
+                    </div>
+                    <div className="tooltip-slot">{invTooltip.slotName}</div>
+                    {invTooltip.required_level > 1 && <div className="tooltip-lvl">Lv.{invTooltip.required_level} 필요</div>}
+                  </div>
+                )}
+              </>
+            )}
+
+            {invTab === 'materials' && (
+              <div className="inv-materials-panel">
+                {materials.length === 0 ? (
+                  <div className="inv-mat-empty">보유한 재료가 없습니다.<br/>몬스터를 사냥하여 재료를 획득하세요!</div>
+                ) : (
+                  <div className="inv-mat-list">
+                    {materials.map(mat => (
+                      <div key={mat.material_id} className="inv-mat-item">
+                        <div className="inv-mat-icon">{mat.icon}</div>
+                        <div className="inv-mat-info">
+                          <div className="inv-mat-name" style={{ color: GRADE_COLORS[mat.grade] || '#aaa' }}>
+                            {mat.name}
+                            <span className="inv-mat-grade">[{mat.grade}]</span>
+                          </div>
+                          <div className="inv-mat-desc">{mat.description}</div>
+                        </div>
+                        <div className="inv-mat-qty">x{mat.quantity}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </Card.Body>

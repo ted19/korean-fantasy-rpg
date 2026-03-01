@@ -1178,73 +1178,84 @@ function getUnitModel(unit) {
 // public/models/ 폴더에 GLB 파일이 있으면 자동으로 로드
 // 파일명 규칙: {modelType}.glb (예: wolf.glb, ghost.glb, mage.glb)
 const GLB_MODEL_SCALES = {
-  mage: 0.56, shaman: 0.56, monk: 0.56,
-  mouse: 0.42, wolf: 0.49, spider: 0.42, bat: 0.42,
-  golem: 0.63, lizard: 0.49, ghost: 0.56,
-  cursedMonk: 0.56, darkGuardian: 0.7,
-  fox: 0.49, waterElemental: 0.56, fireElemental: 0.56,
-  windElemental: 0.56, skeleton: 0.56, lich: 0.63, miniGolem: 0.42,
-  rabbit: 0.42, boar: 0.53, viper: 0.42, blackBear: 0.59, snowLeopard: 0.53,
-  grayBear: 0.63, python: 0.49, whiteTiger: 0.59, threeHeadedHound: 0.59, ancientFox: 0.53,
-  centipede: 0.42, poisonMoth: 0.45, killerBee: 0.42, scorpion: 0.45, queenAnt: 0.48,
-  stagBeetle: 0.42, spiderQueen: 0.56, mantisWarrior: 0.53,
-  zombie: 0.56, ghoul: 0.53, wraith: 0.56, vampire: 0.59, deathKnight: 0.63,
-  lichKing: 0.67, skeletalArcher: 0.53, mummy: 0.56,
-  wanderingSpirit: 0.53, maidenGhost: 0.56, yaksha: 0.63, waterGhost: 0.56,
-  blackShadow: 0.56, blindSpirit: 0.53, moonGhost: 0.56, imoogi: 0.59,
-  earthElemental: 0.59, lightningElemental: 0.56, iceElemental: 0.56,
-  lightElemental: 0.56, darkElemental: 0.56, elementalKing: 0.67,
-  imp: 0.42, succubus: 0.59, incubus: 0.59, hellHound: 0.56, balrog: 0.7,
-  demonServant: 0.56, fallenAngel: 0.59, demonKing: 0.73, gargoyle: 0.56,
-  dragonHatchling: 0.45, wyvern: 0.56, fireDragon: 0.67, iceDragon: 0.67,
-  darkDragon: 0.67, dragonKing: 0.73, drake: 0.56, hydra: 0.67,
-  magicArmor: 0.59, guardian: 0.63, homunculus: 0.42, manaGolem: 0.63,
-  unicorn: 0.56, griffin: 0.59, phoenix: 0.53, mimic: 0.45,
-  poisonMushroom: 0.39, vineMonster: 0.49, treant: 0.63, carnivorousPlant: 0.45,
-  sporeSwarm: 0.42, mandrake: 0.42, worldTreeFragment: 0.59, fungalLord: 0.56,
-  bandit: 0.53, assassin: 0.56, darkWizard: 0.59, fallenKnight: 0.59,
-  berserker: 0.59, necromancer: 0.59, grandWizard: 0.59, thiefLeader: 0.56,
-  smallDokkaebi: 0.39, fireDokkaebi: 0.45, stoneDokkaebi: 0.42, dokkaebiGeneral: 0.56,
-  dokkaebiKing: 0.63, pondDokkaebi: 0.42, dokkaebiClub: 0.45, forestDokkaebi: 0.42,
-  haetae: 0.56, bulgasari: 0.59, chimera: 0.59, minotaur: 0.63,
-  medusa: 0.59, giant: 0.7, werewolf: 0.59,
-  greenSlime: 0.39, blueSlime: 0.39, redSlime: 0.39, poisonSlime: 0.39,
-  metalSlime: 0.39, kingSlime: 0.48, jellyfish: 0.42, slimeLord: 0.53,
-  kingCrab: 0.45, shark: 0.49, giantOctopus: 0.49, mermaidWarrior: 0.53,
-  deepSeaFish: 0.42, kraken: 0.59, seahorseKnight: 0.49, seaDragon: 0.63,
+  player_pungsu: 1.05, player_mudang: 1.05, player_monk: 1.05,
+  mage: 0.84, shaman: 0.84, monk: 0.84,
+  mouse: 0.63, wolf: 0.74, spider: 0.63, bat: 0.63,
+  golem: 0.95, lizard: 0.74, ghost: 0.84,
+  cursedMonk: 0.84, darkGuardian: 1.05,
+  fox: 0.74, waterElemental: 0.84, fireElemental: 0.84,
+  windElemental: 0.84, skeleton: 0.84, lich: 0.95, miniGolem: 0.63,
+  rabbit: 0.63, boar: 0.80, viper: 0.63, blackBear: 0.89, snowLeopard: 0.80,
+  grayBear: 0.95, python: 0.74, whiteTiger: 0.89, threeHeadedHound: 0.89, ancientFox: 0.80,
+  centipede: 0.63, poisonMoth: 0.68, killerBee: 0.63, scorpion: 0.68, queenAnt: 0.72,
+  stagBeetle: 0.63, spiderQueen: 0.84, mantisWarrior: 0.80,
+  zombie: 0.84, ghoul: 0.80, wraith: 0.84, vampire: 0.89, deathKnight: 0.95,
+  lichKing: 1.01, skeletalArcher: 0.80, mummy: 0.84,
+  wanderingSpirit: 0.80, maidenGhost: 0.84, yaksha: 0.95, waterGhost: 0.84,
+  blackShadow: 0.84, blindSpirit: 0.80, moonGhost: 0.84, imoogi: 0.89,
+  earthElemental: 0.89, lightningElemental: 0.84, iceElemental: 0.84,
+  lightElemental: 0.84, darkElemental: 0.84, elementalKing: 1.01,
+  imp: 0.63, succubus: 0.89, incubus: 0.89, hellHound: 0.84, balrog: 1.05,
+  demonServant: 0.84, fallenAngel: 0.89, demonKing: 1.10, gargoyle: 0.84,
+  dragonHatchling: 0.68, wyvern: 0.84, fireDragon: 1.01, iceDragon: 1.01,
+  darkDragon: 1.01, dragonKing: 1.10, drake: 0.84, hydra: 1.01,
+  magicArmor: 0.89, guardian: 0.95, homunculus: 0.63, manaGolem: 0.95,
+  unicorn: 0.84, griffin: 0.89, phoenix: 0.80, mimic: 0.68,
+  poisonMushroom: 0.59, vineMonster: 0.74, treant: 0.95, carnivorousPlant: 0.68,
+  sporeSwarm: 0.63, mandrake: 0.63, worldTreeFragment: 0.89, fungalLord: 0.84,
+  bandit: 0.80, assassin: 0.84, darkWizard: 0.89, fallenKnight: 0.89,
+  berserker: 0.89, necromancer: 0.89, grandWizard: 0.89, thiefLeader: 0.84,
+  smallDokkaebi: 0.59, fireDokkaebi: 0.68, stoneDokkaebi: 0.63, dokkaebiGeneral: 0.84,
+  dokkaebiKing: 0.95, pondDokkaebi: 0.63, dokkaebiClub: 0.68, forestDokkaebi: 0.63,
+  haetae: 0.84, bulgasari: 0.89, chimera: 0.89, minotaur: 0.95,
+  medusa: 0.89, giant: 1.05, werewolf: 0.89,
+  greenSlime: 0.59, blueSlime: 0.59, redSlime: 0.59, poisonSlime: 0.59,
+  metalSlime: 0.59, kingSlime: 0.72, jellyfish: 0.63, slimeLord: 0.80,
+  kingCrab: 0.68, shark: 0.74, giantOctopus: 0.74, mermaidWarrior: 0.80,
+  deepSeaFish: 0.63, kraken: 0.89, seahorseKnight: 0.74, seaDragon: 0.95,
 };
 
 // GLB 모델 존재 여부 캐시
 const glbAvailableCache = {};
 
-function GLBModelLoader({ modelType, fallback }) {
-  const [hasGlb, setHasGlb] = useState(glbAvailableCache[modelType]);
+function GLBModelLoader({ modelType, glbUrl, fallback }) {
+  const cacheKey = glbUrl || modelType;
+  const [hasGlb, setHasGlb] = useState(glbAvailableCache[cacheKey]);
   const [gltf, setGltf] = useState(null);
 
   useEffect(() => {
-    if (glbAvailableCache[modelType] === false) return;
-    if (glbAvailableCache[modelType] === true && gltf) return;
+    if (glbAvailableCache[cacheKey] === false) return;
+    if (glbAvailableCache[cacheKey] === true && gltf) return;
 
-    const url = `${process.env.PUBLIC_URL}/models/${modelType}.glb`;
+    const url = glbUrl || `${process.env.PUBLIC_URL}/characters/models/${modelType}.glb`;
     const loader = new GLTFLoader();
     loader.load(
       url,
       (loaded) => {
-        glbAvailableCache[modelType] = true;
+        glbAvailableCache[cacheKey] = true;
         setHasGlb(true);
         setGltf(loaded);
       },
       undefined,
       () => {
-        glbAvailableCache[modelType] = false;
+        glbAvailableCache[cacheKey] = false;
         setHasGlb(false);
       }
     );
-  }, [modelType, gltf]);
+  }, [cacheKey, glbUrl, modelType, gltf]);
 
   if (hasGlb && gltf) {
     const scale = GLB_MODEL_SCALES[modelType] || 0.56;
     const clonedScene = gltf.scene.clone();
+    // vertex color 지원: GLB 메시의 vertex color가 있으면 활성화
+    clonedScene.traverse((child) => {
+      if (child.isMesh && child.geometry) {
+        if (child.geometry.attributes.color) {
+          child.material = child.material.clone();
+          child.material.vertexColors = true;
+        }
+      }
+    });
     return (
       <primitive
         object={clonedScene}
@@ -1363,75 +1374,35 @@ function ProceduralModel({ unit }) {
   return <DefaultModel color={unit.color} isPlayer={unit.team === 'player'} />;
 }
 
+// 플레이어 캐릭터 GLB 매핑 (Hunyuan3D 생성 모델)
+const PLAYER_GLB_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
+const PLAYER_GLB_SCALE = 1.05;
+
 // 모델 렌더 컴포넌트 (GLB 우선, 없으면 프로시저 폴백)
 function UnitModelRenderer({ unit }) {
   const modelType = getUnitModel(unit);
   const proceduralFallback = <ProceduralModel unit={unit} />;
+
+  // 플레이어: 전용 AI 생성 3D 캐릭터 모델 사용
+  if (unit.id === 'player' && unit.classType) {
+    const charKey = PLAYER_GLB_MAP[unit.classType];
+    if (charKey) {
+      const charUrl = `/characters/models/${charKey}.glb`;
+      return (
+        <GLBModelLoader
+          modelType={`player_${charKey}`}
+          glbUrl={charUrl}
+          fallback={proceduralFallback}
+        />
+      );
+    }
+  }
 
   return (
     <GLBModelLoader
       modelType={modelType}
       fallback={proceduralFallback}
     />
-  );
-}
-
-// 2D 빌보드 스프라이트 (캐릭터용)
-const CLASS_SPRITE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
-
-function CharacterBillboard({ unit }) {
-  const { camera } = useThree();
-  const groupRef = useRef();
-  const textureRef = useRef({});
-  const [currentTex, setCurrentTex] = useState(null);
-  const loader = useMemo(() => new THREE.TextureLoader(), []);
-  const classKey = CLASS_SPRITE_MAP[unit.classType] || 'pungsu';
-
-  // 모든 포즈 텍스처 프리로드
-  useEffect(() => {
-    const poses = ['idle', 'attack', 'skill', 'hurt'];
-    poses.forEach(pose => {
-      const url = `${PUB}/characters/battle/${classKey}_${pose}.png`;
-      loader.load(url, (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        textureRef.current[pose] = tex;
-        if (pose === 'idle' && !currentTex) setCurrentTex(tex);
-      });
-    });
-  }, [classKey]); // eslint-disable-line
-
-  // 상태에 따라 텍스처 전환
-  useEffect(() => {
-    const pose = unit.spriteState || 'idle';
-    if (textureRef.current[pose]) {
-      setCurrentTex(textureRef.current[pose]);
-    }
-  }, [unit.spriteState]);
-
-  // 빌보드: 항상 카메라를 향함
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.quaternion.copy(camera.quaternion);
-    }
-  });
-
-  if (!currentTex) return null;
-
-  return (
-    <group ref={groupRef}>
-      <mesh position={[0, 0.75, 0]}>
-        <planeGeometry args={[1.6, 1.6]} />
-        <meshBasicMaterial
-          map={currentTex}
-          transparent={true}
-          alphaTest={0.1}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
-    </group>
   );
 }
 
@@ -1473,16 +1444,9 @@ function UnitMesh({ unit, isActive, mapData }) {
 
   return (
     <group ref={ref} position={[unit.x * TILE_SIZE, y, unit.z * TILE_SIZE]}>
-      {/* 플레이어: 2D 빌보드 스프라이트, 그 외: 3D 모델 */}
-      {unit.id === 'player' ? (
-        <group scale={[2.2, 2.2, 2.2]}>
-          <CharacterBillboard unit={unit} />
-        </group>
-      ) : (
-        <group scale={[2.2, 2.2, 2.2]}>
-          <UnitModelRenderer unit={unit} />
-        </group>
-      )}
+      <group scale={[2.2, 2.2, 2.2]}>
+        <UnitModelRenderer unit={unit} />
+      </group>
       {/* 활성 표시 링 */}
       {isActive && (
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1546,9 +1510,11 @@ function DamagePopup({ popup }) {
 
   const isDamage = popup.type === 'damage';
   const isHeal = popup.type === 'heal';
-  const fontSize = isDamage ? 0.85 : isHeal ? 0.7 : 0.6;
-  const color = isDamage ? '#ff2222' : isHeal ? '#22ff66' : '#ffee44';
-  const outlineColor = isDamage ? '#660000' : isHeal ? '#005500' : '#554400';
+  const isElement = popup.type === 'element';
+  const isElementWeak = popup.type === 'element-weak';
+  const fontSize = isDamage ? 0.85 : isHeal ? 0.7 : (isElement || isElementWeak) ? 0.55 : 0.6;
+  const color = isDamage ? '#ff2222' : isHeal ? '#22ff66' : isElement ? '#ffa502' : isElementWeak ? '#7b93b3' : '#ffee44';
+  const outlineColor = isDamage ? '#660000' : isHeal ? '#005500' : isElement ? '#553300' : isElementWeak ? '#334455' : '#554400';
 
   return (
     <group ref={ref} position={[popup.x * TILE_SIZE, popup.y + 2.5, popup.z * TILE_SIZE]} scale={[scale, scale, scale]}>
@@ -1780,7 +1746,7 @@ function SkillEffectRenderer({ effect }) {
 }
 
 // 유닛 컨텍스트 메뉴 (3D 공간에 HTML 오버레이)
-function UnitContextMenu({ unit, mapData, menuState, onAction }) {
+function UnitContextMenu({ unit, mapData, menuState, onAction, potions }) {
   if (!unit || !menuState || !menuState.show) return null;
 
   const tile = mapData.tiles.find(t => t.x === unit.x && t.z === unit.z);
@@ -1808,6 +1774,9 @@ function UnitContextMenu({ unit, mapData, menuState, onAction }) {
               <button className="srpg-ctx-btn skill" onClick={() => onAction('showSkills')}>
                 스킬
               </button>
+              <button className="srpg-ctx-btn items" onClick={() => onAction('showItems')}>
+                물품 {potions && potions.length > 0 && <span className="srpg-ctx-item-count">{potions.length}</span>}
+              </button>
               <button className="srpg-ctx-btn wait" onClick={() => onAction('wait')}>
                 대기
               </button>
@@ -1832,31 +1801,118 @@ function UnitContextMenu({ unit, mapData, menuState, onAction }) {
               </button>
             </>
           )}
+          {menuState.mode === 'items' && (
+            <>
+              {(!potions || potions.length === 0) ? (
+                <div className="srpg-ctx-empty">사용 가능한 물품이 없습니다</div>
+              ) : (
+                potions.map(p => (
+                  <button
+                    key={p.item_id}
+                    className={`srpg-ctx-btn item-entry ${p.effect_hp > 0 ? 'hp' : 'mp'}`}
+                    onClick={() => onAction('useItem', p)}
+                  >
+                    <span className="srpg-ctx-item-name">{p.effect_hp > 0 ? '❤️' : '💎'} {p.name}</span>
+                    <span className="srpg-ctx-item-qty">x{p.quantity}</span>
+                  </button>
+                ))
+              )}
+              <button className="srpg-ctx-btn back" onClick={() => onAction('back')}>
+                뒤로가기
+              </button>
+            </>
+          )}
         </div>
       </Html>
     </group>
   );
 }
 
-// 카메라 컨트롤
+// 카메라 컨트롤 (줌인/줌아웃 + 드래그 이동)
 function CameraController({ mapWidth, mapHeight }) {
-  const { camera, size } = useThree();
+  const { camera, size, gl } = useThree();
+  const zoomRef = useRef(50);
+  const panRef = useRef({ x: 0, z: 0 });
+  const isDragging = useRef(false);
+  const lastMouse = useRef({ x: 0, y: 0 });
+
   const center = useMemo(() => ({
     x: (mapWidth - 1) * TILE_SIZE / 2,
     z: (mapHeight - 1) * TILE_SIZE / 2,
   }), [mapWidth, mapHeight]);
 
+  // 초기 카메라 설정
   React.useEffect(() => {
-    // 맵 크기에 따라 줌 자동 조정
     const maxDim = Math.max(mapWidth, mapHeight) * TILE_SIZE;
     const baseZoom = Math.min(size.width, size.height) / (maxDim * 1.4);
     const zoom = Math.max(20, Math.min(60, baseZoom));
+    zoomRef.current = zoom;
 
     camera.position.set(center.x + 10, 12, center.z + 10);
     camera.lookAt(center.x, 0, center.z);
     camera.zoom = zoom;
     camera.updateProjectionMatrix();
   }, [camera, center, size, mapWidth, mapHeight]);
+
+  // 마우스 휠 줌 + 우클릭 드래그 이동
+  React.useEffect(() => {
+    const canvas = gl.domElement;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -4 : 4;
+      zoomRef.current = Math.max(15, Math.min(120, zoomRef.current + delta));
+      camera.zoom = zoomRef.current;
+      camera.updateProjectionMatrix();
+    };
+
+    const handleMouseDown = (e) => {
+      if (e.button === 2 || e.button === 1) { // 우클릭 또는 중클릭
+        isDragging.current = true;
+        lastMouse.current = { x: e.clientX, y: e.clientY };
+        e.preventDefault();
+      }
+    };
+
+    const handleMouseMove = (e) => {
+      if (!isDragging.current) return;
+      const dx = (e.clientX - lastMouse.current.x) / zoomRef.current * 2;
+      const dy = (e.clientY - lastMouse.current.y) / zoomRef.current * 2;
+      lastMouse.current = { x: e.clientX, y: e.clientY };
+
+      // 아이소메트릭 방향으로 이동
+      panRef.current.x -= (dx + dy) * 0.5;
+      panRef.current.z -= (-dx + dy) * 0.5;
+
+      const cx = center.x + panRef.current.x;
+      const cz = center.z + panRef.current.z;
+      camera.position.set(cx + 10, 12, cz + 10);
+      camera.lookAt(cx, 0, cz);
+      camera.updateProjectionMatrix();
+    };
+
+    const handleMouseUp = () => {
+      isDragging.current = false;
+    };
+
+    const handleContextMenu = (e) => e.preventDefault();
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('mouseleave', handleMouseUp);
+    canvas.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseup', handleMouseUp);
+      canvas.removeEventListener('mouseleave', handleMouseUp);
+      canvas.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [gl, camera, center]);
 
   return null;
 }
@@ -1874,6 +1930,7 @@ function MapScene({
   skillEffects,
   menuState,
   onMenuAction,
+  potions,
 }) {
   const [hoveredTile, setHoveredTile] = useState(null);
 
@@ -1942,6 +1999,7 @@ function MapScene({
           mapData={mapData}
           menuState={menuState}
           onAction={onMenuAction}
+          potions={potions}
         />
       )}
     </>

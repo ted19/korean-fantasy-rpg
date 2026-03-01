@@ -1,0 +1,401 @@
+/* Blacksmith-specific styles (extends facility-page base) */
+
+.blacksmith-page .bs-craft-panel,
+.blacksmith-page .bs-enhance-panel,
+.blacksmith-page .bs-materials-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- Recipe List ---- */
+.bs-recipe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.bs-recipe-list::-webkit-scrollbar,
+.bs-enhance-list::-webkit-scrollbar { width: 4px; }
+.bs-recipe-list::-webkit-scrollbar-thumb,
+.bs-enhance-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+.bs-recipe-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bs-recipe-card:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+.bs-recipe-card.selected { background: rgba(255, 165, 2, 0.08); border-color: rgba(255, 165, 2, 0.4); }
+.bs-recipe-card.disabled { opacity: 0.5; }
+
+.bs-recipe-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.3);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bs-recipe-img { width: 100%; height: 100%; object-fit: cover; }
+.bs-recipe-info { flex: 1; min-width: 0; }
+
+.bs-recipe-name {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bs-recipe-grade { font-size: 11px; opacity: 0.7; }
+
+.bs-recipe-desc {
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bs-recipe-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #666;
+}
+
+.bs-recipe-type { color: #60a5fa; }
+.bs-recipe-class { color: #c084fc; }
+.bs-recipe-level-warn { color: #f87171; }
+
+.bs-recipe-cost {
+  color: #ffa502;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---- Recipe Detail ---- */
+.bs-recipe-detail {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255, 165, 2, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.bs-recipe-detail h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bs-grade-tag { font-size: 12px; opacity: 0.7; }
+
+.bs-detail-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.bs-detail-stats span {
+  font-size: 13px;
+  color: #ccc;
+  background: rgba(255,255,255,0.04);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.bs-detail-mats { margin-bottom: 12px; }
+
+.bs-detail-mats-title {
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.bs-mat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.bs-mat-row.ok { color: #4ade80; }
+.bs-mat-row.missing { color: #f87171; background: rgba(239, 68, 68, 0.04); }
+
+.bs-mat-icon { width: 18px; text-align: center; }
+.bs-mat-name { flex: 1; }
+.bs-mat-qty { font-weight: 600; }
+
+.bs-craft-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #ffa502, #e08900);
+  border: none;
+  border-radius: 10px;
+  color: #000;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bs-craft-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(255, 165, 2, 0.4); }
+.bs-craft-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ---- Enhance ---- */
+.bs-enhance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.bs-enhance-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bs-enhance-card:hover { background: rgba(255,255,255,0.05); }
+.bs-enhance-card.selected { background: rgba(30, 144, 255, 0.08); border-color: rgba(30, 144, 255, 0.4); }
+.bs-enhance-card.maxed { opacity: 0.6; }
+
+.bs-enhance-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.3);
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bs-enhance-img { width: 100%; height: 100%; object-fit: cover; }
+
+.bs-enhance-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: #e94560;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.bs-enhance-info { flex: 1; min-width: 0; }
+.bs-enhance-name { font-size: 14px; font-weight: 600; }
+
+.bs-enhance-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.bs-enhance-grade { font-weight: 600; }
+.bs-equipped-tag { color: #4ade80; }
+
+.bs-enhance-bar {
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  margin-top: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.bs-enhance-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1e90ff, #60a5fa);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.bs-enhance-bar-text {
+  position: absolute;
+  right: 0;
+  top: -14px;
+  font-size: 10px;
+  color: #888;
+}
+
+.bs-enhance-rate { color: #4ade80; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.bs-enhance-max {
+  color: #ffa502;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 165, 2, 0.12);
+  padding: 3px 8px;
+  border-radius: 10px;
+}
+
+/* ---- Enhance Detail ---- */
+.bs-enhance-detail {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(30, 144, 255, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.bs-enhance-detail h3 { margin: 0 0 12px; font-size: 18px; }
+
+.bs-enhance-maxed {
+  color: #ffa502;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  padding: 20px;
+}
+
+.bs-enhance-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.bs-enhance-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #ccc;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.bs-enhance-stat-row.missing { color: #f87171; background: rgba(239, 68, 68, 0.04); }
+
+.rate-high { color: #4ade80; font-weight: 600; }
+.rate-mid { color: #fbbf24; font-weight: 600; }
+.rate-low { color: #f87171; font-weight: 600; }
+
+.bs-enhance-warning {
+  color: #fbbf24;
+  font-size: 12px;
+  background: rgba(251, 191, 36, 0.08);
+  padding: 6px 10px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.bs-enhance-result {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 10px;
+  animation: enhanceFlash 0.5s ease-out;
+}
+
+.bs-enhance-result.success {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+
+.bs-enhance-result.fail {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+@keyframes enhanceFlash {
+  0% { transform: scale(1.05); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.bs-enhance-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #1e90ff, #0066cc);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bs-enhance-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(30, 144, 255, 0.4); }
+.bs-enhance-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ---- Materials ---- */
+.bs-mat-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.bs-mat-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bs-mat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+}
+
+.bs-mat-card-icon { font-size: 22px; width: 30px; text-align: center; flex-shrink: 0; }
+.bs-mat-card-info { flex: 1; min-width: 0; }
+.bs-mat-card-name { font-size: 13px; font-weight: 600; }
+.bs-mat-card-desc { font-size: 11px; color: #666; }
+.bs-mat-card-qty { font-size: 12px; color: #aaa; }
+
+.bs-mat-sell-btn {
+  padding: 4px 10px;
+  background: rgba(255, 165, 2, 0.08);
+  border: 1px solid rgba(255, 165, 2, 0.25);
+  color: #ffa502;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.bs-mat-sell-btn:hover:not(:disabled) { background: rgba(255, 165, 2, 0.15); }
+.bs-mat-sell-btn:disabled { opacity: 0.3; cursor: not-allowed; }

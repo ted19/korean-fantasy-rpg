@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Navbar, Nav, Container } from 'react-bootstrap';
 
 const CLASS_IMAGES = {
   '풍수사': '/characters/pungsu_icon.png',
@@ -14,67 +13,97 @@ const CLASS_ICONS = {
 };
 
 const MENU_ITEMS = [
-  { id: 'home', name: '홈', icon: '🏠' },
-  { id: 'village', name: '마을', icon: '🏘️' },
-  { id: 'dungeon', name: '던전', icon: '⚔️' },
-  { id: 'bestiary', name: '몬스터 도감', icon: '📖' },
+  { id: 'home', name: '홈', icon: '/ui/nav_home.png' },
+  { id: 'village', name: '마을', icon: '/ui/nav_village.png' },
+  { id: 'stage', name: '스테이지', icon: '/ui/nav_stage.png' },
+  { id: 'dungeon', name: '던전', icon: '/ui/nav_dungeon.png' },
+  { id: 'bestiary', name: '도감', icon: '/ui/nav_bestiary.png' },
 ];
 
-function TopNav({ character, charState, currentLocation, onLocationChange, onLogout }) {
+function NavIcon({ src, fallback, className }) {
+  const [err, setErr] = useState(false);
+  if (err) return <span className={className}>{fallback}</span>;
+  return <img src={src} alt="" className={className} onError={() => setErr(true)} />;
+}
+
+function TopNav({ character, charState, currentLocation, onLocationChange, onLogout, onGoToCharacterSelect }) {
   const [imgError, setImgError] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <Navbar expand="md" className="top-nav" sticky="top">
-      <Container fluid className="px-2 px-md-3">
-        {/* 프로필 영역 */}
-        <div className="top-nav-profile">
-          <div className="top-nav-avatar">
-            {!imgError && CLASS_IMAGES[character.class_type] ? (
-              <img
-                src={CLASS_IMAGES[character.class_type]}
-                alt={character.class_type}
-                onError={() => setImgError(true)}
-              />
-            ) : (
-              <span className="top-nav-avatar-fallback">{CLASS_ICONS[character.class_type]}</span>
-            )}
+    <nav className="top-nav-v2">
+      {/* 배경 장식 */}
+      <div className="top-nav-v2-bg" style={{ backgroundImage: 'url(/ui/nav_bg.png)', backgroundSize: 'cover', backgroundPosition: 'center' }} />
+
+      <div className="top-nav-v2-inner">
+        {/* 왼쪽: 로고 + 프로필 */}
+        <div className="top-nav-v2-left">
+          <div className="top-nav-v2-logo">
+            <img src="/ui/game_logo.png" alt="logo" onError={(e) => { e.target.style.display = 'none'; }} />
           </div>
-          <div className="top-nav-info d-none d-sm-flex">
-            <span className="top-nav-name">{character.name}</span>
-            <div className="top-nav-tags">
-              <span className="top-nav-tag class">{character.class_type}</span>
-              <span className="top-nav-tag level">Lv.{charState.level}</span>
-              <span className="top-nav-tag gold">🪙 {charState.gold}</span>
+          <div className="top-nav-v2-profile">
+            <div className="top-nav-v2-avatar">
+              {!imgError && CLASS_IMAGES[character.class_type] ? (
+                <img
+                  src={CLASS_IMAGES[character.class_type]}
+                  alt={character.class_type}
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                <span className="top-nav-v2-avatar-fallback">{CLASS_ICONS[character.class_type]}</span>
+              )}
             </div>
-          </div>
-          <div className="top-nav-gold-mobile d-sm-none">
-            <span className="top-nav-tag level">Lv.{charState.level}</span>
-            <span className="top-nav-tag gold">🪙 {charState.gold}</span>
+            <div className="top-nav-v2-info">
+              <span className="top-nav-v2-name">{character.name}</span>
+              <div className="top-nav-v2-stats">
+                <span className="top-nav-v2-stat class-tag">{character.class_type}</span>
+                <span className="top-nav-v2-stat level-tag">Lv.{charState.level}</span>
+                <span className="top-nav-v2-stat gold-tag">
+                  <img src="/ui/gold_coin.png" alt="" className="top-nav-v2-coin" onError={(e) => { e.target.style.display = 'none'; }} />
+                  {(charState.gold ?? 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <Navbar.Toggle aria-controls="top-nav-menu" className="top-nav-toggle" />
+        {/* 모바일 토글 */}
+        <button className="top-nav-v2-toggle" onClick={() => setMenuOpen(!menuOpen)}>
+          <span /><span /><span />
+        </button>
 
-        <Navbar.Collapse id="top-nav-menu">
-          <Nav className="ms-auto top-nav-links">
-            {MENU_ITEMS.map((item) => (
-              <Nav.Link
-                key={item.id}
-                active={currentLocation === item.id}
-                onClick={() => onLocationChange(item.id)}
-                className="top-nav-link"
-              >
-                <span className="top-nav-link-icon">{item.icon}</span>
-                <span className="top-nav-link-name">{item.name}</span>
-              </Nav.Link>
-            ))}
-            <Nav.Link onClick={onLogout} className="top-nav-link top-nav-logout">
-              로그아웃
-            </Nav.Link>
-          </Nav>
-        </Navbar.Collapse>
-      </Container>
-    </Navbar>
+        {/* 오른쪽: 메뉴 */}
+        <div className={`top-nav-v2-menu${menuOpen ? ' open' : ''}`}>
+          {MENU_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              className={`top-nav-v2-btn${currentLocation === item.id ? ' active' : ''}`}
+              onClick={() => { onLocationChange(item.id); setMenuOpen(false); }}
+            >
+              <div className="top-nav-v2-btn-icon-wrap">
+                <NavIcon src={item.icon} fallback="?" className="top-nav-v2-btn-icon" />
+                {currentLocation === item.id && <div className="top-nav-v2-btn-glow" />}
+              </div>
+              <span className="top-nav-v2-btn-name">{item.name}</span>
+            </button>
+          ))}
+          {onGoToCharacterSelect && (
+            <button className="top-nav-v2-btn" onClick={() => { onGoToCharacterSelect(); setMenuOpen(false); }}>
+              <div className="top-nav-v2-btn-icon-wrap">
+                <NavIcon src="/ui/nav_charswitch.png" fallback="👤" className="top-nav-v2-btn-icon" />
+              </div>
+              <span className="top-nav-v2-btn-name">캐릭터</span>
+            </button>
+          )}
+          <button className="top-nav-v2-btn logout" onClick={() => { onLogout(); setMenuOpen(false); }}>
+            <div className="top-nav-v2-btn-icon-wrap">
+              <NavIcon src="/ui/logout_icon.png" fallback="🚪" className="top-nav-v2-btn-icon" />
+            </div>
+            <span className="top-nav-v2-btn-name">나가기</span>
+          </button>
+        </div>
+      </div>
+    </nav>
   );
 }
 

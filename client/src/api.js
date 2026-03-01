@@ -9,6 +9,10 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const selectedCharId = localStorage.getItem('selectedCharId');
+  if (selectedCharId) {
+    config.headers['X-Char-Id'] = selectedCharId;
+  }
   return config;
 });
 

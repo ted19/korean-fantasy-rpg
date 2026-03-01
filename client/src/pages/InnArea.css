@@ -1,0 +1,272 @@
+/* Inn-specific styles (extends facility-page base) */
+
+.inn-page { --accent: #f59e0b; --accent-dim: rgba(245, 158, 11, 0.12); }
+
+/* ---- Content layout ---- */
+.inn-content {
+  display: flex;
+  gap: 16px;
+}
+
+.inn-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-right: 4px;
+  min-width: 0;
+}
+
+.inn-list::-webkit-scrollbar { width: 4px; }
+.inn-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+.inn-detail {
+  width: 320px;
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+  align-self: flex-start;
+}
+
+/* ---- Mercenary Card ---- */
+.inn-merc-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inn-merc-card:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+.inn-merc-card.selected { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.4); }
+.inn-merc-card.disabled { opacity: 0.5; }
+
+.inn-merc-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.3);
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inn-merc-img { width: 100%; height: 100%; object-fit: cover; }
+
+.inn-merc-level-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: #e94560;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.inn-merc-info { flex: 1; min-width: 0; }
+
+.inn-merc-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #eee;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inn-merc-class {
+  font-size: 11px;
+  color: #c084fc;
+  font-weight: 500;
+}
+
+.inn-merc-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #888;
+}
+
+.inn-merc-level-warn { color: #f87171; }
+
+.inn-merc-desc {
+  font-size: 11px;
+  color: #666;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inn-merc-price {
+  color: #ffa502;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---- EXP Bar ---- */
+.inn-merc-exp-bar {
+  position: relative;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.inn-merc-exp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.inn-merc-exp-text {
+  position: absolute;
+  right: 0;
+  top: -14px;
+  font-size: 10px;
+  color: #888;
+}
+
+/* ---- Detail Panel ---- */
+.inn-detail-header {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.inn-detail-portrait {
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(0,0,0,0.3);
+  flex-shrink: 0;
+}
+
+.inn-detail-header h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: #eee;
+}
+
+.inn-detail-level {
+  font-size: 13px;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.inn-detail-sub {
+  font-size: 12px;
+  color: #aaa;
+}
+
+.inn-detail-desc {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.inn-detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.inn-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #ccc;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+}
+
+.inn-stat-row span:first-child { color: #888; }
+
+/* ---- Growth Info ---- */
+.inn-detail-growth {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(245, 158, 11, 0.05);
+  border: 1px solid rgba(245, 158, 11, 0.1);
+  border-radius: 8px;
+}
+
+.inn-growth-title {
+  font-size: 11px;
+  color: #f59e0b;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.inn-growth-grid {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #4ade80;
+}
+
+.inn-growth-grid span {
+  background: rgba(74, 222, 128, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ---- Buttons ---- */
+.inn-hire-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  border-radius: 10px;
+  color: #000;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inn-hire-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4); }
+.inn-hire-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.inn-fire-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inn-fire-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+.inn-fire-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .inn-content { flex-direction: column; }
+  .inn-detail { width: 100%; }
+}

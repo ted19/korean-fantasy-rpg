@@ -4,6 +4,8 @@ import api from '../api';
 import Shop from './Shop';
 import Quest from './Quest';
 import Summon from './Summon';
+import BlacksmithArea from './BlacksmithArea';
+import InnArea from './InnArea';
 
 function VillageImg({ id, fallback, className }) {
   const [err, setErr] = useState(false);
@@ -12,43 +14,32 @@ function VillageImg({ id, fallback, className }) {
 }
 
 const VILLAGE_ACTIONS = [
-  { id: 'rest', name: '여관', icon: '🛌', desc: 'HP/MP를 완전히 회복합니다.' },
+  { id: 'inn', name: '여관', icon: '🛌', desc: '용병 고용과 휴식을 합니다.' },
   { id: 'shop', name: '상점', icon: '🛒', desc: '아이템을 사고팔 수 있습니다.' },
+  { id: 'blacksmith', name: '대장간', icon: '⚒️', desc: '장비 제작과 강화를 합니다.' },
   { id: 'quest', name: '길드', icon: '📜', desc: '퀘스트를 확인합니다.' },
   { id: 'summon', name: '소환술사의 집', icon: '👻', desc: '소환수를 고용하고 관리합니다.' },
 ];
 
-function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummonsChanged }) {
+function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummonsChanged, onMercenariesChanged }) {
   const [activeView, setActiveView] = useState(null);
-
-  const handleRest = async () => {
-    try {
-      const res = await api.post('/battle/rest');
-      const c = res.data.character;
-      onCharStateUpdate({
-        currentHp: c.current_hp ?? c.hp,
-        currentMp: c.current_mp ?? c.mp,
-      });
-      onLog('여관에서 푹 쉬었습니다. HP/MP가 완전히 회복되었습니다!', 'heal');
-    } catch {
-      onLog('휴식에 실패했습니다.', 'damage');
-    }
-  };
 
   const handleBack = () => {
     if (activeView === 'summon' && onSummonsChanged) onSummonsChanged();
+    if (activeView === 'inn' && onMercenariesChanged) onMercenariesChanged();
     setActiveView(null);
   };
 
   const handleAction = (id) => {
-    if (id === 'rest') return handleRest();
     setActiveView(id);
   };
 
   if (activeView) {
     const maxWidth = activeView === 'summon' ? 900 : undefined;
     const Content = {
+      inn: <InnArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} onMercenariesChanged={onMercenariesChanged} />,
       shop: <Shop character={character} charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
+      blacksmith: <BlacksmithArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
       quest: <Quest charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
       summon: <Summon charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
     }[activeView];

@@ -1,9 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Nav, Badge, Button, ProgressBar } from 'react-bootstrap';
+import { Badge, Button, ProgressBar } from 'react-bootstrap';
 import api from '../api';
 import SummonEquipment from './SummonEquipment';
 
 const TYPE_FILTERS = ['전체', '귀신', '몬스터', '정령', '언데드'];
+
+const ELEMENT_INFO = {
+  fire:    { name: '불', icon: '🔥', color: '#ff6b35' },
+  water:   { name: '물', icon: '💧', color: '#4da6ff' },
+  earth:   { name: '땅', icon: '🪨', color: '#8bc34a' },
+  wind:    { name: '바람', icon: '🌀', color: '#b388ff' },
+  neutral: { name: '중립', icon: '⚪', color: '#9ca3af' },
+};
+
+function NpcImg({ src, className }) {
+  const [err, setErr] = useState(false);
+  if (err) return null;
+  return <img src={src} alt="" className={className} onError={() => setErr(true)} />;
+}
 
 function SummonImg({ src, fallback, className }) {
   const [err, setErr] = useState(false);
@@ -22,6 +36,20 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
   const [showEquipment, setShowEquipment] = useState(false);
   const [showSkills, setShowSkills] = useState(null);
   const [skillsData, setSkillsData] = useState({ skills: [], summonLevel: 1 });
+  const [npcMsg, setNpcMsg] = useState('이 세계에는 다양한 소환수가 있지...');
+
+  const NPC_MSGS = {
+    shop: [
+      '이 세계에는 다양한 소환수가 있지...',
+      '마음에 드는 소환수를 골라보거라.',
+      '강한 소환수일수록 더 많은 힘이 필요하단다.',
+    ],
+    my: [
+      '소환수를 잘 돌봐야 강해진다.',
+      '장비와 스킬로 소환수를 키워보거라.',
+      '자네 소환수들이 잘 자라고 있구만.',
+    ],
+  };
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -46,14 +74,21 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
     loadMySummons();
   }, [loadTemplates, loadMySummons]);
 
+  useEffect(() => {
+    const msgs = NPC_MSGS[tab] || NPC_MSGS.shop;
+    setNpcMsg(msgs[Math.floor(Math.random() * msgs.length)]);
+  }, [tab]);
+
   const handleBuy = async (templateId) => {
     try {
       const res = await api.post('/summon/buy', { templateId });
       onLog(res.data.message, 'system');
       onCharStateUpdate({ gold: res.data.gold });
+      setNpcMsg('좋은 선택이다. 잘 키워보거라.');
       loadMySummons();
     } catch (err) {
       onLog(err.response?.data?.message || '고용 실패', 'damage');
+      setNpcMsg('아직 준비가 되지 않은 것 같구나.');
     }
   };
 
@@ -91,14 +126,8 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
   };
 
   const ownedTemplateIds = mySummons.map((s) => s.template_id);
-
-  const filteredTemplates = templates.filter(
-    (t) => typeFilter === '전체' || t.type === typeFilter
-  );
-
-  const filteredSummons = mySummons.filter(
-    (s) => typeFilter === '전체' || s.type === typeFilter
-  );
+  const filteredTemplates = templates.filter((t) => typeFilter === '전체' || t.type === typeFilter);
+  const filteredSummons = mySummons.filter((s) => typeFilter === '전체' || s.type === typeFilter);
 
   if (showEquipment && selectedSummon) {
     return (
@@ -126,7 +155,14 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
           <SummonImg src={summon?.icon_url_img || `/summons/${summon?.template_id}_icon.png`} fallback={summon?.icon} className="summon-card-icon" />
           <div>
             <div className="summon-card-name">{summon?.name}</div>
-            <div className="summon-card-type">{summon?.type} · Lv.{summon?.level}</div>
+            <div className="summon-card-type">
+              {summon?.type} · Lv.{summon?.level}
+              {summon?.element && ELEMENT_INFO[summon.element] && (
+                <span className="summon-element" style={{ color: ELEMENT_INFO[summon.element].color }}>
+                  {ELEMENT_INFO[summon.element].icon} {ELEMENT_INFO[summon.element].name}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="summon-skills-list">
@@ -135,8 +171,8 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
               <div className="summon-skill-top">
                 <span className="summon-skill-type-icon">{SKILL_TYPE_ICONS[skill.type]}</span>
                 <span className="summon-skill-name">{skill.name}</span>
-                <Badge bg="dark" style={{ color: 'var(--orange)', background: 'rgba(245, 158, 11, 0.1)' }}>{skill.skill_category}</Badge>
-                <Badge bg="dark" style={{ color: 'var(--blue)', background: 'rgba(59, 130, 246, 0.1)' }}>{skill.mp_cost}MP</Badge>
+                <Badge bg="dark" style={{ color: '#fbbf24', background: 'rgba(245, 158, 11, 0.1)' }}>{skill.skill_category}</Badge>
+                <Badge bg="dark" style={{ color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)' }}>{skill.mp_cost}MP</Badge>
               </div>
               <div className="summon-skill-desc">{skill.description}</div>
               <div className="summon-skill-meta">
@@ -163,7 +199,7 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
             </div>
           ))}
           {skillsData.skills.length === 0 && (
-            <div className="summon-empty">배울 수 있는 스킬이 없습니다.</div>
+            <div className="facility-empty">배울 수 있는 스킬이 없습니다.</div>
           )}
         </div>
       </div>
@@ -171,33 +207,49 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
   }
 
   return (
-    <div className="summon-container">
-      <Nav variant="tabs" className="mb-3">
-        <Nav.Item>
-          <Nav.Link active={tab === 'shop'} onClick={() => setTab('shop')}>고용하기</Nav.Link>
-        </Nav.Item>
-        <Nav.Item>
-          <Nav.Link active={tab === 'my'} onClick={() => setTab('my')}>
-            내 소환수 <Badge bg="secondary" className="ms-1">{mySummons.length}</Badge>
-          </Nav.Link>
-        </Nav.Item>
-      </Nav>
+    <div className="facility-page summoner-page">
+      {/* Banner */}
+      <div className="facility-banner summoner-banner">
+        <NpcImg src="/village/summoner_banner.png" className="facility-banner-img" />
+        <div className="facility-banner-overlay" />
+        <div className="facility-banner-title">소환술사의 집</div>
+      </div>
 
-      <div className="shop-filters">
-        <Nav variant="pills" className="flex-wrap gap-1 flex-grow-1">
-          {TYPE_FILTERS.map((f) => (
-            <Nav.Item key={f}>
-              <Nav.Link
-                active={typeFilter === f}
-                onClick={() => setTypeFilter(f)}
-                className="py-1 px-2"
-              >
-                {f}
-              </Nav.Link>
-            </Nav.Item>
-          ))}
-        </Nav>
-        <span className="shop-gold ms-2">{charState.gold}G</span>
+      {/* NPC Section */}
+      <div className="facility-npc">
+        <div className="facility-npc-portrait-wrap">
+          <NpcImg src="/village/summoner_portrait.png" className="facility-npc-portrait" />
+        </div>
+        <div className="facility-npc-speech">
+          <div className="facility-npc-name">소환술사 <span className="npc-name-sub">한 미령</span></div>
+          <div className="facility-npc-msg">{npcMsg}</div>
+        </div>
+        <div className="facility-gold">
+          <span>{(charState.gold ?? 0).toLocaleString()}G</span>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="facility-tabs">
+        <button className={`facility-tab ${tab === 'shop' ? 'active' : ''}`} onClick={() => setTab('shop')}>
+          고용하기
+        </button>
+        <button className={`facility-tab ${tab === 'my' ? 'active' : ''}`} onClick={() => setTab('my')}>
+          내 소환수 <span className="tab-badge">{mySummons.length}</span>
+        </button>
+      </div>
+
+      {/* Type Filter */}
+      <div className="facility-filters">
+        {TYPE_FILTERS.map((f) => (
+          <button
+            key={f}
+            className={`facility-filter-btn ${typeFilter === f ? 'active' : ''}`}
+            onClick={() => setTypeFilter(f)}
+          >
+            {f}
+          </button>
+        ))}
       </div>
 
       {tab === 'shop' ? (
@@ -215,7 +267,14 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
                       {t.name}
                       {owned && <Badge bg="success" className="ms-1" style={{ fontSize: 10 }}>보유</Badge>}
                     </div>
-                    <div className="summon-card-type">{t.type}</div>
+                    <div className="summon-card-type">
+                      {t.type}
+                      {t.element && ELEMENT_INFO[t.element] && (
+                        <span className="summon-element" style={{ color: ELEMENT_INFO[t.element].color }}>
+                          {ELEMENT_INFO[t.element].icon} {ELEMENT_INFO[t.element].name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="summon-card-stats">
@@ -229,21 +288,20 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
                   {t.required_level > 1 && <span className="eff lvl">Lv.{t.required_level}</span>}
                 </div>
                 <div className="summon-card-bottom">
-                  <span className="item-price">{t.price}G</span>
-                  <Button
-                    size="sm"
-                    variant="primary"
+                  <span className="fitem-price">{t.price.toLocaleString()}G</span>
+                  <button
+                    className={`fitem-btn buy ${(owned || cantAfford || cantLevel) ? 'disabled' : ''}`}
                     disabled={owned || cantAfford || cantLevel}
                     onClick={() => handleBuy(t.id)}
                   >
                     {owned ? '보유 중' : cantLevel ? `Lv.${t.required_level}` : cantAfford ? '골드 부족' : '고용'}
-                  </Button>
+                  </button>
                 </div>
               </div>
             );
           })}
           {filteredTemplates.length === 0 && (
-            <div className="summon-empty">해당 타입의 소환수가 없습니다.</div>
+            <div className="facility-empty">해당 타입의 소환수가 없습니다.</div>
           )}
         </div>
       ) : (
@@ -254,7 +312,14 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
                 <SummonImg src={s.icon_url_img || `/summons/${s.template_id}_icon.png`} fallback={s.icon} className="summon-card-icon" />
                 <div className="summon-card-info">
                   <div className="summon-card-name">{s.name}</div>
-                  <div className="summon-card-type">{s.type} · Lv.{s.level}</div>
+                  <div className="summon-card-type">
+                    {s.type} · Lv.{s.level}
+                    {s.element && ELEMENT_INFO[s.element] && (
+                      <span className="summon-element" style={{ color: ELEMENT_INFO[s.element].color }}>
+                        {ELEMENT_INFO[s.element].icon} {ELEMENT_INFO[s.element].name}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="summon-card-level-bar">
@@ -277,27 +342,21 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
                 <div className="summon-card-skills">
                   {s.learned_skills.map((sk) => (
                     <Badge key={sk.id} bg="dark" className="summon-skill-tag" title={sk.description}
-                      style={{ background: 'rgba(59, 130, 246, 0.08)', color: 'var(--blue)' }}>
+                      style={{ background: 'rgba(59, 130, 246, 0.08)', color: '#60a5fa' }}>
                       {SKILL_TYPE_ICONS[sk.type]} {sk.name}
                     </Badge>
                   ))}
                 </div>
               )}
               <div className="summon-card-actions">
-                <Button size="sm" variant="primary" onClick={() => { setSelectedSummon(s); setShowEquipment(true); }}>
-                  장비
-                </Button>
-                <Button size="sm" variant="primary" onClick={() => loadSkills(s.id)}>
-                  스킬
-                </Button>
-                <Button size="sm" variant="outline-danger" onClick={() => handleSell(s.id)}>
-                  해고 ({s.sell_price}G)
-                </Button>
+                <button className="fitem-btn buy" onClick={() => { setSelectedSummon(s); setShowEquipment(true); }}>장비</button>
+                <button className="fitem-btn buy" onClick={() => loadSkills(s.id)}>스킬</button>
+                <button className="fitem-btn sell" onClick={() => handleSell(s.id)}>해고 ({s.sell_price}G)</button>
               </div>
             </div>
           ))}
           {filteredSummons.length === 0 && (
-            <div className="summon-empty">보유한 소환수가 없습니다.</div>
+            <div className="facility-empty">보유한 소환수가 없습니다.</div>
           )}
         </div>
       )}

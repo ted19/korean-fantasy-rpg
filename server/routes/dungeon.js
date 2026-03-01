@@ -133,12 +133,10 @@ router.get('/:key', auth, async (req, res) => {
       if (prog.length > 0) clearedStage = prog[0].stage_number;
     }
 
-    const tileOverrides = typeof dungeon.tile_overrides === 'string'
-      ? JSON.parse(dungeon.tile_overrides) : dungeon.tile_overrides;
-    const playerSpawns = typeof dungeon.player_spawns === 'string'
-      ? JSON.parse(dungeon.player_spawns) : dungeon.player_spawns;
-    const monsterSpawns = typeof dungeon.monster_spawns === 'string'
-      ? JSON.parse(dungeon.monster_spawns) : dungeon.monster_spawns;
+    const safeParse = (v) => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return null; } };
+    const tileOverrides = safeParse(dungeon.tile_overrides);
+    const playerSpawns = safeParse(dungeon.player_spawns);
+    const monsterSpawns = safeParse(dungeon.monster_spawns);
 
     res.json({
       dungeon: {
@@ -187,6 +185,7 @@ router.get('/:key', auth, async (req, res) => {
           isBoss: !!s.is_boss,
           monsterCount: s.monster_count,
           monsterLevelBonus: s.monster_level_bonus,
+          description: s.description || '',
           rewardExpBonus: s.reward_exp_bonus,
           rewardGoldBonus: s.reward_gold_bonus,
           mapWidth: s.map_width || dungeon.map_width,

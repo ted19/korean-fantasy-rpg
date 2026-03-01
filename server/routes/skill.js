@@ -19,7 +19,12 @@ function auth(req, res, next) {
 // 내 직업의 전체 스킬 목록 + 습득 여부
 router.get('/list', auth, async (req, res) => {
   try {
-    const [chars] = await pool.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ skills: [] });
     const char = chars[0];
 
@@ -44,7 +49,12 @@ router.post('/learn', auth, async (req, res) => {
   try {
     const { skillId } = req.body;
 
-    const [chars] = await pool.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 

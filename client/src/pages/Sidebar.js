@@ -20,10 +20,11 @@ const MENU_ITEMS = [
 ];
 
 function SidebarContent({ character, charState, onLocationChange, currentLocation, onShowCharDetail, onLogout }) {
-  const expNeeded = charState.level * 100;
-  const hpPercent = Math.min(100, (charState.currentHp / charState.maxHp) * 100);
-  const mpPercent = Math.min(100, (charState.currentMp / charState.maxMp) * 100);
-  const expPercent = Math.min(100, (charState.exp / expNeeded) * 100);
+  if (!charState || !character) return null;
+  const expNeeded = (charState.level || 1) * 100;
+  const hpPercent = charState.maxHp > 0 ? Math.min(100, ((charState.currentHp || 0) / charState.maxHp) * 100) : 0;
+  const mpPercent = charState.maxMp > 0 ? Math.min(100, ((charState.currentMp || 0) / charState.maxMp) * 100) : 0;
+  const expPercent = expNeeded > 0 ? Math.min(100, ((charState.exp || 0) / expNeeded) * 100) : 0;
 
   return (
     <>
@@ -35,7 +36,13 @@ function SidebarContent({ character, charState, onLocationChange, currentLocatio
           }
         </div>
         <div className="profile-name">{character.name}</div>
-        <div className="profile-class">{character.class_type}</div>
+        <div className="profile-class">{character.class_type}
+          {character.element && character.element !== 'neutral' && (
+            <span style={{ marginLeft: 6 }}>
+              {{ fire: '🔥', water: '💧', earth: '🪨', wind: '🌀', neutral: '⚪' }[character.element]}
+            </span>
+          )}
+        </div>
         <div className="profile-level">Lv. {charState.level}</div>
       </div>
 

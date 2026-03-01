@@ -19,7 +19,12 @@ function auth(req, res, next) {
 // 게시판 퀘스트 목록 (수락 가능한 것들)
 router.get('/available', auth, async (req, res) => {
   try {
-    const [chars] = await pool.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ quests: [] });
     const char = chars[0];
 
@@ -56,7 +61,12 @@ router.get('/available', auth, async (req, res) => {
 // 내 진행중/완료 퀘스트
 router.get('/my', auth, async (req, res) => {
   try {
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.json({ quests: [] });
 
     const [rows] = await pool.query(
@@ -83,7 +93,12 @@ router.post('/accept', auth, async (req, res) => {
   try {
     const { questId } = req.body;
 
-    const [chars] = await pool.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -150,7 +165,12 @@ router.post('/reward', auth, async (req, res) => {
   try {
     const { questId } = req.body;
 
-    const [chars] = await conn.query('SELECT * FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
@@ -183,21 +203,29 @@ router.post('/reward', auth, async (req, res) => {
     let newPAtk = char.phys_attack, newPDef = char.phys_defense, newMAtk = char.mag_attack, newMDef = char.mag_defense, newCrit = char.crit_rate, newEvasion = char.evasion;
     let leveledUp = false;
 
-    const expNeeded = newLevel * 100;
-    if (newExp >= expNeeded) {
+    // 성장률 테이블 참조 레벨업
+    const [growthRowsQ] = await conn.query(
+      'SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]
+    );
+    const gq = growthRowsQ[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
+    let expNeeded = newLevel * 100;
+    while (newExp >= expNeeded) {
       newExp -= expNeeded;
       newLevel++;
-      newMaxHp += 10;
-      newMaxMp += 5;
-      newAtk += 2;
-      newDef += 1;
-      newPAtk += 2;
-      newPDef += 1;
-      newMAtk += 2;
-      newMDef += 1;
-      newCrit += 0.5;
-      newEvasion += 0.3;
+      newMaxHp += Math.floor(gq.hp_per_level);
+      newMaxMp += Math.floor(gq.mp_per_level);
+      newAtk += Math.floor(gq.attack_per_level);
+      newDef += Math.floor(gq.defense_per_level);
+      newPAtk += Math.floor(gq.phys_attack_per_level);
+      newPDef += Math.floor(gq.phys_defense_per_level);
+      newMAtk += Math.floor(gq.mag_attack_per_level);
+      newMDef += Math.floor(gq.mag_defense_per_level);
+      if (newLevel % 10 === 0) {
+        newCrit += Math.floor(gq.crit_rate_per_10level);
+        newEvasion += Math.floor(gq.evasion_per_10level);
+      }
       leveledUp = true;
+      expNeeded = newLevel * 100;
     }
 
     await conn.query(
@@ -266,7 +294,12 @@ router.post('/reward', auth, async (req, res) => {
 router.post('/abandon', auth, async (req, res) => {
   try {
     const { questId } = req.body;
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
 
     await pool.query(

@@ -82,6 +82,7 @@ export function createPlayerUnit(char, skills, spawnPos, equippedWeapon) {
     color: '#4fc3f7',
     weaponType,
     weaponName: equippedWeapon?.name || null,
+    element: char.element || 'neutral',
   };
 }
 
@@ -116,6 +117,42 @@ export function createSummonUnit(summon, spawnPos) {
     color: '#81c784',
     weaponType: 'default',
     weaponName: null,
+    element: summon.element || 'neutral',
+  };
+}
+
+export function createMercenaryUnit(merc, spawnPos) {
+  const weaponType = merc.weapon_type || merc.weaponType || 'default';
+  return {
+    id: `merc_${merc.id}`,
+    mercId: merc.id,
+    name: merc.name,
+    team: 'player',
+    classType: merc.class_type || 'mercenary',
+    level: merc.level,
+    hp: merc.hp,
+    maxHp: merc.hp,
+    mp: merc.mp || 0,
+    maxMp: merc.mp || 0,
+    attack: merc.phys_attack || 0,
+    defense: merc.phys_defense || 0,
+    physAttack: merc.phys_attack || 0,
+    physDefense: merc.phys_defense || 0,
+    magAttack: merc.mag_attack || 0,
+    magDefense: merc.mag_defense || 0,
+    critRate: merc.crit_rate || 5,
+    evasion: merc.evasion || 3,
+    move: 3,
+    skills: [],
+    x: spawnPos.x,
+    z: spawnPos.z,
+    acted: false,
+    moved: false,
+    icon: '🗡️',
+    color: '#ffb347',
+    weaponType,
+    weaponName: null,
+    element: merc.element || 'neutral',
   };
 }
 
@@ -151,6 +188,7 @@ export function createMonsterUnit(monster, spawnPos, index) {
     weaponName: null,
     aiType: monster.aiType || 'aggressive',
     skillCooldowns: {},
+    element: monster.element || 'neutral',
   };
 }
 
@@ -327,11 +365,11 @@ export function calcDamage(attacker, defender, skill = null, mapData = null) {
   let atkStat;
   let defStat;
   if (isMagic) {
-    atkStat = attacker.magAttack || Math.floor((attacker.attack || 0) * 0.5);
-    defStat = defender.magDefense || Math.floor((defender.defense || 0) * 0.4);
+    atkStat = (attacker.magAttack ?? 0) || Math.floor((attacker.attack || 0) * 0.5);
+    defStat = (defender.magDefense ?? 0) || Math.floor((defender.defense || 0) * 0.4);
   } else {
-    atkStat = attacker.physAttack || attacker.attack || 0;
-    defStat = defender.physDefense || Math.floor((defender.defense || 0) * 0.7);
+    atkStat = (attacker.physAttack ?? 0) || attacker.attack || 0;
+    defStat = (defender.physDefense ?? 0) || Math.floor((defender.defense || 0) * 0.7);
   }
 
   let base = atkStat;
@@ -354,6 +392,23 @@ export function calcDamage(attacker, defender, skill = null, mapData = null) {
   const def = defStat + terrainDef;
   const variance = Math.floor(Math.random() * 5) - 2;
   let dmg = Math.max(1, base - def + variance);
+
+  // 속성 상성 적용
+  let elementMult = 1.0;
+  let elementLabel = '';
+  if (attacker.element && defender.element && attacker.element !== defender.element) {
+    const ELEMENT_TABLE = {
+      fire:    { fire:1.0, water:0.5, earth:1.5, wind:1.5, neutral:1.0 },
+      water:   { fire:2.0, water:1.0, earth:1.5, wind:0.5, neutral:1.0 },
+      earth:   { fire:0.5, water:0.5, earth:1.0, wind:2.0, neutral:1.0 },
+      wind:    { fire:1.5, water:2.0, earth:0.5, wind:1.0, neutral:1.0 },
+      neutral: { fire:1.0, water:1.0, earth:1.0, wind:1.0, neutral:1.0 },
+    };
+    elementMult = ELEMENT_TABLE[attacker.element]?.[defender.element] ?? 1.0;
+    if (elementMult > 1.0) elementLabel = '효과적!';
+    else if (elementMult < 1.0) elementLabel = '비효과적...';
+    dmg = Math.max(1, Math.floor(dmg * elementMult));
+  }
 
   // 높이 보정
   let heightInfo = { mult: 1.0, label: '' };
@@ -381,7 +436,7 @@ export function calcDamage(attacker, defender, skill = null, mapData = null) {
     isCrit = false;
   }
 
-  return { damage: dmg, heightInfo, evaded, terrainDef, isCrit, isMagic };
+  return { damage: dmg, heightInfo, evaded, terrainDef, isCrit, isMagic, elementMult, elementLabel };
 }
 
 // 회복량 계산
@@ -462,7 +517,7 @@ function selectSkill(unit, allies, enemies, mapData) {
 
     if (skill.type === 'heal') {
       // 아군이 위험할 때 힐
-      const woundedAlly = allies.find(a => a.hp / a.maxHp < 0.4);
+      const woundedAlly = allies.find(a => a.maxHp > 0 && a.hp / a.maxHp < 0.4);
       if (woundedAlly) priority = 80 + (1 - woundedAlly.hp / woundedAlly.maxHp) * 20;
       // 자신이 위험할 때 자힐
       if (hpRatio < 0.35) priority = 90;

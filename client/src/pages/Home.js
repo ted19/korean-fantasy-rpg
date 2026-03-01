@@ -4,11 +4,13 @@ import TopNav from './TopNav';
 import CharacterHome from './CharacterHome';
 import VillageArea from './VillageArea';
 import DungeonArea from './DungeonArea';
+import StageArea from './StageArea';
 import MonsterBestiary from './MonsterBestiary';
 import BattleLog from './BattleLog';
 import SrpgBattle from '../srpg/SrpgBattle';
+import StageBattle from '../srpg/StageBattle';
 
-function Home({ user, character, onLogout, onCharacterDeleted }) {
+function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSelect }) {
   const [currentLocation, setCurrentLocation] = useState('home');
   const [logs, setLogs] = useState([{ text: `${character.name}님이 접속했습니다.`, type: 'system' }]);
   const [charState, setCharState] = useState({
@@ -32,20 +34,36 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
   const [learnedSkills, setLearnedSkills] = useState([]);
   const [mySummons, setMySummons] = useState([]);
   const [activeSummonIds, setActiveSummonIds] = useState([]);
+  const [myMercenaries, setMyMercenaries] = useState([]);
   const [srpgBattle, setSrpgBattle] = useState(false);
   const [battleLocation, setBattleLocation] = useState(null);
   const [battleStage, setBattleStage] = useState(null);
   const [returnDungeonKey, setReturnDungeonKey] = useState(null);
+  const [returnStageGroupKey, setReturnStageGroupKey] = useState(null);
+  const [battleStageGroup, setBattleStageGroup] = useState(null);
+  const [battleStageMonsters, setBattleStageMonsters] = useState(null);
 
   const loadMySummons = async () => {
     try {
       const res = await api.get('/summon/my');
       setMySummons(res.data.summons);
-      setActiveSummonIds(prev => prev.filter(id => res.data.summons.some(s => s.id === id)));
+      setActiveSummonIds(prev => {
+        if (prev.length === 0 && res.data.summons.length > 0) {
+          return res.data.summons.map(s => s.id);
+        }
+        return prev.filter(id => res.data.summons.some(s => s.id === id));
+      });
     } catch {}
   };
 
-  useEffect(() => { loadMySummons(); }, []);
+  const loadMyMercenaries = async () => {
+    try {
+      const res = await api.get('/mercenary/my');
+      setMyMercenaries(res.data.mercenaries);
+    } catch {}
+  };
+
+  useEffect(() => { loadMySummons(); loadMyMercenaries(); }, []);
 
   useEffect(() => {
     api.get('/skill/list').then(res => {
@@ -81,6 +99,25 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
     setBattleLocation(dungeonKey);
     setBattleStage(stage);
     setReturnDungeonKey(dungeonKey);
+    setBattleStageGroup(null);
+    setBattleStageMonsters(null);
+    setSrpgBattle(true);
+    setFighting(true);
+  };
+
+  const handleStartStageBattle = (groupKey, stage, monsters) => {
+    if (fighting || srpgBattle) return;
+    if (charState.currentHp <= 0) {
+      addLog('HP가 0입니다! 마을에서 휴식하세요.', 'damage');
+      return;
+    }
+    const dungeonKey = stage.dungeonKey || 'forest';
+    setBattleLocation(dungeonKey);
+    setBattleStage(stage);
+    setBattleStageGroup(groupKey);
+    setBattleStageMonsters(monsters);
+    setReturnStageGroupKey(groupKey);
+    setReturnDungeonKey(null);
     setSrpgBattle(true);
     setFighting(true);
   };
@@ -92,7 +129,15 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
     // 승리시 스테이지 클리어를 먼저 저장 (UI 전환 전에)
     if (result === 'victory') {
       addLog(`SRPG 전투 승리! EXP +${expGained}, Gold +${goldGained}`, 'heal');
-      if (stage && dungeonKey) {
+      if (stage && battleStageGroup) {
+        // 히스토리 스테이지 클리어
+        try {
+          await api.post('/stage/clear', {
+            groupKey: battleStageGroup,
+            stageNumber: stage.stageNumber,
+          });
+        } catch {}
+      } else if (stage && dungeonKey) {
         try {
           await api.post('/dungeon/clear-stage', {
             dungeonKey,
@@ -102,11 +147,13 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
       }
     }
 
-    // 전투 UI 해제 (DungeonArea 리마운트 → 최신 데이터 로드)
+    // 전투 UI 해제 (리마운트 → 최신 데이터 로드)
     setSrpgBattle(false);
     setFighting(false);
     setBattleLocation(null);
     setBattleStage(null);
+    setBattleStageGroup(null);
+    setBattleStageMonsters(null);
 
     try {
       const res = await api.get('/characters/me');
@@ -131,19 +178,43 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
     } catch {}
 
     await loadMySummons();
+    await loadMyMercenaries();
 
     if (result === 'retreat') {
       addLog('전투에서 후퇴했습니다.', 'system');
       setReturnDungeonKey(null);
+      setReturnStageGroupKey(null);
       setCurrentLocation('village');
     } else if (result !== 'victory') {
       addLog('SRPG 전투 패배... 마을에서 휴식하세요.', 'damage');
       setReturnDungeonKey(null);
+      setReturnStageGroupKey(null);
       setCurrentLocation('village');
     }
   };
 
-  // SRPG 전투 모드
+  // 스테이지 카드 전투 모드
+  if (srpgBattle && battleStageGroup && battleStage) {
+    const activeSummonData = mySummons.filter(s => activeSummonIds.includes(s.id));
+    return (
+      <div className="game-layout-top">
+        <StageBattle
+          stage={battleStage}
+          character={character}
+          charState={charState}
+          learnedSkills={learnedSkills}
+          activeSummons={activeSummonData}
+          activeMercenaries={myMercenaries}
+          monsters={battleStageMonsters}
+          groupKey={battleStageGroup}
+          onBattleEnd={handleSrpgBattleEnd}
+          onLog={addLog}
+        />
+      </div>
+    );
+  }
+
+  // SRPG 전투 모드 (던전)
   if (srpgBattle && battleLocation) {
     const activeSummonData = mySummons.filter(s => activeSummonIds.includes(s.id));
     return (
@@ -155,6 +226,7 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
           charState={charState}
           learnedSkills={learnedSkills}
           activeSummons={activeSummonData}
+          activeMercenaries={myMercenaries}
           onBattleEnd={handleSrpgBattleEnd}
           onLog={addLog}
         />
@@ -174,6 +246,8 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
             onSkillsUpdate={setLearnedSkills}
             onCharacterDeleted={onCharacterDeleted}
             onSummonsChanged={loadMySummons}
+            onMercenariesChanged={loadMyMercenaries}
+            myMercenaries={myMercenaries}
           />
         );
       case 'village':
@@ -184,6 +258,19 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
             onCharStateUpdate={handleCharStateUpdate}
             onLog={addLog}
             onSummonsChanged={loadMySummons}
+            onMercenariesChanged={loadMyMercenaries}
+          />
+        );
+      case 'stage':
+        return (
+          <StageArea
+            charState={charState}
+            mySummons={mySummons}
+            activeSummonIds={activeSummonIds}
+            onToggleSummon={toggleSummon}
+            onStartStageBattle={handleStartStageBattle}
+            returnGroupKey={returnStageGroupKey}
+            onReturnHandled={() => setReturnStageGroupKey(null)}
           />
         );
       case 'dungeon':
@@ -213,6 +300,7 @@ function Home({ user, character, onLogout, onCharacterDeleted }) {
         currentLocation={currentLocation}
         onLocationChange={handleLocationChange}
         onLogout={onLogout}
+        onGoToCharacterSelect={onGoToCharacterSelect}
       />
 
       <main className="game-main-top">

@@ -35,7 +35,7 @@ router.get('/encyclopedia', auth, async (req, res) => {
     const { category_id, tier, search } = req.query;
     let sql = `SELECT m.id, m.name, m.icon, m.hp, m.attack, m.defense, m.move_range,
                m.exp_reward, m.gold_reward, m.tier, m.description, m.category_id,
-               m.ai_type, m.mp,
+               m.ai_type, m.mp, m.element,
                mc.name as category_name, mc.icon as category_icon,
                d.name as dungeon_name, d.key_name as dungeon_key
                FROM monsters m
@@ -118,9 +118,55 @@ router.get('/:id', auth, async (req, res) => {
       [req.params.id]
     );
 
-    res.json({ monster: m, skills });
+    // 드랍 아이템 로드
+    const [drops] = await pool.query(
+      `SELECT md.drop_rate, md.min_quantity, md.max_quantity,
+              mat.name, mat.icon, mat.grade, mat.description
+       FROM monster_drops md
+       JOIN materials mat ON md.material_id = mat.id
+       WHERE md.monster_id = ?
+       ORDER BY md.drop_rate DESC`,
+      [req.params.id]
+    );
+
+    res.json({ monster: m, skills, drops });
   } catch (err) {
     console.error('Monster detail error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 장비 도감 - 모든 장비 아이템 목록
+router.get('/equipment-encyclopedia', auth, async (req, res) => {
+  try {
+    const { type, grade, search } = req.query;
+    let sql = `SELECT id, name, type, slot, weapon_hand, description, price, sell_price,
+               effect_hp, effect_mp, effect_attack, effect_defense,
+               effect_phys_attack, effect_phys_defense, effect_mag_attack, effect_mag_defense,
+               effect_crit_rate, effect_evasion, required_level, class_restriction,
+               grade, max_enhance
+               FROM items WHERE type != 'potion'`;
+    const params = [];
+
+    if (type) {
+      sql += ' AND type = ?';
+      params.push(type);
+    }
+    if (grade) {
+      sql += ' AND grade = ?';
+      params.push(grade);
+    }
+    if (search) {
+      sql += ' AND name LIKE ?';
+      params.push(`%${search}%`);
+    }
+
+    sql += ' ORDER BY type, grade DESC, required_level, name';
+
+    const [items] = await pool.query(sql, params);
+    res.json({ items });
+  } catch (err) {
+    console.error('Equipment encyclopedia error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });

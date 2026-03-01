@@ -10,6 +10,14 @@ const CLASS_IMAGES = {
   '승려': '/characters/monk_full.png',
 };
 
+const ELEMENT_INFO = {
+  fire:    { name: '불', icon: '🔥', color: '#ff6b35' },
+  water:   { name: '물', icon: '💧', color: '#4da6ff' },
+  earth:   { name: '땅', icon: '🪨', color: '#8bc34a' },
+  wind:    { name: '바람', icon: '🌀', color: '#b388ff' },
+  neutral: { name: '중립', icon: '⚪', color: '#9ca3af' },
+};
+
 function CharacterDetail({ character, charState, onCharStateUpdate, onLog, onSkillsUpdate, onClose, onCharacterDeleted }) {
   const [activeTab, setActiveTab] = useState('equipment');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -45,7 +53,14 @@ function CharacterDetail({ character, charState, onCharStateUpdate, onLog, onSki
           </div>
           <div>
             <h5 className="game-title mb-1" style={{ fontSize: '1.2rem' }}>{character.name}</h5>
-            <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>{character.class_type} · Lv.{charState.level}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {character.class_type} · Lv.{charState.level}
+              {character.element && ELEMENT_INFO[character.element] && (
+                <span style={{ color: ELEMENT_INFO[character.element].color, fontWeight: 600 }}>
+                  {ELEMENT_INFO[character.element].icon} {ELEMENT_INFO[character.element].name}
+                </span>
+              )}
+            </div>
             <div className="d-flex gap-1 flex-wrap mt-1">
               <Badge bg="dark" style={{ color: 'var(--green)', background: 'rgba(34, 197, 94, 0.1)' }}>HP {charState.currentHp}/{charState.maxHp}</Badge>
               <Badge bg="dark" style={{ color: 'var(--blue)', background: 'rgba(59, 130, 246, 0.1)' }}>MP {charState.currentMp}/{charState.maxMp}</Badge>

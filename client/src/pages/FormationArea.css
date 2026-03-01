@@ -1,0 +1,358 @@
+.formation-area {
+  display: flex;
+  gap: 16px;
+  height: 100%;
+}
+
+/* 왼쪽: 유닛 카드 목록 */
+.formation-units {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.formation-units-header {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 600;
+}
+
+.formation-unit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
+}
+
+.formation-unit-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.formation-unit-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-subtle);
+}
+
+.formation-unit-card.selected {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.formation-unit-card.placed {
+  opacity: 0.5;
+}
+
+.formation-unit-card.is-player {
+  border-left: 3px solid var(--gold);
+}
+
+.formation-unit-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-dark);
+  flex-shrink: 0;
+}
+
+.formation-unit-icon-text {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.formation-unit-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.formation-unit-name {
+  font-weight: 600;
+  color: var(--text-bright);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.formation-unit-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.formation-unit-range {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.formation-unit-range.melee {
+  color: var(--orange);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.formation-unit-range.ranged {
+  color: var(--blue);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.formation-unit-range.magic {
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.1);
+}
+
+/* 오른쪽: 진영 설정 */
+.formation-right {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 진영 슬롯 탭 */
+.formation-slots {
+  display: flex;
+  gap: 4px;
+}
+
+.formation-slot-tab {
+  flex: 1;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-bottom: 2px solid transparent;
+}
+
+.formation-slot-tab:hover {
+  color: var(--text-normal);
+  background: var(--bg-card-hover);
+}
+
+.formation-slot-tab.active {
+  color: var(--accent);
+  background: var(--bg-panel);
+  border-color: var(--border-subtle);
+  border-bottom-color: var(--accent);
+}
+
+/* 3x3 그리드 */
+.formation-grid-wrapper {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-dark);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.formation-grid-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.formation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.formation-grid-row-label {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 280px;
+  margin-top: 6px;
+}
+
+.formation-grid-row-label span {
+  font-size: 9px;
+  color: var(--text-dark);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.formation-cell {
+  aspect-ratio: 1;
+  background: var(--bg-card);
+  border: 2px dashed var(--border-dark);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+  min-height: 75px;
+}
+
+.formation-cell:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-card-hover);
+}
+
+.formation-cell.has-unit {
+  border-style: solid;
+  border-color: var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.formation-cell.has-unit.is-player-cell {
+  border-color: var(--gold-dim);
+  background: rgba(212, 168, 67, 0.05);
+}
+
+.formation-cell.drop-target {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.08);
+  border-style: solid;
+}
+
+.formation-cell-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 2px;
+}
+
+.formation-cell-icon-text {
+  font-size: 22px;
+  margin-bottom: 2px;
+}
+
+.formation-cell-name {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  font-weight: 600;
+}
+
+.formation-cell-empty {
+  font-size: 20px;
+  color: var(--text-dark);
+}
+
+.formation-cell-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  background: rgba(239, 68, 68, 0.8);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  display: none;
+  padding: 0;
+}
+
+.formation-cell:hover .formation-cell-remove {
+  display: block;
+}
+
+/* 저장 버튼 */
+.formation-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.formation-save-btn {
+  padding: 8px 24px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.formation-save-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
+
+.formation-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.formation-reset-btn {
+  padding: 8px 16px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.formation-reset-btn:hover {
+  color: var(--text-normal);
+  border-color: var(--border-subtle);
+}
+
+.formation-msg {
+  text-align: center;
+  font-size: 12px;
+  color: var(--green);
+  min-height: 18px;
+}
+
+.formation-msg.error {
+  color: var(--red);
+}
