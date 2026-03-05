@@ -47,33 +47,104 @@ const TERRAIN_EFFECTS = {
   dark:   { moveCost: 1, defBonus: 0,  evasion: 5,   label: '어둠 (회피+5%)' },
 };
 
+// tileKey 기반 지형 효과 (타워맵 생성기 호환)
+const TILE_KEY_TERRAIN = {
+  floor:   'grass',
+  wall:    'wall',    // 이동 불가
+  water:   'water',
+  danger:  'water',
+  special: 'dark',
+  accent1: 'grass',
+  accent2: 'dirt',
+};
+
+// tileKey 기반 턴 시작 효과 (타워맵 장애물 시스템)
+const TILE_TURN_EFFECTS = {
+  water:   { type: 'buff', stat: 'magAttack', value: 3, label: '물 속성 강화', icon: '💧' },
+  danger:  { type: 'damage', percent: 8, label: '위험 지형 피해', icon: '🔥' },
+  special: { type: 'heal', percent: 10, label: '룬의 축복', icon: '✦' },
+  accent2: { type: 'buff', stat: 'defense', value: 3, label: '땅 속성 강화', icon: '🪨' },
+};
+
+/**
+ * tileKey 기반 턴 시작 지형 효과 반환
+ * @param {string} tileKey - 타일키 (floor, wall, water, danger, special, accent1, accent2)
+ * @returns {object|null} 효과 객체 또는 null
+ */
+export function getTileTurnEffect(tileKey) {
+  return TILE_TURN_EFFECTS[tileKey] || null;
+}
+
 export function getTerrainEffect(tileType) {
-  return TERRAIN_EFFECTS[tileType] || TERRAIN_EFFECTS.grass;
+  // 직접 매칭
+  if (TERRAIN_EFFECTS[tileType]) return TERRAIN_EFFECTS[tileType];
+  // tileKey 직접 매칭
+  if (TILE_KEY_TERRAIN[tileType]) {
+    const mapped = TILE_KEY_TERRAIN[tileType];
+    if (mapped === 'wall') return { moveCost: 99, defBonus: 4, evasion: 0, label: '장애물 (이동 불가)' };
+    if (TERRAIN_EFFECTS[mapped]) return TERRAIN_EFFECTS[mapped];
+  }
+  // tileKey 매칭 (타워맵 테마 타일: cave_floor, goblin_grass 등)
+  if (tileType && tileType.includes('_')) {
+    const suffix = tileType.split('_').pop();
+    // wall 키워드: 벽/절벽/나무/뼈/기둥 → 이동불가
+    if (['wall', 'cliff', 'tree', 'bone', 'pillar', 'rock'].some(k => tileType.includes(k))) {
+      return { moveCost: 99, defBonus: 4, evasion: 0, label: '장애물' };
+    }
+    // water/lava/abyss/deep/void → 위험 지형
+    if (['water', 'lava', 'abyss', 'deep', 'void', 'mud'].some(k => tileType.includes(k))) {
+      return TERRAIN_EFFECTS.water;
+    }
+    // 특수: crystal, altar, treasure, camp, peak, throne, nest → 어둠(회피)
+    if (['crystal', 'altar', 'treasure', 'camp', 'peak', 'throne', 'nest', 'portal', 'special'].some(k => tileType.includes(k))) {
+      return TERRAIN_EFFECTS.dark;
+    }
+    // snow, ice → 돌(방어)
+    if (['snow', 'ice'].some(k => tileType.includes(k))) {
+      return TERRAIN_EFFECTS.stone;
+    }
+    // fire, danger → 위험
+    if (['fire', 'danger', 'poison', 'blood', 'shadow'].some(k => tileType.includes(k))) {
+      return { moveCost: 2, defBonus: -1, evasion: 0, label: '위험 지형' };
+    }
+  }
+  return TERRAIN_EFFECTS.grass;
 }
 
 // ========== 유닛 생성 ==========
-export function createPlayerUnit(char, skills, spawnPos, equippedWeapon) {
+export function createPlayerUnit(char, skills, spawnPos, equippedWeapon, passiveBonuses) {
   const weaponType = getWeaponType(equippedWeapon?.name);
+  // 패시브 보너스 적용
+  const pb = passiveBonuses || {};
+  const applyBonus = (base, stat) => {
+    const b = pb[stat];
+    if (!b) return base;
+    let val = base + (b.flat || 0);
+    if (b.percent) val = Math.floor(val * (1 + b.percent / 100));
+    return val;
+  };
+  const maxHp = applyBonus(char.hp, 'hp');
+  const maxMp = applyBonus(char.mp, 'mp');
   return {
     id: 'player',
     name: char.name,
     team: 'player',
     classType: char.class_type,
     level: char.level,
-    hp: char.current_hp ?? char.hp,
-    maxHp: char.hp,
-    mp: char.current_mp ?? char.mp,
-    maxMp: char.mp,
-    attack: char.attack,
-    defense: char.defense,
-    physAttack: char.phys_attack || 0,
-    physDefense: char.phys_defense || 0,
-    magAttack: char.mag_attack || 0,
-    magDefense: char.mag_defense || 0,
-    critRate: char.crit_rate || 5,
-    evasion: char.evasion || 3,
+    hp: Math.min(char.current_hp ?? char.hp, maxHp),
+    maxHp,
+    mp: Math.min(char.current_mp ?? char.mp, maxMp),
+    maxMp,
+    attack: applyBonus(char.attack, 'attack'),
+    defense: applyBonus(char.defense, 'defense'),
+    physAttack: applyBonus(char.phys_attack || 0, 'phys_attack'),
+    physDefense: applyBonus(char.phys_defense || 0, 'phys_defense'),
+    magAttack: applyBonus(char.mag_attack || 0, 'mag_attack'),
+    magDefense: applyBonus(char.mag_defense || 0, 'mag_defense'),
+    critRate: applyBonus(char.crit_rate || 5, 'crit_rate'),
+    evasion: applyBonus(char.evasion || 3, 'evasion'),
     move: 4,
-    skills: skills || [],
+    skills: (skills || []).map(s => ({ ...s, iconUrl: `/skills/${s.id}_icon.png` })),
     x: spawnPos.x,
     z: spawnPos.z,
     acted: false,
@@ -108,7 +179,7 @@ export function createSummonUnit(summon, spawnPos) {
     critRate: summon.crit_rate || summon.critRate || 5,
     evasion: summon.evasion || 3,
     move: 3,
-    skills: skills.map(s => ({ ...s })),
+    skills: skills.map(s => ({ ...s, iconUrl: `/summon_skills/${s.id}_icon.png` })),
     x: spawnPos.x,
     z: spawnPos.z,
     acted: false,
@@ -123,6 +194,7 @@ export function createSummonUnit(summon, spawnPos) {
 
 export function createMercenaryUnit(merc, spawnPos) {
   const weaponType = merc.weapon_type || merc.weaponType || 'default';
+  const fatigued = merc.fatigue !== undefined && merc.fatigue <= 0;
   return {
     id: `merc_${merc.id}`,
     mercId: merc.id,
@@ -130,9 +202,9 @@ export function createMercenaryUnit(merc, spawnPos) {
     team: 'player',
     classType: merc.class_type || 'mercenary',
     level: merc.level,
-    hp: merc.hp,
+    hp: fatigued ? 0 : merc.hp,
     maxHp: merc.hp,
-    mp: merc.mp || 0,
+    mp: fatigued ? 0 : (merc.mp || 0),
     maxMp: merc.mp || 0,
     attack: merc.phys_attack || 0,
     defense: merc.phys_defense || 0,
@@ -143,7 +215,7 @@ export function createMercenaryUnit(merc, spawnPos) {
     critRate: merc.crit_rate || 5,
     evasion: merc.evasion || 3,
     move: 3,
-    skills: [],
+    skills: (merc.learned_skills || merc.skills || []).map(s => ({ ...s, currentCooldown: 0, iconUrl: `/merc_skills/${s.id}_icon.png` })),
     x: spawnPos.x,
     z: spawnPos.z,
     acted: false,
@@ -159,6 +231,7 @@ export function createMercenaryUnit(merc, spawnPos) {
 export function createMonsterUnit(monster, spawnPos, index) {
   return {
     id: `monster_${index}`,
+    monsterId: monster.monsterId || null,
     name: monster.name,
     team: 'enemy',
     level: monster.level || 1,
@@ -189,6 +262,7 @@ export function createMonsterUnit(monster, spawnPos, index) {
     aiType: monster.aiType || 'aggressive',
     skillCooldowns: {},
     element: monster.element || 'neutral',
+    eliteTier: monster.eliteTier || null,
   };
 }
 
@@ -238,8 +312,8 @@ export function getMovementRange(unit, mapData, allUnits) {
       const heightDiff = Math.abs(nextTile.height - currentTile.height);
       if (heightDiff > maxHeightDiff) continue;
 
-      // 지형별 이동 비용
-      const terrain = getTerrainEffect(nextTile.type);
+      // 지형별 이동 비용 (tileKey 우선, type fallback)
+      const terrain = getTerrainEffect(nextTile.tileKey || nextTile.type);
       const moveCost = terrain.moveCost;
       const newCost = cost + moveCost;
 
@@ -357,9 +431,18 @@ function getHeightBonus(attackerTile, defenderTile) {
 
 // ========== 데미지 계산 (높이 + 지형 효과 포함) ==========
 export function calcDamage(attacker, defender, skill = null, mapData = null) {
-  // 스킬의 물리/마법 판정: 스킬에 명시 없으면 높은 쪽 사용
+  // 스킬의 물리/마법 판정: damage_type 우선, 없으면 공격자 스탯 비교
   const isSkill = skill && skill.type === 'attack';
-  const isMagic = isSkill && (skill.damage_type === 'magic' || (skill.damage_multiplier >= 1.5 && (attacker.magAttack || 0) > (attacker.physAttack || 0)));
+  let isMagic = false;
+  if (isSkill) {
+    if (skill.damage_type === 'magical' || skill.damage_type === 'magic') {
+      isMagic = true;
+    } else if (skill.damage_type === 'physical') {
+      isMagic = false;
+    } else {
+      isMagic = (attacker.magAttack || 0) > (attacker.physAttack || 0);
+    }
+  }
 
   // 공격력 계산 (물리 또는 마법)
   let atkStat;
@@ -391,7 +474,7 @@ export function calcDamage(attacker, defender, skill = null, mapData = null) {
 
   const def = defStat + terrainDef;
   const variance = Math.floor(Math.random() * 5) - 2;
-  let dmg = Math.max(1, base - def + variance);
+  let dmg = Math.max(1, Math.floor(base * (100 / (100 + def * 1.2))) + variance);
 
   // 속성 상성 적용
   let elementMult = 1.0;
@@ -424,7 +507,8 @@ export function calcDamage(attacker, defender, skill = null, mapData = null) {
   const critChance = attacker.critRate || 5;
   if (Math.random() * 100 < critChance) {
     isCrit = true;
-    dmg = Math.floor(dmg * 1.5);
+    const critMultiplier = 1.4 + Math.min(critChance, 30) * 0.01;
+    dmg = Math.floor(dmg * critMultiplier);
   }
 
   // 회피 판정 (유닛 회피율 + 지형 회피)
@@ -488,8 +572,10 @@ function positionScore(pos, mapData, target, atkRange) {
   score += terrain.defBonus;
   score += terrain.evasion * 0.5;
 
-  // 물 타일 페널티
-  if (tile.type === 'water') score -= 3;
+  // 물/위험 타일 페널티
+  if (tile.type === 'water' || (terrain.moveCost >= 3)) score -= 3;
+  // 벽 타일 절대 비선호
+  if (terrain.moveCost >= 99) score -= 100;
 
   // 공격 사거리에 적이 있으면 가산
   const dist = manhattan(pos, target);
@@ -555,6 +641,13 @@ function selectSkill(unit, allies, enemies, mapData) {
 }
 
 // ========== AI 타입별 행동 결정 ==========
+// 근거리 유닛이 실제 공격 가능한 적 목록 (이동 후 사거리 내 도달 가능한 적만)
+function getReachableEnemies(candidates, enemies, atkRange) {
+  return enemies.filter(enemy =>
+    candidates.some(pos => manhattan(pos, enemy) <= atkRange)
+  );
+}
+
 export function aiDecide(unit, mapData, allUnits) {
   const enemies = allUnits.filter(u => u.team !== unit.team && u.hp > 0);
   const allies = allUnits.filter(u => u.team === unit.team && u.hp > 0 && u.id !== unit.id);
@@ -571,6 +664,11 @@ export function aiDecide(unit, mapData, allUnits) {
   const sortedByDist = [...enemies].sort((a, b) => manhattan(a, unit) - manhattan(b, unit));
   const sortedByThreat = [...enemies].sort((a, b) => threatScore(b, unit) - threatScore(a, unit));
 
+  // 근거리 유닛(range 1): 실제 도달 가능한 적만 우선 타겟
+  const reachable = atkRange <= 1 ? getReachableEnemies(candidates, enemies, atkRange) : enemies;
+  const reachByDist = [...reachable].sort((a, b) => manhattan(a, unit) - manhattan(b, unit));
+  const reachByThreat = [...reachable].sort((a, b) => threatScore(b, unit) - threatScore(a, unit));
+
   // 스킬 선택
   const chosenSkill = selectSkill(unit, allies, enemies, mapData);
   const effectiveRange = chosenSkill && chosenSkill.range ? Math.max(chosenSkill.range, atkRange) : atkRange;
@@ -582,7 +680,7 @@ export function aiDecide(unit, mapData, allUnits) {
   if (aiType === 'coward') {
     // 겁쟁이: HP 50% 이상이면 가까운 적 공격, 이하면 도망
     if (hpRatio > 0.5) {
-      target = sortedByDist[0];
+      target = reachByDist[0] || sortedByDist[0];
       moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
     } else {
       // 적에게서 가장 먼 위치로 이동
@@ -599,8 +697,8 @@ export function aiDecide(unit, mapData, allUnits) {
     }
   } else if (aiType === 'defensive') {
     // 방어형: 자리 고수, 접근한 적만 반격, 방어 버프 우선
-    const nearbyEnemy = sortedByDist.find(e => manhattan(e, unit) <= effectiveRange + unit.move);
-    target = nearbyEnemy || sortedByDist[0];
+    const nearbyEnemy = reachByDist.find(e => manhattan(e, unit) <= effectiveRange + unit.move);
+    target = nearbyEnemy || reachByDist[0] || sortedByDist[0];
 
     if (nearbyEnemy && manhattan(nearbyEnemy, unit) <= effectiveRange) {
       // 이미 사거리 안 → 이동 안 함
@@ -615,7 +713,7 @@ export function aiDecide(unit, mapData, allUnits) {
     }
   } else if (aiType === 'ranged') {
     // 원거리: 최대 사거리 유지하며 공격, 적 접근시 후퇴
-    target = sortedByThreat[0];
+    target = reachByThreat[0] || sortedByThreat[0];
     const distToTarget = manhattan(unit, target);
 
     if (distToTarget <= 1 && unit.move >= 2) {
@@ -648,14 +746,14 @@ export function aiDecide(unit, mapData, allUnits) {
       return { target: unit, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'buff' };
     }
     // 디버프/공격 폴백
-    target = sortedByDist[0];
+    target = reachByDist[0] || sortedByDist[0];
     moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
   } else if (aiType === 'boss') {
     // 보스: 스킬 적극 활용 + 페이즈 전환
     // Phase 1 (HP>50%): 공격적
     // Phase 2 (HP<=50%): 버프 + 힐 + 강력한 스킬 사용
     if (hpRatio > 0.5) {
-      target = sortedByThreat[0];
+      target = reachByThreat[0] || sortedByThreat[0];
       moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
     } else {
       // 힐이 있으면 사용
@@ -667,12 +765,12 @@ export function aiDecide(unit, mapData, allUnits) {
         return { target: unit, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'buff' };
       }
       // 광역 스킬 우선
-      target = sortedByThreat[0];
+      target = reachByThreat[0] || sortedByThreat[0];
       moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
     }
   } else {
-    // aggressive (기본): 가장 위협적인 적에게 돌진
-    target = sortedByThreat[0];
+    // aggressive (기본): 도달 가능한 적 중 가장 위협적인 적에게 돌진
+    target = reachByThreat[0] || sortedByThreat[0];
     moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
   }
 
@@ -737,7 +835,8 @@ function findDefensivePosition(candidates, target, atkRange, mapData) {
     const terrain = getTerrainEffect(tile.type);
     score += terrain.defBonus * 2;
     if (dist <= atkRange) score += 3;
-    if (tile.type === 'stone') score += 2;
+    if (tile.type === 'stone' || terrain.defBonus >= 2) score += 2;
+    if (terrain.moveCost >= 99) score -= 100;
 
     if (score > bestScore) {
       bestScore = score;
@@ -841,6 +940,63 @@ export function checkBattleEnd(units) {
   return null;
 }
 
+// ========== 정예 몬스터 시스템 ==========
+// 확률적으로 한 전투에 1마리가 강화되어 등장
+export const ELITE_TIERS = [
+  { key: 'fierce',    label: '흉폭한',   mult: 1.5, rewardMult: 1.5, color: '#f59e0b', chance: 0.25, icon: '🔥' },
+  { key: 'enraged',   label: '격노한',   mult: 2.0, rewardMult: 2.0, color: '#ef4444', chance: 0.12, icon: '💢' },
+  { key: 'champion',  label: '우두머리', mult: 2.5, rewardMult: 2.5, color: '#a855f7', chance: 0.06, icon: '👑' },
+  { key: 'nightmare', label: '악몽의',   mult: 3.0, rewardMult: 3.5, color: '#dc2626', chance: 0.02, icon: '💀' },
+];
+
+/**
+ * 정예 몬스터 등급을 랜덤으로 결정. null이면 일반 몬스터.
+ */
+export function rollEliteTier() {
+  const roll = Math.random();
+  let cumulative = 0;
+  // 높은 등급부터 체크 (nightmare → champion → enraged → fierce)
+  for (let i = ELITE_TIERS.length - 1; i >= 0; i--) {
+    cumulative += ELITE_TIERS[i].chance;
+    if (roll < cumulative) return ELITE_TIERS[i];
+  }
+  return null;
+}
+
+/**
+ * 몬스터 스탯에 정예 배율 적용
+ */
+export function applyEliteStats(monster, tier) {
+  if (!tier) return monster;
+  return {
+    ...monster,
+    hp: Math.floor((monster.hp || 50) * tier.mult),
+    maxHp: Math.floor((monster.maxHp || monster.hp || 50) * tier.mult),
+    mp: Math.floor((monster.mp || 0) * tier.mult),
+    maxMp: Math.floor((monster.maxMp || monster.mp || 0) * tier.mult),
+    attack: Math.floor((monster.attack || 5) * tier.mult),
+    defense: Math.floor((monster.defense || 0) * tier.mult),
+    phys_attack: Math.floor((monster.phys_attack || monster.physAttack || 0) * tier.mult),
+    physAttack: Math.floor((monster.phys_attack || monster.physAttack || 0) * tier.mult),
+    phys_defense: Math.floor((monster.phys_defense || monster.physDefense || 0) * tier.mult),
+    physDefense: Math.floor((monster.phys_defense || monster.physDefense || 0) * tier.mult),
+    mag_attack: Math.floor((monster.mag_attack || monster.magAttack || 0) * tier.mult),
+    magAttack: Math.floor((monster.mag_attack || monster.magAttack || 0) * tier.mult),
+    mag_defense: Math.floor((monster.mag_defense || monster.magDefense || 0) * tier.mult),
+    magDefense: Math.floor((monster.mag_defense || monster.magDefense || 0) * tier.mult),
+    crit_rate: Math.floor((monster.crit_rate || monster.critRate || 5) * tier.mult),
+    critRate: Math.floor((monster.crit_rate || monster.critRate || 5) * tier.mult),
+    evasion: Math.floor((monster.evasion || 3) * tier.mult),
+    expReward: Math.floor((monster.expReward || monster.exp_reward || monster.exp || 0) * tier.rewardMult),
+    exp_reward: Math.floor((monster.expReward || monster.exp_reward || monster.exp || 0) * tier.rewardMult),
+    exp: Math.floor((monster.exp || monster.expReward || monster.exp_reward || 0) * tier.rewardMult),
+    goldReward: Math.floor((monster.goldReward || monster.gold_reward || monster.gold || 0) * tier.rewardMult),
+    gold_reward: Math.floor((monster.goldReward || monster.gold_reward || monster.gold || 0) * tier.rewardMult),
+    gold: Math.floor((monster.gold || monster.goldReward || monster.gold_reward || 0) * tier.rewardMult),
+    eliteTier: tier,
+  };
+}
+
 // ========== 적 생성 ==========
 export function generateEnemies(monsterPool, playerLevel, stage = null) {
   if (!monsterPool || monsterPool.length === 0) return [];
@@ -864,6 +1020,10 @@ export function generateEnemies(monsterPool, playerLevel, stage = null) {
 
   const levelBonus = stage ? (stage.monsterLevelBonus || 0) : 0;
 
+  // 정예 몬스터 등급 결정 (한 전투에 최대 1마리)
+  const eliteTier = rollEliteTier();
+  const eliteIdx = eliteTier ? Math.floor(Math.random() * count) : -1;
+
   const enemies = [];
   for (let i = 0; i < count; i++) {
     const template = pickWeighted();
@@ -876,8 +1036,10 @@ export function generateEnemies(monsterPool, playerLevel, stage = null) {
     const atkScale = 1 + levelBonus * 0.08 + (isBossMonster ? 0.3 : 0);
     const defScale = 1 + levelBonus * 0.05 + (isBossMonster ? 0.2 : 0);
 
-    enemies.push({
-      name: isBossMonster ? `${baseMonster.name} (보스)` : baseMonster.name,
+    const enemy = {
+      monsterId: baseMonster.id || null,
+      name: baseMonster.name,
+      isBoss: isBossMonster,
       hp: Math.floor((baseMonster.hp || 50) * hpScale),
       mp: baseMonster.mp || 0,
       attack: Math.floor((baseMonster.attack || 5) * atkScale),
@@ -888,7 +1050,14 @@ export function generateEnemies(monsterPool, playerLevel, stage = null) {
       icon: baseMonster.icon || '👹',
       aiType: isBossMonster ? 'boss' : (baseMonster.aiType || 'aggressive'),
       skills: baseMonster.skills || [],
-    });
+    };
+
+    // 정예 적용 (보스가 아닌 몬스터에만)
+    if (i === eliteIdx && !isBossMonster) {
+      enemies.push(applyEliteStats(enemy, eliteTier));
+    } else {
+      enemies.push(enemy);
+    }
   }
   return enemies;
 }

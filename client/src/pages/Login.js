@@ -56,35 +56,17 @@ function Login({ onLogin }) {
         ))}
       </div>
 
-      {/* 메인 콘텐츠 */}
-      <div className="auth-layout">
-        {/* 좌측: 캐릭터 일러스트 + 게임 타이틀 */}
-        <div className="auth-hero">
-          <div className="auth-hero-character">
-            <img src="/ui/login_character.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-          </div>
-          <div className="auth-hero-text">
-            <div className="auth-hero-logo">
-              <img src="/ui/auth_logo_bg.png" alt="" className="auth-hero-logo-img" onError={(e) => { e.target.style.display = 'none'; }} />
-            </div>
-            <h1 className="auth-hero-title">산해경전</h1>
+      {/* 메인 콘텐츠 - 중앙 배치 */}
+      <div className="auth-center-layout">
+        <div className="auth-center-card">
+          <div className="auth-center-header">
+            <h1 className="auth-hero-title">금오신화</h1>
             <p className="auth-hero-subtitle">한국 판타지 RPG</p>
-            <div className="auth-hero-decor">
-              <img src="/ui/auth_bottom_decor.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-            </div>
           </div>
-        </div>
 
-        {/* 우측: 로그인 폼 */}
-        <div className="auth-form-area">
-          <div className="auth-form-card">
-            <div className="auth-form-frame">
-              <img src="/ui/auth_frame.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-            </div>
-
-            <div className="auth-form-inner">
-              <h2 className="auth-form-title">로그인</h2>
-              <p className="auth-form-desc">모험을 계속하세요</p>
+          <div className="auth-form-inner">
+            <h2 className="auth-form-title">로그인</h2>
+            <p className="auth-form-desc">모험을 계속하세요</p>
 
               {error && (
                 <div className="auth-error">
@@ -155,11 +137,10 @@ function Login({ onLogin }) {
                 <span>또는</span>
               </div>
 
-              <p className="auth-switch">
-                아직 계정이 없으신가요?{' '}
-                <Link to="/register" className="auth-switch-link">새로운 모험 시작</Link>
-              </p>
-            </div>
+            <p className="auth-switch">
+              아직 계정이 없으신가요?{' '}
+              <Link to="/register" className="auth-switch-link">새로운 모험 시작</Link>
+            </p>
           </div>
         </div>
       </div>

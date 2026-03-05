@@ -24,9 +24,11 @@
 .dg-scene-bg-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  background-size: 512px auto;
+  background-repeat: repeat;
+  background-position: center top;
   opacity: 0.25;
-  filter: blur(1px);
+  filter: blur(1px) grayscale(100%);
 }
 
 .dg-scene-bg-overlay {
@@ -327,20 +329,25 @@
 }
 
 .dg-back-btn {
-  background: none;
-  border: 1px solid var(--border-dark);
-  color: var(--text-dim);
-  padding: 7px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-family: var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 22px;
   margin-bottom: 14px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.35);
 }
 .dg-back-btn:hover {
-  border-color: var(--gold);
-  color: var(--gold);
+  background: linear-gradient(135deg, #7c7ff7, #9d78fa);
+  box-shadow: 0 6px 20px rgba(99,102,241,0.45);
+  transform: translateX(-2px);
 }
 
 /* Detail Header */
@@ -510,15 +517,15 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 24px 0 32px;
+  padding: 16px 0 16px;
   overflow: visible;
 }
 
 /* Central path line */
 .dg-roadmap-path-line {
   position: absolute;
-  top: 24px;
-  bottom: 32px;
+  top: 16px;
+  bottom: 16px;
   left: 50%;
   width: 4px;
   transform: translateX(-50%);
@@ -688,6 +695,7 @@
   border-width: 3px;
   border-radius: 12px;
   z-index: 1;
+  overflow: visible;
 }
 .dg-row.boss-row.left { padding-left: calc(50% + 20px); }
 .dg-row.boss-row.right { padding-right: calc(50% + 20px); }
@@ -862,6 +870,20 @@
   white-space: nowrap;
 }
 
+.dg-boss-horns {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 8px;
+  background:
+    radial-gradient(ellipse at 15% 100%, #ef4444 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 100%, #ef4444 0%, transparent 50%);
+  filter: blur(3px);
+  opacity: 0.7;
+}
+
 /* ===== Sections ===== */
 .dg-section-title {
   font-size: 0.85rem;
@@ -974,7 +996,7 @@
 
 /* Monsters Section */
 .dg-monsters {
-  margin-top: 20px;
+  margin-top: 24px;
   border-top: 1px solid var(--border-dark);
   padding-top: 16px;
 }
@@ -1237,4 +1259,57 @@
   .dg-detail-banner { height: 100px; }
   .dg-popup { width: 95vw; max-height: 85vh; }
   .dg-popup-info-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ===== Ticket Display ===== */
+.dg-card-ticket {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+  font-weight: 600;
+}
+.dg-card-ticket.empty {
+  background: rgba(156, 163, 175, 0.15);
+  border-color: rgba(156, 163, 175, 0.3);
+  color: #9ca3af;
+}
+.dg-card-ticket.has {
+  background: rgba(74, 222, 128, 0.15);
+  border-color: rgba(74, 222, 128, 0.3);
+  color: #4ade80;
+}
+
+.dg-popup-ticket-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 8px;
+}
+.dg-popup-ticket-label {
+  font-size: 0.85rem;
+  color: #aaa;
+}
+.dg-popup-ticket-count {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.dg-popup-ticket-count.has {
+  color: #4ade80;
+}
+.dg-popup-ticket-count.empty {
+  color: #f87171;
+}
+
+.dg-popup-start-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #444 !important;
+  box-shadow: none !important;
 }

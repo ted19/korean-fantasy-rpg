@@ -18,11 +18,83 @@ function auth(req, res, next) {
   }
 }
 
+// 상점 재고 테이블 초기화 (캐릭터별)
+(async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shop_stock (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      item_id INT NOT NULL,
+      refresh_at DATETIME NOT NULL,
+      INDEX idx_char_refresh (character_id, refresh_at)
+    )
+  `).catch(() => {});
+  // character_id 컬럼이 없을 수 있으므로 추가 시도
+  await pool.query(`ALTER TABLE shop_stock ADD COLUMN character_id INT NOT NULL DEFAULT 0 AFTER id`).catch(() => {});
+  await pool.query(`ALTER TABLE shop_stock ADD INDEX idx_char_refresh (character_id, refresh_at)`).catch(() => {});
+})();
+
+const REFRESH_INTERVAL_MS = 5 * 60 * 60 * 1000; // 5시간
+const SHOP_ITEM_COUNT = 5;
+
+async function refreshShopStock(conn, characterId, classType) {
+  const now = Date.now();
+  const epoch = new Date('2025-01-01T00:00:00Z').getTime();
+  const windowStart = epoch + Math.floor((now - epoch) / REFRESH_INTERVAL_MS) * REFRESH_INTERVAL_MS;
+  const refreshAt = new Date(windowStart + REFRESH_INTERVAL_MS);
+
+  // 이미 현재 윈도우 재고가 있는지 확인 (캐릭터별)
+  const [existing] = await conn.query(
+    'SELECT id FROM shop_stock WHERE character_id = ? AND refresh_at = ? LIMIT 1',
+    [characterId, refreshAt]
+  );
+  if (existing.length > 0) return refreshAt;
+
+  // 해당 캐릭터의 기존 재고 삭제
+  await conn.query('DELETE FROM shop_stock WHERE character_id = ?', [characterId]);
+
+  // 직업에 맞는 장비 + 물약 풀에서 랜덤 5개 선택
+  // class_restriction이 NULL이거나 캐릭터 직업과 일치하는 아이템만
+  const [candidates] = await conn.query(
+    `SELECT id FROM items
+     WHERE (class_restriction IS NULL OR class_restriction = ?)
+       AND type != 'cosmetic'
+     ORDER BY RAND()
+     LIMIT ?`,
+    [classType, SHOP_ITEM_COUNT]
+  );
+
+  if (candidates.length > 0) {
+    const ts = refreshAt.toISOString().slice(0, 19).replace('T', ' ');
+    const values = candidates.map(r => `(${characterId}, ${r.id}, '${ts}')`).join(',');
+    await conn.query(`INSERT INTO shop_stock (character_id, item_id, refresh_at) VALUES ${values}`);
+  }
+
+  return refreshAt;
+}
+
 // 상점 아이템 목록
 router.get('/items', auth, async (req, res) => {
   try {
-    const [items] = await pool.query("SELECT * FROM items WHERE grade IN ('일반','고급') OR type = 'potion' ORDER BY type, required_level, price");
-    res.json({ items });
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id, class_type FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id, class_type FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.json({ items: [], refreshAt: null });
+    const char = chars[0];
+
+    const refreshAt = await refreshShopStock(pool, char.id, char.class_type);
+
+    const [items] = await pool.query(
+      `SELECT i.* FROM items i
+       JOIN shop_stock ss ON i.id = ss.item_id
+       WHERE ss.character_id = ?
+       ORDER BY i.type, i.required_level, i.price`,
+      [char.id]
+    );
+    res.json({ items, refreshAt });
   } catch (err) {
     console.error('Shop items error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
@@ -40,19 +112,64 @@ router.get('/inventory', auth, async (req, res) => {
     );
     if (chars.length === 0) return res.json({ inventory: [] });
 
+    const charId = chars[0].id;
+
+    // 장착된 item_id별 개수 카운트 (캐릭터 + 소환수 + 용병)
+    const equippedCountMap = {};
+    const addCount = (rows) => { for (const r of rows) equippedCountMap[r.item_id] = (equippedCountMap[r.item_id] || 0) + 1; };
+
+    const [charEquipped] = await pool.query('SELECT item_id FROM equipment WHERE character_id = ?', [charId]);
+    addCount(charEquipped);
+
+    const [summonEquipped] = await pool.query(
+      `SELECT se.item_id FROM summon_equipment se
+       JOIN character_summons cs ON se.summon_id = cs.id
+       WHERE cs.character_id = ? AND se.item_id IS NOT NULL`,
+      [charId]
+    );
+    addCount(summonEquipped);
+
+    const [mercEquipped] = await pool.query(
+      `SELECT me.item_id FROM mercenary_equipment me
+       JOIN character_mercenaries cm ON me.mercenary_id = cm.id
+       WHERE cm.character_id = ?`,
+      [charId]
+    );
+    addCount(mercEquipped);
+
+    const [cosmeticEquipped] = await pool.query('SELECT item_id FROM equipped_cosmetics WHERE character_id = ?', [charId]);
+    addCount(cosmeticEquipped);
+
     const [inventory] = await pool.query(
-      `SELECT i.*, it.name, it.type, it.description, it.price, it.sell_price,
+      `SELECT i.id as inv_id, i.*, it.name, it.type, it.slot, it.description, it.price, it.sell_price,
               it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense,
               it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense,
-              it.effect_crit_rate, it.effect_evasion, it.class_restriction
+              it.effect_crit_rate, it.effect_evasion, it.class_restriction,
+              IFNULL(it.grade, '일반') as grade,
+              IFNULL(i.enhance_level, 0) as enhance_level,
+              IFNULL(it.max_enhance, 0) as max_enhance,
+              it.cosmetic_effect
        FROM inventory i
        JOIN items it ON i.item_id = it.id
        WHERE i.character_id = ?
        ORDER BY it.type, it.name`,
-      [chars[0].id]
+      [charId]
     );
 
-    res.json({ inventory });
+    // 장비: 장착중인 개수만큼 제외, 물약: 수량 그대로
+    const usedCount = {};
+    const result = inventory.filter(i => {
+      if (i.type === 'potion') return i.quantity > 0;
+      const equipped = equippedCountMap[i.item_id] || 0;
+      const used = usedCount[i.item_id] || 0;
+      if (used < equipped) {
+        usedCount[i.item_id] = used + 1;
+        return false;
+      }
+      return true;
+    }).map(i => ({ ...i, available_qty: i.type === 'potion' ? i.quantity : 1 }));
+
+    res.json({ inventory: result });
   } catch (err) {
     console.error('Inventory error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
@@ -75,6 +192,13 @@ router.post('/buy', auth, async (req, res) => {
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
+    // 상점 재고에 있는 아이템인지 확인
+    const [stockCheck] = await conn.query(
+      'SELECT id FROM shop_stock WHERE character_id = ? AND item_id = ?',
+      [char.id, itemId]
+    );
+    if (stockCheck.length === 0) return res.status(400).json({ message: '상점에 해당 아이템이 없습니다.' });
+
     const [items] = await conn.query('SELECT * FROM items WHERE id = ?', [itemId]);
     if (items.length === 0) return res.status(404).json({ message: '아이템을 찾을 수 없습니다.' });
     const item = items[0];
@@ -93,22 +217,21 @@ router.post('/buy', auth, async (req, res) => {
       return res.status(400).json({ message: `골드가 부족합니다. (필요: ${totalPrice}G, 보유: ${gold}G)` });
     }
 
-    // 장비는 1개만
-    if (item.type !== 'potion') {
-      const [existing] = await conn.query(
-        'SELECT id FROM inventory WHERE character_id = ? AND item_id = ?',
-        [char.id, item.id]
-      );
-      if (existing.length > 0) {
-        return res.status(400).json({ message: '이미 보유하고 있는 장비입니다.' });
-      }
-    }
-
     await conn.beginTransaction();
 
     await conn.query('UPDATE characters SET gold = gold - ? WHERE id = ?', [totalPrice, char.id]);
 
     if (item.type === 'potion') {
+      // 물약: 수량 스택 (최대 99)
+      const [existing] = await conn.query(
+        'SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?',
+        [char.id, item.id]
+      );
+      const currentQty = existing.length > 0 ? existing[0].quantity : 0;
+      if (currentQty + quantity > 99) {
+        await conn.rollback();
+        return res.status(400).json({ message: `물약은 최대 99개까지 보유할 수 있습니다. (현재: ${currentQty}개)` });
+      }
       await conn.query(
         `INSERT INTO inventory (character_id, item_id, quantity)
          VALUES (?, ?, ?)
@@ -116,11 +239,20 @@ router.post('/buy', auth, async (req, res) => {
         [char.id, item.id, quantity, quantity]
       );
     } else {
-      await conn.query(
-        'INSERT INTO inventory (character_id, item_id, quantity, equipped) VALUES (?, ?, 1, 0)',
-        [char.id, item.id]
-      );
+      // 장비: 개별 행으로 삽입 (각각 강화 가능)
+      for (let i = 0; i < quantity; i++) {
+        await conn.query(
+          'INSERT INTO inventory (character_id, item_id, quantity) VALUES (?, ?, 1)',
+          [char.id, item.id]
+        );
+      }
     }
+
+    // 상점 재고에서 해당 아이템 제거 (구매 후 사라짐)
+    await conn.query(
+      'DELETE FROM shop_stock WHERE character_id = ? AND item_id = ? LIMIT 1',
+      [char.id, item.id]
+    );
 
     await conn.commit();
 
@@ -143,7 +275,7 @@ router.post('/buy', auth, async (req, res) => {
 router.post('/sell', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { itemId, quantity = 1 } = req.body;
+    const { itemId, invId, quantity = 1 } = req.body;
 
     const [chars] = await conn.query(
       req.selectedCharId
@@ -154,55 +286,79 @@ router.post('/sell', auth, async (req, res) => {
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
-    const [invRows] = await conn.query(
-      `SELECT i.*, it.name, it.sell_price, it.type, it.effect_attack, it.effect_defense, it.effect_hp, it.effect_mp
-       FROM inventory i JOIN items it ON i.item_id = it.id
-       WHERE i.character_id = ? AND i.item_id = ?`,
-      [char.id, itemId]
-    );
+    // invId가 있으면 특정 행, 없으면 item_id로 조회
+    const [invRows] = invId
+      ? await conn.query(
+          `SELECT i.*, it.name, it.sell_price, it.type FROM inventory i JOIN items it ON i.item_id = it.id WHERE i.id = ? AND i.character_id = ?`,
+          [invId, char.id]
+        )
+      : await conn.query(
+          `SELECT i.*, it.name, it.sell_price, it.type FROM inventory i JOIN items it ON i.item_id = it.id WHERE i.character_id = ? AND i.item_id = ?`,
+          [char.id, itemId]
+        );
     if (invRows.length === 0) return res.status(404).json({ message: '보유하지 않은 아이템입니다.' });
 
     const inv = invRows[0];
 
-    if (inv.equipped) {
+    // 장착 중 확인 (equipment 테이블)
+    const [equipCheck] = await conn.query(
+      'SELECT id FROM equipment WHERE character_id = ? AND item_id = ?',
+      [char.id, inv.item_id]
+    );
+    if (equipCheck.length > 0) {
       return res.status(400).json({ message: '장착 중인 아이템은 해제 후 판매하세요.' });
     }
 
-    // 소환수 장착 중인 아이템 판매 차단
+    // 소환수 장착 중 확인
     const [summonEquip] = await conn.query(
       `SELECT se.id FROM summon_equipment se
        JOIN character_summons cs ON se.summon_id = cs.id
        WHERE cs.character_id = ? AND se.item_id = ?`,
-      [char.id, itemId]
+      [char.id, inv.item_id]
     );
     if (summonEquip.length > 0) {
       return res.status(400).json({ message: '소환수가 장착 중인 아이템은 해제 후 판매하세요.' });
     }
 
-    const sellQty = Math.min(quantity, inv.quantity);
-    const totalGold = inv.sell_price * sellQty;
+    // 코스메틱 장착 중 확인
+    const [cosmeticEquip] = await conn.query(
+      'SELECT id FROM equipped_cosmetics WHERE character_id = ? AND item_id = ?',
+      [char.id, inv.item_id]
+    );
+    if (cosmeticEquip.length > 0) {
+      return res.status(400).json({ message: '장착 중인 코스메틱은 해제 후 판매하세요.' });
+    }
 
     await conn.beginTransaction();
 
-    if (inv.quantity <= sellQty) {
-      await conn.query('DELETE FROM inventory WHERE character_id = ? AND item_id = ?', [char.id, itemId]);
+    if (inv.type === 'potion') {
+      // 물약: 수량 감소
+      const sellQty = Math.min(quantity, inv.quantity);
+      const totalGold = inv.sell_price * sellQty;
+      if (inv.quantity <= sellQty) {
+        await conn.query('DELETE FROM inventory WHERE id = ?', [inv.id]);
+      } else {
+        await conn.query('UPDATE inventory SET quantity = quantity - ? WHERE id = ?', [sellQty, inv.id]);
+      }
+      await conn.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [totalGold, char.id]);
+      await conn.commit();
+      const [updatedChar] = await pool.query('SELECT * FROM characters WHERE id = ?', [char.id]);
+      res.json({
+        message: `${inv.name}${sellQty > 1 ? ' x' + sellQty : ''}을(를) ${totalGold}G에 판매했습니다.`,
+        gold: updatedChar[0].gold,
+      });
     } else {
-      await conn.query(
-        'UPDATE inventory SET quantity = quantity - ? WHERE character_id = ? AND item_id = ?',
-        [sellQty, char.id, itemId]
-      );
+      // 장비: 해당 행 삭제
+      const totalGold = inv.sell_price;
+      await conn.query('DELETE FROM inventory WHERE id = ?', [inv.id]);
+      await conn.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [totalGold, char.id]);
+      await conn.commit();
+      const [updatedChar] = await pool.query('SELECT * FROM characters WHERE id = ?', [char.id]);
+      res.json({
+        message: `${inv.name}을(를) ${totalGold}G에 판매했습니다.`,
+        gold: updatedChar[0].gold,
+      });
     }
-
-    await conn.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [totalGold, char.id]);
-
-    await conn.commit();
-
-    const [updatedChar] = await pool.query('SELECT * FROM characters WHERE id = ?', [char.id]);
-
-    res.json({
-      message: `${inv.name}${sellQty > 1 ? ' x' + sellQty : ''}을(를) ${totalGold}G에 판매했습니다.`,
-      gold: updatedChar[0].gold,
-    });
   } catch (err) {
     await conn.rollback();
     console.error('Sell error:', err);
@@ -253,9 +409,9 @@ router.post('/use', auth, async (req, res) => {
     await conn.query('UPDATE characters SET current_hp = ?, current_mp = ? WHERE id = ?', [newHp, newMp, char.id]);
 
     if (inv.quantity <= 1) {
-      await conn.query('DELETE FROM inventory WHERE character_id = ? AND item_id = ?', [char.id, itemId]);
+      await conn.query('DELETE FROM inventory WHERE id = ?', [inv.id]);
     } else {
-      await conn.query('UPDATE inventory SET quantity = quantity - 1 WHERE character_id = ? AND item_id = ?', [char.id, itemId]);
+      await conn.query('UPDATE inventory SET quantity = quantity - 1 WHERE id = ?', [inv.id]);
     }
 
     await conn.commit();
@@ -270,6 +426,108 @@ router.post('/use', auth, async (req, res) => {
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   } finally {
     conn.release();
+  }
+});
+
+// 코스메틱 장착 현황 조회
+router.get('/cosmetics/equipped', auth, async (req, res) => {
+  try {
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.json({ cosmetics: {} });
+    const charId = chars[0].id;
+
+    const [rows] = await pool.query(
+      `SELECT ec.entity_type, ec.entity_id, ec.item_id, i.cosmetic_effect, i.name as item_name
+       FROM equipped_cosmetics ec
+       JOIN items i ON ec.item_id = i.id
+       WHERE ec.character_id = ?`,
+      [charId]
+    );
+
+    const cosmetics = {};
+    for (const r of rows) {
+      const key = r.entity_type === 'character' ? 'player' : `merc_${r.entity_id}`;
+      cosmetics[key] = { effect: r.cosmetic_effect, itemId: r.item_id, itemName: r.item_name };
+    }
+    res.json({ cosmetics });
+  } catch (err) {
+    console.error('Cosmetics equipped error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 코스메틱 장착
+router.post('/cosmetic/equip', auth, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { invId, entityType, entityId } = req.body;
+    if (!invId || !entityType) return res.status(400).json({ message: '필수 파라미터가 누락되었습니다.' });
+
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
+    const charId = chars[0].id;
+
+    // 인벤토리 확인
+    const [invRows] = await conn.query(
+      `SELECT i.*, it.cosmetic_effect, it.name as item_name FROM inventory i
+       JOIN items it ON i.item_id = it.id
+       WHERE i.id = ? AND i.character_id = ? AND it.type = 'cosmetic'`,
+      [invId, charId]
+    );
+    if (invRows.length === 0) return res.status(404).json({ message: '보유하지 않은 코스메틱입니다.' });
+
+    const eId = entityType === 'character' ? charId : (entityId || 0);
+
+    await conn.query(
+      `INSERT INTO equipped_cosmetics (character_id, entity_type, entity_id, item_id)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE item_id = VALUES(item_id)`,
+      [charId, entityType, eId, invRows[0].item_id]
+    );
+
+    res.json({ message: `${invRows[0].item_name} 코스메틱을 장착했습니다.`, effect: invRows[0].cosmetic_effect });
+  } catch (err) {
+    console.error('Cosmetic equip error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  } finally {
+    conn.release();
+  }
+});
+
+// 코스메틱 해제
+router.post('/cosmetic/unequip', auth, async (req, res) => {
+  try {
+    const { entityType, entityId } = req.body;
+
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
+    const charId = chars[0].id;
+
+    const eId = entityType === 'character' ? charId : (entityId || 0);
+    await pool.query(
+      'DELETE FROM equipped_cosmetics WHERE character_id = ? AND entity_type = ? AND entity_id = ?',
+      [charId, entityType, eId]
+    );
+
+    res.json({ message: '코스메틱을 해제했습니다.' });
+  } catch (err) {
+    console.error('Cosmetic unequip error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });
 

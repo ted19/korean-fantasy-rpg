@@ -3,15 +3,29 @@ import { Row, Col, Card, Badge } from 'react-bootstrap';
 import api from '../api';
 import '../srpg/StageBattle.css';
 
+const GRADE_COLORS = {
+  '일반': '#aaa',
+  '고급': '#4ade80',
+  '희귀': '#60a5fa',
+  '영웅': '#c084fc',
+  '전설': '#fbbf24',
+  '신화': '#ff6b6b',
+};
+
 const SLOT_CONFIG = [
-  { id: 'helmet', name: '투구', icon: '🪖', img: '/ui/slot_helmet.png', row: 1, col: 2 },
-  { id: 'weapon', name: '무기', icon: '⚔️', img: '/ui/slot_weapon.png', row: 2, col: 1 },
-  { id: 'chest', name: '갑옷', icon: '🛡️', img: '/ui/slot_chest.png', row: 2, col: 2 },
-  { id: 'shield', name: '방패', icon: '🛡️', img: '/ui/slot_shield.png', row: 2, col: 3 },
-  { id: 'ring', name: '반지', icon: '💍', img: '/ui/slot_ring.png', row: 3, col: 1 },
-  { id: 'boots', name: '장화', icon: '👢', img: '/ui/slot_boots.png', row: 3, col: 2 },
-  { id: 'necklace', name: '목걸이', icon: '📿', img: '/ui/slot_necklace.png', row: 3, col: 3 },
+  { id: 'helmet', name: '투구', icon: '🪖', row: 1, col: 2 },
+  { id: 'weapon', name: '무기', icon: '⚔️', row: 2, col: 1 },
+  { id: 'chest', name: '갑옷', icon: '🛡️', row: 2, col: 2 },
+  { id: 'shield', name: '방패', icon: '🛡️', row: 2, col: 3 },
+  { id: 'ring', name: '반지', icon: '💍', row: 3, col: 1 },
+  { id: 'boots', name: '장화', icon: '👢', row: 3, col: 2 },
+  { id: 'necklace', name: '목걸이', icon: '📿', row: 3, col: 3 },
 ];
+
+const TYPE_ICONS = {
+  weapon: '⚔️', chest: '🛡️', helmet: '🪖',
+  boots: '👢', ring: '💍', necklace: '📿', shield: '🛡️', potion: '🧪',
+};
 
 const COSMETIC_EFFECT_LABELS = {
   aura_gold: '황금 기운', flame: '불꽃 오라', ice: '빙결 오라', lightning: '번개 오라',
@@ -28,42 +42,22 @@ const COSMETIC_EFFECT_COLORS = {
   starlight: '#aab8ff', phoenix: '#ff6600', chaos_vortex: '#c850ff',
 };
 
-const TYPE_ICONS = {
-  weapon: '⚔️',
-  chest: '🛡️',
-  helmet: '🪖',
-  boots: '👢',
-  ring: '💍',
-  necklace: '📿',
-  shield: '🛡️',
-  potion: '🧪',
-};
-
-const GRADE_COLORS = {
-  '일반': '#aaa',
-  '고급': '#4ade80',
-  '희귀': '#60a5fa',
-  '영웅': '#c084fc',
-  '전설': '#fbbf24',
-  '신화': '#ff6b6b',
-};
-
 function EquipImg({ itemId, fallback, className }) {
   const [err, setErr] = useState(false);
   if (err || !itemId) return <span className={className}>{fallback}</span>;
   return <img src={`/equipment/${itemId}_icon.png`} alt="" className={className} onError={() => setErr(true)} />;
 }
 
-function Equipment({ character, charState, onCharStateUpdate, onLog }) {
+function MercenaryEquipment({ mercenary, onLog, onMercUpdate }) {
   const [equipped, setEquipped] = useState({});
   const [inventory, setInventory] = useState([]);
-  const [materials, setMaterials] = useState([]);
   const [potions, setPotions] = useState([]);
-  const [invTab, setInvTab] = useState('equip'); // 'equip', 'consumable', or 'materials'
+  const [invTab, setInvTab] = useState('equip');
   const [dragItem, setDragItem] = useState(null);
   const [dragOverSlot, setDragOverSlot] = useState(null);
   const [tooltip, setTooltip] = useState(null);
   const [invTooltip, setInvTooltip] = useState(null);
+  const [mercStats, setMercStats] = useState(mercenary);
   const [equippedAura, setEquippedAura] = useState(null);
   const [cosmeticInventory, setCosmeticInventory] = useState([]);
   const [showAuraPopup, setShowAuraPopup] = useState(false);
@@ -71,39 +65,30 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
   const loadData = useCallback(async () => {
     try {
-      const [equipRes, matRes, cosRes, invFullRes] = await Promise.all([
-        api.get('/equipment/info'),
-        api.get('/blacksmith/materials'),
+      const [res, cosRes, invFullRes] = await Promise.all([
+        api.get(`/mercenary/${mercenary.id}/equipment`),
         api.get('/shop/cosmetics/equipped').catch(() => ({ data: { cosmetics: {} } })),
         api.get('/shop/inventory').catch(() => ({ data: { inventory: [] } })),
       ]);
-      setEquipped(equipRes.data.equipped);
-      setInventory(equipRes.data.inventory);
-      setPotions(equipRes.data.potions || []);
-      setMaterials(matRes.data.materials || []);
-      setEquippedAura(cosRes.data.cosmetics?.player || null);
+      setEquipped(res.data.equipped);
+      setInventory(res.data.inventory);
+      setPotions(res.data.potions || []);
+      const mercKey = `merc_${mercenary.id}`;
+      setEquippedAura(cosRes.data.cosmetics?.[mercKey] || null);
       setCosmeticInventory((invFullRes.data.inventory || []).filter(i => i.type === 'cosmetic'));
     } catch {
-      onLog('장비 정보를 불러올 수 없습니다.', 'damage');
+      onLog('용병 장비 정보를 불러올 수 없습니다.', 'damage');
     }
-  }, [onLog]);
+  }, [mercenary.id, onLog]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleEquip = async (itemId, slot) => {
     try {
-      const res = await api.post('/equipment/equip', { itemId, slot });
+      const res = await api.post(`/mercenary/${mercenary.id}/equip`, { itemId, slot });
       onLog(res.data.message, 'system');
-      const c = res.data.character;
-      onCharStateUpdate({
-        maxHp: c.hp, maxMp: c.mp,
-        attack: c.attack, defense: c.defense,
-        physAttack: c.phys_attack, physDefense: c.phys_defense,
-        magAttack: c.mag_attack, magDefense: c.mag_defense,
-        critRate: c.crit_rate, evasion: c.evasion,
-        currentHp: c.current_hp, currentMp: c.current_mp,
-        gold: c.gold,
-      });
+      setMercStats((prev) => ({ ...prev, ...res.data.mercenary }));
+      onMercUpdate();
       loadData();
     } catch (err) {
       onLog(err.response?.data?.message || '장착 실패', 'damage');
@@ -112,18 +97,10 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
   const handleUnequip = async (slot) => {
     try {
-      const res = await api.post('/equipment/unequip', { slot });
+      const res = await api.post(`/mercenary/${mercenary.id}/unequip`, { slot });
       onLog(res.data.message, 'system');
-      const c = res.data.character;
-      onCharStateUpdate({
-        maxHp: c.hp, maxMp: c.mp,
-        attack: c.attack, defense: c.defense,
-        physAttack: c.phys_attack, physDefense: c.phys_defense,
-        magAttack: c.mag_attack, magDefense: c.mag_defense,
-        critRate: c.crit_rate, evasion: c.evasion,
-        currentHp: c.current_hp, currentMp: c.current_mp,
-        gold: c.gold,
-      });
+      setMercStats((prev) => ({ ...prev, ...res.data.mercenary }));
+      onMercUpdate();
       loadData();
     } catch (err) {
       onLog(err.response?.data?.message || '해제 실패', 'damage');
@@ -135,7 +112,6 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', item.item_id);
   };
-
   const onDragOver = (e, slotId) => {
     e.preventDefault();
     if (dragItem && dragItem.slot === slotId) {
@@ -143,31 +119,19 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
       setDragOverSlot(slotId);
     }
   };
-
-  const onDragLeave = () => {
-    setDragOverSlot(null);
-  };
-
+  const onDragLeave = () => { setDragOverSlot(null); };
   const onDrop = (e, slotId) => {
     e.preventDefault();
     setDragOverSlot(null);
-    if (dragItem && dragItem.slot === slotId) {
-      handleEquip(dragItem.item_id, slotId);
-    }
+    if (dragItem && dragItem.slot === slotId) handleEquip(dragItem.item_id, slotId);
     setDragItem(null);
   };
-
-  const onDragEnd = () => {
-    setDragItem(null);
-    setDragOverSlot(null);
-  };
+  const onDragEnd = () => { setDragItem(null); setDragOverSlot(null); };
 
   const handleUsePotion = async (item) => {
     try {
       const res = await api.post('/shop/use', { itemId: item.item_id });
       onLog(res.data.message, 'system');
-      const c = res.data.character;
-      onCharStateUpdate({ currentHp: c.current_hp, currentMp: c.current_mp });
       loadData();
     } catch (err) {
       onLog(err.response?.data?.message || '사용 실패', 'damage');
@@ -176,7 +140,7 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
   const handleAuraEquip = async (invId) => {
     try {
-      const res = await api.post('/shop/cosmetic/equip', { invId, entityType: 'character', entityId: 0 });
+      const res = await api.post('/shop/cosmetic/equip', { invId, entityType: 'mercenary', entityId: mercenary.id });
       onLog(res.data.message, 'system');
       setShowAuraPopup(false);
       loadData();
@@ -187,7 +151,7 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
   const handleAuraUnequip = async () => {
     try {
-      const res = await api.post('/shop/cosmetic/unequip', { entityType: 'character', entityId: 0 });
+      const res = await api.post('/shop/cosmetic/unequip', { entityType: 'mercenary', entityId: mercenary.id });
       onLog(res.data.message, 'system');
       loadData();
     } catch (err) {
@@ -197,14 +161,11 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
   const weaponIs2h = equipped.weapon?.weapon_hand === '2h';
 
-  // 장비 보너스 합산
-  const equipBonus = { hp: 0, mp: 0, attack: 0, defense: 0, physAttack: 0, physDefense: 0, magAttack: 0, magDefense: 0, critRate: 0, evasion: 0 };
+  const equipBonus = { hp: 0, mp: 0, physAttack: 0, physDefense: 0, magAttack: 0, magDefense: 0, critRate: 0, evasion: 0 };
   Object.values(equipped).forEach((item) => {
     if (!item) return;
     equipBonus.hp += item.effect_hp || 0;
     equipBonus.mp += item.effect_mp || 0;
-    equipBonus.attack += item.effect_attack || 0;
-    equipBonus.defense += item.effect_defense || 0;
     equipBonus.physAttack += item.effect_phys_attack || 0;
     equipBonus.physDefense += item.effect_phys_defense || 0;
     equipBonus.magAttack += item.effect_mag_attack || 0;
@@ -223,16 +184,15 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
     <Row className="equip-container g-3">
       <Col xs={12} lg={4} className="mb-3">
         <Card className="equip-card">
-          <div className="equip-card-bg" style={{ position:'absolute', inset:0, background:'url(/ui/equip_panel_bg.png) center/cover no-repeat', opacity:0.08, pointerEvents:'none' }} />
-          <Card.Body style={{ position:'relative' }}>
+          <Card.Body>
             <div className="equip-panel">
-              <div className="equip-panel-title">{character.name}</div>
+              <div className="equip-panel-title">{mercenary.name}</div>
               <div className="text-center" style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: -10, marginBottom: 14 }}>
-                {character.class_type}
+                {mercenary.class_type} · Lv.{mercStats.level || 1}
               </div>
 
               <div className="equip-slots-grid">
-                {/* 오라 슬롯 (row 1, col 1) */}
+                {/* 오라 슬롯 */}
                 <div
                   className={`equip-slot aura-slot ${equippedAura ? 'filled' : ''} ${dragOverSlot === 'aura' && dragItem?.type === 'cosmetic' ? 'drag-over' : ''}`}
                   style={{ gridRow: 1, gridColumn: 1 }}
@@ -260,8 +220,6 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                     </div>
                   )}
                 </div>
-
-                {/* 오라 슬롯 (row 1, col 3) - 빈 공간 대신 안내 */}
                 <div className="equip-slot-spacer" style={{ gridRow: 1, gridColumn: 3 }} />
 
                 {SLOT_CONFIG.map((slot) => {
@@ -293,11 +251,8 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                         </div>
                       ) : (
                         <div className="equip-slot-empty">
-                          <img src={slot.img} alt="" className="equip-slot-placeholder" onError={(e) => { e.target.style.display='none'; e.target.nextSibling && (e.target.nextSibling.style.display=''); }} />
-                          <span className="equip-slot-icon empty" style={{ display: 'none' }}>{slot.icon}</span>
-                          <span className="equip-slot-label">
-                            {isLocked ? '양손무기' : slot.name}
-                          </span>
+                          <span className="equip-slot-icon empty">{slot.icon}</span>
+                          <span className="equip-slot-label">{isLocked ? '양손무기' : slot.name}</span>
                         </div>
                       )}
                     </div>
@@ -326,38 +281,37 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                 </div>
               )}
 
-              {/* 스탯 표시 */}
               <div className="equip-stats-summary">
                 <div className="equip-stat-row">
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: 'var(--green)', background: 'rgba(34, 197, 94, 0.1)' }}>
-                    HP {charState.maxHp} {formatBonus(equipBonus.hp)}
+                    HP {mercStats.hp} {formatBonus(equipBonus.hp)}
                   </Badge>
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: 'var(--blue)', background: 'rgba(59, 130, 246, 0.1)' }}>
-                    MP {charState.maxMp} {formatBonus(equipBonus.mp)}
+                    MP {mercStats.mp} {formatBonus(equipBonus.mp)}
                   </Badge>
                 </div>
                 <div className="equip-stat-row">
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: 'var(--orange)', background: 'rgba(245, 158, 11, 0.1)' }}>
-                    물공 {charState.physAttack} {formatBonus(equipBonus.physAttack)}
+                    물공 {mercStats.phys_attack || 0} {formatBonus(equipBonus.physAttack)}
                   </Badge>
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: '#a78bfa', background: 'rgba(167, 139, 250, 0.1)' }}>
-                    마공 {charState.magAttack} {formatBonus(equipBonus.magAttack)}
+                    마공 {mercStats.mag_attack || 0} {formatBonus(equipBonus.magAttack)}
                   </Badge>
                 </div>
                 <div className="equip-stat-row">
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: 'var(--cyan)', background: 'rgba(6, 182, 212, 0.1)' }}>
-                    물방 {charState.physDefense} {formatBonus(equipBonus.physDefense)}
+                    물방 {mercStats.phys_defense || 0} {formatBonus(equipBonus.physDefense)}
                   </Badge>
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: '#60a5fa', background: 'rgba(96, 165, 250, 0.1)' }}>
-                    마방 {charState.magDefense} {formatBonus(equipBonus.magDefense)}
+                    마방 {mercStats.mag_defense || 0} {formatBonus(equipBonus.magDefense)}
                   </Badge>
                 </div>
                 <div className="equip-stat-row">
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: 'var(--red)', background: 'rgba(239, 68, 68, 0.1)' }}>
-                    치명 {charState.critRate}% {formatBonus(equipBonus.critRate)}
+                    치명 {mercStats.crit_rate || 0}% {formatBonus(equipBonus.critRate)}
                   </Badge>
                   <Badge bg="dark" className="equip-stat-badge" style={{ color: 'var(--green)', background: 'rgba(34, 197, 94, 0.1)' }}>
-                    회피 {charState.evasion}% {formatBonus(equipBonus.evasion)}
+                    회피 {mercStats.evasion || 0}% {formatBonus(equipBonus.evasion)}
                   </Badge>
                 </div>
               </div>
@@ -368,17 +322,13 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
 
       <Col xs={12} lg={8} className="mb-3">
         <Card className="equip-inv-card">
-          <div style={{ position:'absolute', inset:0, background:'url(/ui/inventory_bg.png) center/cover no-repeat', opacity:0.06, pointerEvents:'none' }} />
-          <Card.Body className="d-flex flex-column" style={{ position:'relative' }}>
+          <Card.Body className="d-flex flex-column">
             <div className="inv-tab-bar">
               <button className={`inv-tab-btn ${invTab === 'equip' ? 'active' : ''}`} onClick={() => setInvTab('equip')}>
                 🎒 장비 ({inventory.length})
               </button>
               <button className={`inv-tab-btn ${invTab === 'consumable' ? 'active' : ''}`} onClick={() => setInvTab('consumable')}>
                 🧪 소모품 ({potions.reduce((s, p) => s + p.quantity, 0)})
-              </button>
-              <button className={`inv-tab-btn ${invTab === 'materials' ? 'active' : ''}`} onClick={() => setInvTab('materials')}>
-                🧱 재료 ({materials.reduce((s, m) => s + m.quantity, 0)})
               </button>
             </div>
 
@@ -451,7 +401,7 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                 ) : (
                   <div className="inv-mat-list">
                     {potions.map(pot => (
-                      <div key={pot.inv_id} className="inv-mat-item" style={{ cursor: 'pointer' }}>
+                      <div key={pot.inv_id} className="inv-mat-item">
                         <div className="inv-mat-icon">🧪</div>
                         <div className="inv-mat-info">
                           <div className="inv-mat-name">{pot.name}</div>
@@ -461,36 +411,7 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                           </div>
                         </div>
                         <div className="inv-mat-qty">x{pot.quantity}</div>
-                        <button
-                          className="inv-potion-use-btn"
-                          onClick={() => handleUsePotion(pot)}
-                        >
-                          사용
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {invTab === 'materials' && (
-              <div className="inv-materials-panel">
-                {materials.length === 0 ? (
-                  <div className="inv-mat-empty">보유한 재료가 없습니다.<br/>몬스터를 사냥하여 재료를 획득하세요!</div>
-                ) : (
-                  <div className="inv-mat-list">
-                    {materials.map(mat => (
-                      <div key={mat.material_id} className="inv-mat-item">
-                        <div className="inv-mat-icon">{mat.icon}</div>
-                        <div className="inv-mat-info">
-                          <div className="inv-mat-name" style={{ color: GRADE_COLORS[mat.grade] || '#aaa' }}>
-                            {mat.name}
-                            <span className="inv-mat-grade">[{mat.grade}]</span>
-                          </div>
-                          <div className="inv-mat-desc">{mat.description}</div>
-                        </div>
-                        <div className="inv-mat-qty">x{mat.quantity}</div>
+                        <button className="inv-potion-use-btn" onClick={() => handleUsePotion(pot)}>사용</button>
                       </div>
                     ))}
                   </div>
@@ -506,8 +427,8 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
         <div className="aura-popup-overlay" onClick={() => setSelectedItem(null)}>
           <div className="item-detail-popup" onClick={(e) => e.stopPropagation()}>
             <div className="aura-popup-header">
-              <span style={{ color: GRADE_COLORS[selectedItem.grade] || '#eee' }}>
-                {selectedItem.name}{selectedItem.enhance_level > 0 ? ` +${selectedItem.enhance_level}` : ''}
+              <span style={selectedItem.type === 'cosmetic' ? { color: COSMETIC_EFFECT_COLORS[selectedItem.cosmetic_effect] || '#eee' } : { color: { '일반':'#aaa','고급':'#4ade80','희귀':'#60a5fa','영웅':'#c084fc','전설':'#fbbf24','신화':'#ff6b6b' }[selectedItem.grade] || '#eee' }}>
+                {selectedItem.name}
               </span>
               <button className="aura-popup-close" onClick={() => setSelectedItem(null)}>&times;</button>
             </div>
@@ -623,4 +544,4 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
   );
 }
 
-export default Equipment;
+export default MercenaryEquipment;

@@ -35,7 +35,7 @@ function CharacterDetail({ character, charState, onCharStateUpdate, onLog, onSki
     }
   };
 
-  const expNeeded = charState.level * 100;
+  const expNeeded = Math.floor(80 * charState.level + 0.5 * charState.level * charState.level);
 
   return (
     <Modal show onHide={onClose} centered size="lg" scrollable>

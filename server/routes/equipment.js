@@ -43,9 +43,13 @@ router.get('/info', auth, async (req, res) => {
 
     // 장착 중인 장비
     const [equipped] = await pool.query(
-      `SELECT e.slot, e.item_id, it.*
+      `SELECT e.slot, e.item_id, it.*,
+              IFNULL(inv.enhance_level, 0) as enhance_level,
+              IFNULL(it.max_enhance, 0) as max_enhance,
+              IFNULL(it.grade, '일반') as grade
        FROM equipment e
        JOIN items it ON e.item_id = it.id
+       LEFT JOIN inventory inv ON inv.character_id = e.character_id AND inv.item_id = e.item_id
        WHERE e.character_id = ?`,
       [charId]
     );
@@ -69,13 +73,25 @@ router.get('/info', auth, async (req, res) => {
         effect_mag_defense: e.effect_mag_defense || 0,
         effect_crit_rate: e.effect_crit_rate || 0,
         effect_evasion: e.effect_evasion || 0,
+        enhance_level: e.enhance_level || 0,
+        max_enhance: e.max_enhance || 0,
+        grade: e.grade || '일반',
       };
     });
 
     // 인벤토리 (장비류만, 장착 중인 것 제외)
     const [inventory] = await pool.query(
       `SELECT i.*, it.name, it.type, it.slot, it.weapon_hand, it.description, it.price, it.sell_price,
-              it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.required_level, it.class_restriction
+              it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.required_level, it.class_restriction,
+              IFNULL(it.effect_phys_attack,0) as effect_phys_attack,
+              IFNULL(it.effect_phys_defense,0) as effect_phys_defense,
+              IFNULL(it.effect_mag_attack,0) as effect_mag_attack,
+              IFNULL(it.effect_mag_defense,0) as effect_mag_defense,
+              IFNULL(it.effect_crit_rate,0) as effect_crit_rate,
+              IFNULL(it.effect_evasion,0) as effect_evasion,
+              IFNULL(it.max_enhance, 0) as max_enhance,
+              IFNULL(it.grade, '일반') as grade,
+              it.cosmetic_effect
        FROM inventory i
        JOIN items it ON i.item_id = it.id
        WHERE i.character_id = ? AND it.type != 'potion'
@@ -83,23 +99,63 @@ router.get('/info', auth, async (req, res) => {
       [charId]
     );
 
-    // 장착 중인 item_id 목록
-    const equippedItemIds = equipped.map((e) => e.item_id);
+    // 장착 중인 item_id별 개수 카운트 (캐릭터 + 소환수 + 용병)
+    const equippedCountMap = {};
+    for (const e of equipped) {
+      equippedCountMap[e.item_id] = (equippedCountMap[e.item_id] || 0) + 1;
+    }
 
-    // 소환수 장착 아이템 ID
     const [summonEquipped] = await pool.query(
       `SELECT se.item_id FROM summon_equipment se
        JOIN character_summons cs ON se.summon_id = cs.id
        WHERE cs.character_id = ?`,
       [charId]
     );
-    const summonEquippedIds = summonEquipped.map((e) => e.item_id);
+    for (const e of summonEquipped) {
+      equippedCountMap[e.item_id] = (equippedCountMap[e.item_id] || 0) + 1;
+    }
 
-    // 인벤토리에서 장착 중인 아이템 + 소환수 장착 아이템 제외
-    const excludeIds = [...equippedItemIds, ...summonEquippedIds];
-    const availableInventory = inventory.filter((inv) => !excludeIds.includes(inv.item_id));
+    const [mercEquipped] = await pool.query(
+      `SELECT me.item_id FROM mercenary_equipment me
+       JOIN character_mercenaries cm ON me.mercenary_id = cm.id
+       WHERE cm.character_id = ?`,
+      [charId]
+    );
+    for (const e of mercEquipped) {
+      equippedCountMap[e.item_id] = (equippedCountMap[e.item_id] || 0) + 1;
+    }
 
-    res.json({ equipped: equippedMap, inventory: availableInventory });
+    const [cosmeticEquipped] = await pool.query(
+      'SELECT item_id FROM equipped_cosmetics WHERE character_id = ?', [charId]
+    );
+    for (const e of cosmeticEquipped) {
+      equippedCountMap[e.item_id] = (equippedCountMap[e.item_id] || 0) + 1;
+    }
+
+    // 인벤토리에서 장착 중인 개수만큼 제외 (나머지는 표시)
+    const usedCount = {};
+    const availableInventory = inventory.filter((inv) => {
+      const equipped = equippedCountMap[inv.item_id] || 0;
+      const used = usedCount[inv.item_id] || 0;
+      if (used < equipped) {
+        usedCount[inv.item_id] = used + 1;
+        return false;
+      }
+      return true;
+    });
+
+    // 물약(소모품)
+    const [potions] = await pool.query(
+      `SELECT i.id as inv_id, i.item_id, i.quantity, it.name, it.type, it.description, it.price, it.sell_price,
+              it.effect_hp, it.effect_mp, IFNULL(it.grade, '일반') as grade
+       FROM inventory i
+       JOIN items it ON i.item_id = it.id
+       WHERE i.character_id = ? AND it.type = 'potion' AND i.quantity > 0
+       ORDER BY it.name`,
+      [charId]
+    );
+
+    res.json({ equipped: equippedMap, inventory: availableInventory, potions });
   } catch (err) {
     console.error('Equipment info error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
@@ -126,12 +182,13 @@ router.post('/equip', auth, async (req, res) => {
     if (itemRows.length === 0) return res.status(404).json({ message: '아이템을 찾을 수 없습니다.' });
     const item = itemRows[0];
 
-    // 인벤토리에 있는지 확인
+    // 인벤토리에 있는지 확인 (보유 개수)
     const [invRows] = await conn.query(
       'SELECT * FROM inventory WHERE character_id = ? AND item_id = ?',
       [char.id, itemId]
     );
     if (invRows.length === 0) return res.status(400).json({ message: '보유하지 않은 아이템입니다.' });
+    const ownedCount = invRows.reduce((s, r) => s + (r.quantity || 1), 0);
 
     // 슬롯 유효성 검사
     if (item.slot !== slot) {
@@ -146,6 +203,21 @@ router.post('/equip', auth, async (req, res) => {
     // 레벨 제한 검사
     if (char.level < item.required_level) {
       return res.status(400).json({ message: `레벨 ${item.required_level} 이상만 장착할 수 있습니다.` });
+    }
+
+    // 장착 중인 총 개수 확인 (캐릭터 + 소환수 + 용병)
+    const [eqCnt] = await conn.query('SELECT COUNT(*) as cnt FROM equipment WHERE character_id = ? AND item_id = ?', [char.id, itemId]);
+    const [seCnt] = await conn.query(
+      `SELECT COUNT(*) as cnt FROM summon_equipment se JOIN character_summons cs ON se.summon_id = cs.id WHERE cs.character_id = ? AND se.item_id = ?`,
+      [char.id, itemId]
+    );
+    const [meCnt] = await conn.query(
+      `SELECT COUNT(*) as cnt FROM mercenary_equipment me JOIN character_mercenaries cm ON me.mercenary_id = cm.id WHERE cm.character_id = ? AND me.item_id = ?`,
+      [char.id, itemId]
+    );
+    const totalEquipped = (eqCnt[0].cnt || 0) + (seCnt[0].cnt || 0) + (meCnt[0].cnt || 0);
+    if (totalEquipped >= ownedCount) {
+      return res.status(400).json({ message: '사용 가능한 아이템이 없습니다. (모두 장착 중)' });
     }
 
     // 방패 장착 시 양손무기 체크

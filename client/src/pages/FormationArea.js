@@ -10,6 +10,12 @@ const CLASS_IMAGES = {
 
 const SLOT_NAMES = ['메인 진영', '진영 2', '진영 3', '진영 4'];
 
+const CLASS_RANGE_TYPE = {
+  '풍수사': 'magic',
+  '무당': 'magic',
+  '승려': 'melee',
+};
+
 function UnitIcon({ src, fallback, className }) {
   const [err, setErr] = useState(false);
   if (err || !src) return <span className={className || 'formation-unit-icon-text'}>{fallback || '?'}</span>;
@@ -18,17 +24,19 @@ function UnitIcon({ src, fallback, className }) {
 
 function FormationArea({ character, charState, mySummons, myMercenaries }) {
   const [formations, setFormations] = useState([]);
+  const [unlockInfo, setUnlockInfo] = useState(null);
   const [activeSlot, setActiveSlot] = useState(0);
   const [gridData, setGridData] = useState(Array(3).fill(null).map(() => Array(3).fill(null)));
   const [selectedUnit, setSelectedUnit] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [msgType, setMsgType] = useState('');
+  const [msgKey, setMsgKey] = useState(0);
 
   const loadFormations = useCallback(async () => {
     try {
       const res = await api.get('/formation/list');
       setFormations(res.data.formations);
+      if (res.data.unlockInfo) setUnlockInfo(res.data.unlockInfo);
       const current = res.data.formations.find(f => f.slotIndex === activeSlot);
       if (current && current.gridData) {
         setGridData(current.gridData);
@@ -58,7 +66,7 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
       subText: `${character.class_type} · Lv.${charState.level}`,
       icon: CLASS_IMAGES[character.class_type],
       fallbackIcon: '⚔️',
-      rangeType: 'melee',
+      rangeType: CLASS_RANGE_TYPE[character.class_type] || 'melee',
     },
     ...(mySummons || []).map(s => ({
       id: `summon_${s.id}`,
@@ -88,24 +96,47 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
     if (cell && cell.unitId) placedUnitIds.add(cell.unitId);
   }));
 
+  // 다른 진영 슬롯에 배치된 유닛 ID 목록 (중복 배치 방지)
+  const otherSlotUnitIds = new Set();
+  formations.forEach(f => {
+    if (f.slotIndex === activeSlot || !f.gridData) return;
+    f.gridData.forEach(row => row.forEach(cell => {
+      if (cell && cell.unitId) otherSlotUnitIds.add(cell.unitId);
+    }));
+  });
+
   const handleUnitClick = (unit) => {
-    if (placedUnitIds.has(unit.id)) return;
+    if (placedUnitIds.has(unit.id) || otherSlotUnitIds.has(unit.id)) return;
     setSelectedUnit(prev => prev?.id === unit.id ? null : unit);
   };
 
+  // 셀 해금 여부 확인
+  const isCellUnlocked = (row, col) => {
+    if (!unlockInfo || !unlockInfo.cells) return true;
+    const cell = unlockInfo.cells.find(c => c.row === row && c.col === col);
+    return cell ? cell.unlocked : true;
+  };
+
+  const getCellUnlockInfo = (row, col) => {
+    if (!unlockInfo || !unlockInfo.cells) return null;
+    return unlockInfo.cells.find(c => c.row === row && c.col === col);
+  };
+
   const handleCellClick = (row, col) => {
+    if (!isCellUnlocked(row, col)) return;
+
     const cell = gridData[row][col];
 
-    // 셀에 유닛이 있으면 제거
+    // 셀에 유닛이 있으면 제거 + 자동 저장
     if (cell && cell.unitId) {
       const newGrid = gridData.map(r => [...r]);
       newGrid[row][col] = null;
       setGridData(newGrid);
-      setMessage('');
+      autoSave(newGrid);
       return;
     }
 
-    // 선택된 유닛이 있으면 배치
+    // 선택된 유닛이 있으면 배치 + 자동 저장
     if (selectedUnit) {
       const newGrid = gridData.map(r => [...r]);
       newGrid[row][col] = {
@@ -119,7 +150,7 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
       };
       setGridData(newGrid);
       setSelectedUnit(null);
-      setMessage('');
+      autoSave(newGrid);
     }
   };
 
@@ -128,34 +159,36 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
     const newGrid = gridData.map(r => [...r]);
     newGrid[row][col] = null;
     setGridData(newGrid);
+    autoSave(newGrid);
   };
 
   const handleReset = () => {
-    setGridData(Array(3).fill(null).map(() => Array(3).fill(null)));
+    const emptyGrid = Array(3).fill(null).map(() => Array(3).fill(null));
+    setGridData(emptyGrid);
     setSelectedUnit(null);
-    setMessage('');
+    autoSave(emptyGrid);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    setMessage('');
+  const autoSave = useCallback(async (newGrid) => {
     try {
       await api.post('/formation/save', {
         slotIndex: activeSlot,
         name: SLOT_NAMES[activeSlot],
-        gridData,
+        gridData: newGrid,
       });
-      setMessage('진영이 저장되었습니다.');
-      setMsgType('');
-      // 리로드
       const res = await api.get('/formation/list');
       setFormations(res.data.formations);
+      if (res.data.unlockInfo) setUnlockInfo(res.data.unlockInfo);
+      setMessage('저장됨');
+      setMsgType('success');
+      setMsgKey(k => k + 1);
+      setTimeout(() => setMessage(''), 1500);
     } catch (err) {
       setMessage(err.response?.data?.message || '저장 실패');
       setMsgType('error');
+      setMsgKey(k => k + 1);
     }
-    setSaving(false);
-  };
+  }, [activeSlot]);
 
   return (
     <div className="formation-area">
@@ -166,13 +199,17 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
           {allUnits.map(unit => (
             <div
               key={unit.id}
-              className={`formation-unit-card${selectedUnit?.id === unit.id ? ' selected' : ''}${placedUnitIds.has(unit.id) ? ' placed' : ''}${unit.type === 'player' ? ' is-player' : ''}`}
+              className={`formation-unit-card${selectedUnit?.id === unit.id ? ' selected' : ''}${placedUnitIds.has(unit.id) ? ' placed' : ''}${otherSlotUnitIds.has(unit.id) ? ' placed other-slot' : ''}${unit.type === 'player' ? ' is-player' : ''}`}
               onClick={() => handleUnitClick(unit)}
             >
               <UnitIcon src={unit.icon} fallback={unit.fallbackIcon} className="formation-unit-icon" />
               <div className="formation-unit-info">
                 <div className="formation-unit-name">{unit.name}</div>
-                <div className="formation-unit-sub">{unit.subText}</div>
+                <div className="formation-unit-sub">
+                  {otherSlotUnitIds.has(unit.id)
+                    ? <span style={{ color: 'var(--orange)', fontSize: 10 }}>다른 진영에 배치됨</span>
+                    : unit.subText}
+                </div>
               </div>
               <span className={`formation-unit-range ${unit.rangeType}`}>
                 {unit.rangeType === 'melee' ? '근거리' : unit.rangeType === 'magic' ? '마법' : '원거리'}
@@ -191,15 +228,22 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
       <div className="formation-right">
         {/* 슬롯 탭 */}
         <div className="formation-slots">
-          {SLOT_NAMES.map((name, i) => (
-            <div
-              key={i}
-              className={`formation-slot-tab${activeSlot === i ? ' active' : ''}`}
-              onClick={() => setActiveSlot(i)}
-            >
-              {name}
-            </div>
-          ))}
+          {SLOT_NAMES.map((name, i) => {
+            const slotInfo = unlockInfo?.slots?.[i];
+            const locked = slotInfo && !slotInfo.unlocked;
+            return (
+              <div
+                key={i}
+                className={`formation-slot-tab${activeSlot === i ? ' active' : ''}${locked ? ' locked' : ''}`}
+                onClick={() => !locked && setActiveSlot(i)}
+                title={locked ? `Lv.${slotInfo.reqLevel} 해금` : ''}
+              >
+                {locked ? <span className="formation-slot-lock">🔒</span> : null}
+                {name}
+                {locked && <span className="formation-slot-req">Lv.{slotInfo.reqLevel}</span>}
+              </div>
+            );
+          })}
         </div>
 
         {/* 3x3 그리드 */}
@@ -210,28 +254,41 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
           </div>
           <div className="formation-grid">
             {gridData.map((row, ri) =>
-              row.map((cell, ci) => (
-                <div
-                  key={`${ri}-${ci}`}
-                  className={`formation-cell${cell ? ' has-unit' : ''}${cell && cell.type === 'player' ? ' is-player-cell' : ''}${selectedUnit && !cell ? ' drop-target' : ''}`}
-                  onClick={() => handleCellClick(ri, ci)}
-                >
-                  {cell ? (
-                    <>
-                      <UnitIcon src={cell.icon} fallback={cell.fallbackIcon} className="formation-cell-icon" />
-                      <div className="formation-cell-name">{cell.name}</div>
-                      <button
-                        className="formation-cell-remove"
-                        onClick={(e) => handleRemoveUnit(e, ri, ci)}
-                      >
-                        ×
-                      </button>
-                    </>
-                  ) : (
-                    <span className="formation-cell-empty">+</span>
-                  )}
-                </div>
-              ))
+              row.map((cell, ci) => {
+                const unlocked = isCellUnlocked(ri, ci);
+                const cellInfo = getCellUnlockInfo(ri, ci);
+                return (
+                  <div
+                    key={`${ri}-${ci}`}
+                    className={`formation-cell${cell ? ' has-unit' : ''}${cell && cell.type === 'player' ? ' is-player-cell' : ''}${selectedUnit && !cell && unlocked ? ' drop-target' : ''}${!unlocked ? ' locked' : ''}`}
+                    onClick={() => handleCellClick(ri, ci)}
+                  >
+                    {!unlocked ? (
+                      <div className="formation-cell-locked">
+                        <span className="formation-cell-lock-icon">🔒</span>
+                        <span className="formation-cell-lock-req">
+                          {cellInfo && cellInfo.reqLevel > (unlockInfo?.level || 0)
+                            ? `Lv.${cellInfo.reqLevel}`
+                            : `클리어 ${cellInfo?.reqClears}`}
+                        </span>
+                      </div>
+                    ) : cell ? (
+                      <>
+                        <UnitIcon src={cell.icon} fallback={cell.fallbackIcon} className="formation-cell-icon" />
+                        <div className="formation-cell-name">{cell.name}</div>
+                        <button
+                          className="formation-cell-remove"
+                          onClick={(e) => handleRemoveUnit(e, ri, ci)}
+                        >
+                          ×
+                        </button>
+                      </>
+                    ) : (
+                      <span className="formation-cell-empty">+</span>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
           <div className="formation-grid-row-label">
@@ -241,15 +298,15 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
           </div>
         </div>
 
-        {/* 저장/초기화 */}
+        {/* 초기화 */}
         <div className="formation-actions">
           <button className="formation-reset-btn" onClick={handleReset}>초기화</button>
-          <button className="formation-save-btn" onClick={handleSave} disabled={saving}>
-            {saving ? '저장 중...' : '진영 저장'}
-          </button>
         </div>
-        <div className={`formation-msg${msgType === 'error' ? ' error' : ''}`}>{message}</div>
+        {message && (
+          <div key={msgKey} className={`formation-msg ${msgType}`}>{msgType === 'success' && '✅ '}{message}</div>
+        )}
       </div>
+
     </div>
   );
 }

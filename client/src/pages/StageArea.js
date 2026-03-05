@@ -1,22 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Badge, ProgressBar } from 'react-bootstrap';
+import { Row, Col, Badge } from 'react-bootstrap';
 import api from '../api';
 import './StageArea.css';
 import './MonsterBestiary.css';
 
-// 시대별 배경색/테마 매핑
-const ERA_THEMES = {
-  gojoseon: { accent: '#4ade80' },
-  samhan: { accent: '#60a5fa' },
-  goguryeo: { accent: '#f87171' },
-  baekje: { accent: '#fbbf24' },
-  silla: { accent: '#c084fc' },
-  balhae: { accent: '#2dd4bf' },
-  goryeo: { accent: '#818cf8' },
-  joseon: { accent: '#fb923c' },
-  imjin: { accent: '#fb7185' },
-  modern: { accent: '#38bdf8' },
-};
+// 기본 accent (서버에서 못 받아올 때 fallback)
+const DEFAULT_ACCENT = '#4ade80';
 
 function StageImg({ src, fallback, className, alt }) {
   const [err, setErr] = useState(false);
@@ -51,7 +40,7 @@ const AI_TYPE_INFO = {
 
 const SKILL_TYPE_COLORS = { attack: '#ef4444', heal: '#22c55e', buff: '#f59e0b', debuff: '#a855f7', aoe: '#f97316' };
 
-function StageArea({ charState, mySummons, activeSummonIds, onToggleSummon, onStartStageBattle, returnGroupKey, onReturnHandled }) {
+function StageArea({ charState, onStartStageBattle, returnGroupKey, onReturnHandled }) {
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupDetail, setGroupDetail] = useState(null);
@@ -61,16 +50,26 @@ function StageArea({ charState, mySummons, activeSummonIds, onToggleSummon, onSt
   const [monsterDrops, setMonsterDrops] = useState([]);
   const [popupImgLoaded, setPopupImgLoaded] = useState(false);
   const [stagePopup, setStagePopup] = useState(null);
+  const [countryIdx, setCountryIdx] = useState(0);
+  const [countries, setCountries] = useState([]);
 
   useEffect(() => {
-    async function loadGroups() {
+    async function loadData() {
       try {
-        const res = await api.get('/stage/groups');
-        setGroups(res.data.groups);
+        const [groupsRes, countriesRes] = await Promise.all([
+          api.get('/stage/groups'),
+          api.get('/stage/countries'),
+        ]);
+        setGroups(groupsRes.data.groups);
+        setCountries(countriesRes.data.countries || []);
 
         if (returnGroupKey) {
-          const target = res.data.groups.find(g => g.key === returnGroupKey);
+          const target = groupsRes.data.groups.find(g => g.key === returnGroupKey);
           if (target) {
+            // 해당 그룹의 국가 인덱스로 이동
+            const cList = countriesRes.data.countries || [];
+            const cIdx = cList.findIndex(c => c.key === target.country);
+            if (cIdx >= 0) setCountryIdx(cIdx);
             setSelectedGroup(target);
             try {
               const detailRes = await api.get(`/stage/group/${returnGroupKey}`);
@@ -80,11 +79,11 @@ function StageArea({ charState, mySummons, activeSummonIds, onToggleSummon, onSt
           if (onReturnHandled) onReturnHandled();
         }
       } catch (err) {
-        console.error('Failed to load stage groups:', err);
+        console.error('Failed to load stage data:', err);
       }
       setLoading(false);
     }
-    loadGroups();
+    loadData();
   }, []); // eslint-disable-line
 
   const selectGroup = async (group) => {
@@ -140,7 +139,7 @@ function StageArea({ charState, mySummons, activeSummonIds, onToggleSummon, onSt
     const stages = groupDetail.stages || [];
     const group = groupDetail.group;
     const groupIdx = groups.findIndex(g => g.key === selectedGroup.key);
-    const theme = ERA_THEMES[selectedGroup.key] || ERA_THEMES.gojoseon;
+    const theme = { accent: selectedGroup.accentColor || DEFAULT_ACCENT };
 
     return (
       <div className="stage-detail">
@@ -235,34 +234,6 @@ function StageArea({ charState, mySummons, activeSummonIds, onToggleSummon, onSt
               );
             })}
           </div>
-
-          {mySummons && mySummons.length > 0 && (
-            <div className="stage-summons">
-              <div className="stage-section-title">
-                <span className="stage-section-icon">⚔️</span>
-                소환수 동행
-                <span className="stage-section-count">({activeSummonIds.length}/{mySummons.length})</span>
-              </div>
-              <div className="stage-summon-list">
-                {mySummons.map((s) => (
-                  <button
-                    key={s.id}
-                    className={`stage-summon-btn ${activeSummonIds.includes(s.id) ? 'active' : ''}`}
-                    onClick={() => onToggleSummon(s.id)}
-                  >
-                    <span className="stage-summon-img-wrap">
-                      <img src={`/summons/${s.template_id}_icon.png`} alt="" className="stage-summon-img" onError={(e)=>{e.target.style.display='none'; e.target.parentNode.textContent=s.icon}}/>
-                    </span>
-                    <span className="stage-summon-info">
-                      <span className="stage-summon-name">{s.name}</span>
-                      <span className="stage-summon-lv">Lv.{s.level}</span>
-                    </span>
-                    {activeSummonIds.includes(s.id) && <span className="stage-summon-check">✓</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           <div className="stage-monsters">
             <div className="stage-section-title">
@@ -492,34 +463,92 @@ function StageArea({ charState, mySummons, activeSummonIds, onToggleSummon, onSt
     );
   }
 
-  // 그룹 목록 - 카드 그리드 스타일
+  // 현재 국가 (DB에서 가져온 countries 사용)
+  const currentCountry = countries[countryIdx] || countries[0];
+  const filteredGroups = currentCountry
+    ? groups.filter(g => g.country === currentCountry.key)
+    : groups;
+
+  // 이전/다음 국가 해금 여부 확인
+  const isCountryLocked = (cIdx) => {
+    if (cIdx === 0) return false;
+    const prevC = countries[cIdx - 1];
+    if (!prevC) return true;
+    const prevGroups = groups.filter(g => g.country === prevC.key);
+    if (prevGroups.length === 0) return true;
+    const lastGroup = prevGroups[prevGroups.length - 1];
+    return !(lastGroup.clearedStage >= lastGroup.totalStages && lastGroup.totalStages > 0);
+  };
+
+  const prevCountry = () => setCountryIdx(i => Math.max(0, i - 1));
+  const nextCountry = () => {
+    if (countryIdx < countries.length - 1) setCountryIdx(i => i + 1);
+  };
+
+  // 그룹 목록 - 좌우 화살표 국가 전환
   return (
     <div className="stage-scene">
       <div className="stage-scene-bg">
         <img src="/stages/stage_map_bg.png" alt="스테이지 월드맵" className="stage-scene-bg-img" />
         <div className="stage-scene-bg-overlay" />
       </div>
-      <div className="stage-title-area">
-        <img src="/stages/stage_title_deco.png" alt="" className="stage-title-deco" />
-        <div className="stage-title">한국사 스테이지</div>
+      {/* 국가 네비게이션 - 좌우 화살표 */}
+      <div className="stage-country-nav">
+        <button
+          className="stage-country-arrow left"
+          onClick={prevCountry}
+          disabled={countryIdx === 0}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+
+        <div className="stage-country-center">
+          <div className="stage-country-indicator">
+            {countries.map((c, i) => (
+              <span
+                key={c.key}
+                className={`stage-country-dot ${i === countryIdx ? 'active' : ''} ${isCountryLocked(i) ? 'locked' : ''}`}
+                onClick={() => !isCountryLocked(i) && setCountryIdx(i)}
+              />
+            ))}
+          </div>
+          <div className="stage-country-title">{currentCountry.name}</div>
+          <div className="stage-country-subtitle">{currentCountry.subtitle}</div>
+          {isCountryLocked(countryIdx) && (
+            <div className="stage-country-locked-msg">
+              이전 국가 스테이지를 모두 클리어하면 해금됩니다
+            </div>
+          )}
+        </div>
+
+        <button
+          className="stage-country-arrow right"
+          onClick={nextCountry}
+          disabled={countryIdx >= countries.length - 1}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
       </div>
-      <div className="stage-subtitle">역사 속 전장을 누비며 강해지자</div>
 
       <Row className="g-3 stage-grid">
-        {groups.map((g, idx) => {
+        {filteredGroups.map((g, idx) => {
           const locked = !g.unlocked;
           const progress = g.clearedStage || 0;
           const total = g.totalStages || 0;
           const isComplete = progress >= total && total > 0;
-          const prevName = idx > 0 ? groups[idx - 1].name : null;
-          const theme = ERA_THEMES[g.key] || ERA_THEMES.gojoseon;
+          const prevName = idx > 0 ? filteredGroups[idx - 1].name : null;
+          const accent = g.accentColor || DEFAULT_ACCENT;
 
           return (
             <Col xs={6} sm={4} lg={3} key={g.id}>
               <div
                 className={`stage-card ${locked ? 'locked' : ''} ${isComplete ? 'complete' : ''}`}
                 onClick={() => !locked && selectGroup(g)}
-                style={{ '--group-color': g.bgColor, '--era-accent': theme.accent }}
+                style={{ '--group-color': g.bgColor, '--era-accent': accent }}
               >
                 <div className="stage-card-img-wrap">
                   <StageImg src={`/stages/${g.key}_card.png`} alt={g.name} className="stage-card-img" />
@@ -534,7 +563,7 @@ function StageArea({ charState, mySummons, activeSummonIds, onToggleSummon, onSt
                   {isComplete && <div className="stage-card-complete-badge">완료</div>}
                 </div>
                 <div className="stage-card-info">
-                  <div className="stage-card-era" style={{ color: theme.accent }}>{g.era}</div>
+                  <div className="stage-card-era" style={{ color: accent }}>{g.era}</div>
                   <div className="stage-card-name">{g.name}</div>
                   <div className="stage-card-desc">{g.description}</div>
                   <div className="stage-card-meta">

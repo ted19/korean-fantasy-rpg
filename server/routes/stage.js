@@ -1,6 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../db');
+const { pool, getSelectedChar, refreshStamina, calcMaxStamina } = require('../db');
 
 const router = express.Router();
 const JWT_SECRET = 'game-secret-key-change-in-production';
@@ -16,6 +16,26 @@ function auth(req, res, next) {
   }
 }
 
+// 국가 목록
+router.get('/countries', auth, async (req, res) => {
+  try {
+    const [countries] = await pool.query(
+      'SELECT key_name, name, subtitle, icon, display_order, accent_color FROM stage_countries ORDER BY display_order'
+    );
+    res.json({ countries: countries.map(c => ({
+      key: c.key_name,
+      name: c.name,
+      subtitle: c.subtitle,
+      icon: c.icon,
+      displayOrder: c.display_order,
+      accentColor: c.accent_color,
+    }))});
+  } catch (err) {
+    console.error('Stage countries error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 스테이지 그룹 목록 + 진행도
 router.get('/groups', auth, async (req, res) => {
   try {
@@ -27,6 +47,12 @@ router.get('/groups', auth, async (req, res) => {
     );
     if (chars.length === 0) return res.json({ groups: [] });
     const charId = chars[0].id;
+
+    // 국가 순서를 DB에서 가져옴
+    const [countryRows] = await pool.query(
+      'SELECT key_name FROM stage_countries ORDER BY display_order'
+    );
+    const countryOrder = countryRows.map(c => c.key_name);
 
     const [groups] = await pool.query(
       'SELECT * FROM stage_groups ORDER BY display_order'
@@ -47,37 +73,68 @@ router.get('/groups', auth, async (req, res) => {
     const progressMap = {};
     for (const p of progress) progressMap[p.group_id] = { cleared: p.stage_number, stars: p.stars };
 
-    // 순차 해금
-    const result = [];
-    for (let i = 0; i < groups.length; i++) {
-      const g = groups[i];
-      const total = totalMap[g.id] || 0;
-      const prog = progressMap[g.id] || { cleared: 0, stars: 0 };
-      let unlocked = false;
+    // 국가별 순차 해금 (같은 국가 내에서 순차, 이전 국가 마지막 클리어 시 다음 국가 해금)
+    const byCountry = {};
+    for (const g of groups) {
+      const c = g.country || 'korea';
+      if (!byCountry[c]) byCountry[c] = [];
+      byCountry[c].push(g);
+    }
 
-      if (i === 0) {
-        unlocked = true;
-      } else {
-        const prevGroup = groups[i - 1];
-        const prevTotal = totalMap[prevGroup.id] || 0;
-        const prevProg = progressMap[prevGroup.id] || { cleared: 0 };
-        unlocked = prevProg.cleared >= prevTotal;
+    const result = [];
+    for (let ci = 0; ci < countryOrder.length; ci++) {
+      const country = countryOrder[ci];
+      const countryGroups = byCountry[country] || [];
+
+      // 이전 국가의 50% 이상 그룹 클리어시 다음 국가 해금
+      let prevCountryCleared = true;
+      if (ci > 0) {
+        const prevCountry = countryOrder[ci - 1];
+        const prevGroups = byCountry[prevCountry] || [];
+        if (prevGroups.length > 0) {
+          const halfGroups = Math.ceil(prevGroups.length / 2);
+          let clearedGroupCount = 0;
+          for (const pg of prevGroups) {
+            const pgTotal = totalMap[pg.id] || 0;
+            const pgProg = progressMap[pg.id] || { cleared: 0 };
+            if (pgTotal > 0 && pgProg.cleared >= pgTotal) clearedGroupCount++;
+          }
+          prevCountryCleared = clearedGroupCount >= halfGroups;
+        }
       }
 
-      result.push({
-        id: g.id,
-        key: g.key_name,
-        name: g.name,
-        description: g.description,
-        icon: g.icon,
-        era: g.era,
-        requiredLevel: g.required_level,
-        bgColor: g.bg_color,
-        totalStages: total,
-        clearedStage: prog.cleared,
-        stars: prog.stars,
-        unlocked,
-      });
+      for (let i = 0; i < countryGroups.length; i++) {
+        const g = countryGroups[i];
+        const total = totalMap[g.id] || 0;
+        const prog = progressMap[g.id] || { cleared: 0, stars: 0 };
+        let unlocked = false;
+
+        if (i === 0) {
+          unlocked = prevCountryCleared;
+        } else {
+          const prevGroup = countryGroups[i - 1];
+          const prevTotal = totalMap[prevGroup.id] || 0;
+          const prevProg = progressMap[prevGroup.id] || { cleared: 0 };
+          unlocked = prevProg.cleared >= prevTotal;
+        }
+
+        result.push({
+          id: g.id,
+          key: g.key_name,
+          name: g.name,
+          description: g.description,
+          icon: g.icon,
+          era: g.era,
+          country: g.country || 'korea',
+          accentColor: g.accent_color || '#4ade80',
+          requiredLevel: g.required_level,
+          bgColor: g.bg_color,
+          totalStages: total,
+          clearedStage: prog.cleared,
+          stars: prog.stars,
+          unlocked,
+        });
+      }
     }
 
     res.json({ groups: result });
@@ -257,12 +314,43 @@ router.post('/clear', auth, async (req, res) => {
   }
 });
 
+// 전투 시작 시 행동력 차감 (스테이지 & 던전 공용)
+router.post('/spend-stamina', auth, async (req, res) => {
+  try {
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    await refreshStamina(char, pool);
+
+    if (char.stamina <= 0) {
+      return res.status(400).json({ message: '행동력이 부족합니다!', stamina: 0, maxStamina: char.max_stamina });
+    }
+
+    await pool.query(
+      'UPDATE characters SET stamina = stamina - 1, last_stamina_time = IFNULL(last_stamina_time, NOW()) WHERE id = ?',
+      [char.id]
+    );
+
+    const newStamina = char.stamina - 1;
+    // 행동력이 만땅에서 처음 소비되면 last_stamina_time을 현재로 설정
+    if (char.stamina >= char.max_stamina) {
+      await pool.query('UPDATE characters SET last_stamina_time = NOW() WHERE id = ?', [char.id]);
+    }
+
+    const [updatedChar] = await pool.query('SELECT last_stamina_time FROM characters WHERE id = ?', [char.id]);
+    res.json({ stamina: newStamina, maxStamina: char.max_stamina, last_stamina_time: updatedChar[0]?.last_stamina_time });
+  } catch (err) {
+    console.error('Spend stamina error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 스테이지 전투 결과 (재료 드랍, EXP/골드)
 router.post('/battle-result', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const { monstersDefeated, expGained, goldGained, victory } = req.body;
+    const { monstersDefeated, expGained, goldGained, victory, activeSummonIds, activeMercenaryIds, summonExpMap, mercExpMap, playerHp, playerMp } = req.body;
 
     const [chars] = await conn.query(
       req.selectedCharId
@@ -273,37 +361,162 @@ router.post('/battle-result', auth, async (req, res) => {
     if (chars.length === 0) { await conn.rollback(); return res.status(404).json({ message: '캐릭터 없음' }); }
     const char = chars[0];
 
-    // 경험치, 골드 지급
-    if (victory) {
-      await conn.query('UPDATE characters SET exp = exp + ?, gold = gold + ? WHERE id = ?',
-        [expGained || 0, goldGained || 0, char.id]);
+    const levelBefore = char.level;
+    let newLevel = char.level;
+    let newExp = char.exp || 0;
+    let newGold = char.gold || 0;
+    let newMaxHp = char.hp;
+    let newMaxMp = char.mp;
+    let newAtk = char.attack;
+    let newDef = char.defense;
+    let newPhysAtk = char.phys_attack || 0;
+    let newPhysDef = char.phys_defense || 0;
+    let newMagAtk = char.mag_attack || 0;
+    let newMagDef = char.mag_defense || 0;
+    let newCritRate = char.crit_rate || 0;
+    let newEvasion = char.evasion || 0;
+    let finalHp = typeof playerHp === 'number' ? Math.max(0, playerHp) : (char.current_hp ?? char.hp);
+    let finalMp = typeof playerMp === 'number' ? Math.max(0, playerMp) : (char.current_mp ?? char.mp);
 
-      // 레벨업 체크
-      let curExp = (char.exp || 0) + (expGained || 0);
-      let curLevel = char.level;
-      let expNeeded = curLevel * 100;
-      while (curExp >= expNeeded) {
-        curExp -= expNeeded;
-        curLevel++;
-        expNeeded = curLevel * 100;
+    if (victory) {
+      newExp += expGained || 0;
+      newGold += goldGained || 0;
+
+      // 레벨업 체크 (성장률 참조)
+      const [gRows] = await conn.query('SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]);
+      const g = gRows[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
+      let expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
+      while (newExp >= expNeeded) {
+        newExp -= expNeeded;
+        newLevel++;
+        newMaxHp += Math.floor(g.hp_per_level);
+        newMaxMp += Math.floor(g.mp_per_level);
+        newAtk += Math.floor(g.attack_per_level);
+        newDef += Math.floor(g.defense_per_level);
+        newPhysAtk += Math.floor(g.phys_attack_per_level);
+        newPhysDef += Math.floor(g.phys_defense_per_level);
+        newMagAtk += Math.floor(g.mag_attack_per_level);
+        newMagDef += Math.floor(g.mag_defense_per_level);
+        if (newLevel % 10 === 0) {
+          newCritRate += Math.floor(g.crit_rate_per_10level);
+          newEvasion += Math.floor(g.evasion_per_10level);
+        }
+        // 레벨업 시 HP/MP 최대치로 회복
+        finalHp = newMaxHp;
+        finalMp = newMaxMp;
+        expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
       }
-      if (curLevel > char.level) {
-        const [gRows] = await conn.query('SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]);
-        const g = gRows[0] || {};
-        const lvlDiff = curLevel - char.level;
+
+      // 소환수 경험치 분배 (기여도 기반)
+      if (activeSummonIds && activeSummonIds.length > 0) {
+        for (const smId of activeSummonIds) {
+          const [smRows] = await conn.query('SELECT * FROM character_summons WHERE id = ? AND character_id = ?', [smId, char.id]);
+          if (smRows.length === 0) continue;
+          const sm = smRows[0];
+          const summonExp = (summonExpMap && summonExpMap[smId]) ? summonExpMap[smId] : Math.floor((expGained || 0) * 0.7);
+          let newSmExp = (sm.exp || 0) + summonExp;
+          const expNeededSm = Math.floor(40 * sm.level + 0.25 * sm.level * sm.level);
+          if (newSmExp >= expNeededSm) {
+            const leftover = newSmExp - expNeededSm;
+            const newSmLevel = sm.level + 1;
+            const [smtRows] = await conn.query('SELECT type FROM summon_templates WHERE id = (SELECT template_id FROM character_summons WHERE id = ?)', [sm.id]);
+            const smType = smtRows[0]?.type || '몬스터';
+            const [sg2Rows] = await conn.query('SELECT * FROM summon_growth_rates WHERE summon_type = ?', [smType]);
+            const sg2 = sg2Rows[0] || { hp_per_level: 5, mp_per_level: 2, attack_per_level: 1, defense_per_level: 1, phys_attack_per_level: 1, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
+            await conn.query(
+              `UPDATE character_summons SET level = ?, exp = ?,
+                hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?,
+                phys_attack = phys_attack + ?, phys_defense = phys_defense + ?,
+                mag_attack = mag_attack + ?, mag_defense = mag_defense + ?,
+                crit_rate = crit_rate + ?, evasion = evasion + ?
+               WHERE id = ?`,
+              [newSmLevel, leftover,
+               Math.floor(sg2.hp_per_level), Math.floor(sg2.mp_per_level),
+               Math.floor(sg2.attack_per_level), Math.floor(sg2.defense_per_level),
+               Math.floor(sg2.phys_attack_per_level), Math.floor(sg2.phys_defense_per_level),
+               Math.floor(sg2.mag_attack_per_level), Math.floor(sg2.mag_defense_per_level),
+               newSmLevel % 10 === 0 ? Math.floor(sg2.crit_rate_per_10level) : 0,
+               newSmLevel % 10 === 0 ? Math.floor(sg2.evasion_per_10level) : 0, sm.id]
+            );
+          } else {
+            await conn.query('UPDATE character_summons SET exp = ? WHERE id = ?', [newSmExp, sm.id]);
+          }
+        }
+      }
+
+      // 용병 경험치 분배 (기여도 기반)
+      if (activeMercenaryIds && activeMercenaryIds.length > 0) {
+        for (const mId of activeMercenaryIds) {
+          const [mRows] = await conn.query('SELECT * FROM character_mercenaries WHERE id = ? AND character_id = ?', [mId, char.id]);
+          if (mRows.length === 0) continue;
+          const merc = mRows[0];
+          const mercExp = (mercExpMap && mercExpMap[mId]) ? mercExpMap[mId] : Math.floor((expGained || 0) * 0.5);
+          let newMercExp = (merc.exp || 0) + mercExp;
+          const expNeededMerc = Math.floor(40 * merc.level + 0.25 * merc.level * merc.level);
+          if (newMercExp >= expNeededMerc) {
+            const leftover = newMercExp - expNeededMerc;
+            const newMercLevel = merc.level + 1;
+            const [mtRows] = await conn.query('SELECT * FROM mercenary_templates WHERE id = ?', [merc.template_id]);
+            const mt = mtRows[0] || { growth_hp: 5, growth_mp: 2, growth_phys_attack: 1, growth_phys_defense: 1, growth_mag_attack: 1, growth_mag_defense: 1 };
+            await conn.query(
+              `UPDATE character_mercenaries SET level = ?, exp = ?,
+                hp = hp + ?, mp = mp + ?,
+                phys_attack = phys_attack + ?, phys_defense = phys_defense + ?,
+                mag_attack = mag_attack + ?, mag_defense = mag_defense + ?
+               WHERE id = ?`,
+              [newMercLevel, leftover,
+               mt.growth_hp, mt.growth_mp,
+               mt.growth_phys_attack, mt.growth_phys_defense,
+               mt.growth_mag_attack, mt.growth_mag_defense, merc.id]
+            );
+            // 레벨업 시 새 스킬 자동 학습
+            const [newSkills] = await conn.query(
+              `SELECT id FROM mercenary_skills
+               WHERE required_level <= ? AND (is_common = 1 OR class_type = ?)
+               AND id NOT IN (SELECT skill_id FROM mercenary_learned_skills WHERE mercenary_id = ?)`,
+              [newMercLevel, mt.class_type, merc.id]
+            );
+            for (const sk of newSkills) {
+              await conn.query('INSERT IGNORE INTO mercenary_learned_skills (mercenary_id, skill_id) VALUES (?, ?)', [merc.id, sk.id]);
+            }
+          } else {
+            await conn.query('UPDATE character_mercenaries SET exp = ? WHERE id = ?', [newMercExp, merc.id]);
+          }
+        }
+      }
+      // 용병 피로도 차감 (전투 참여 시 1 소모)
+      if (activeMercenaryIds && activeMercenaryIds.length > 0) {
         await conn.query(
-          `UPDATE characters SET level = ?, exp = ?,
-            hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?,
-            current_hp = hp + ?, current_mp = mp + ?
-          WHERE id = ?`,
-          [curLevel, curExp,
-           Math.floor((g.hp_per_level || 10) * lvlDiff), Math.floor((g.mp_per_level || 5) * lvlDiff),
-           Math.floor((g.attack_per_level || 2) * lvlDiff), Math.floor((g.defense_per_level || 1) * lvlDiff),
-           Math.floor((g.hp_per_level || 10) * lvlDiff), Math.floor((g.mp_per_level || 5) * lvlDiff),
-           char.id]
+          `UPDATE character_mercenaries SET fatigue = GREATEST(0, fatigue - 1) WHERE id IN (?) AND character_id = ?`,
+          [activeMercenaryIds, char.id]
         );
       }
+    } else {
+      finalHp = 0;
     }
+
+    // 레벨업 스킬포인트
+    const lvlUps = newLevel - levelBefore;
+    const newMaxStamina = newLevel > levelBefore ? calcMaxStamina(newLevel) : (char.max_stamina || 10);
+
+    await conn.query(
+      `UPDATE characters SET level = ?, exp = ?, gold = ?, hp = ?, mp = ?,
+        attack = ?, defense = ?, current_hp = ?, current_mp = ?,
+        phys_attack = ?, phys_defense = ?, mag_attack = ?, mag_defense = ?,
+        crit_rate = ?, evasion = ?,
+        skill_points = skill_points + ?, total_skill_points = total_skill_points + ?
+        ${newLevel > levelBefore ? ', stamina = ?, max_stamina = ?' : ''}
+      WHERE id = ?`,
+      newLevel > levelBefore
+        ? [newLevel, newExp, newGold, newMaxHp, newMaxMp, newAtk, newDef,
+           finalHp, finalMp,
+           newPhysAtk, newPhysDef, newMagAtk, newMagDef, newCritRate, newEvasion,
+           lvlUps, lvlUps, newMaxStamina, newMaxStamina, char.id]
+        : [newLevel, newExp, newGold, newMaxHp, newMaxMp, newAtk, newDef,
+           finalHp, finalMp,
+           newPhysAtk, newPhysDef, newMagAtk, newMagDef, newCritRate, newEvasion,
+           lvlUps, lvlUps, char.id]
+    );
 
     // 재료 드랍
     let droppedMaterials = [];
@@ -333,8 +546,161 @@ router.post('/battle-result', auth, async (req, res) => {
       }
     }
 
+    // 던전 티켓 드랍 (스테이지 승리 시)
+    let droppedTickets = [];
+    if (victory && req.body.groupKey) {
+      const [ticketDrops] = await conn.query(
+        `SELECT std.*, dt.dungeon_key, dt.name, dt.icon, dt.grade
+         FROM stage_ticket_drops std
+         JOIN dungeon_tickets dt ON std.ticket_id = dt.id
+         WHERE std.group_key = ?`,
+        [req.body.groupKey]
+      );
+      for (const drop of ticketDrops) {
+        if (Math.random() < drop.drop_rate) {
+          const qty = drop.min_quantity + Math.floor(Math.random() * (drop.max_quantity - drop.min_quantity + 1));
+          await conn.query(
+            `INSERT INTO character_tickets (character_id, ticket_id, quantity) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
+            [char.id, drop.ticket_id, qty, qty]
+          );
+          const existing = droppedTickets.find(d => d.name === drop.name);
+          if (existing) existing.quantity += qty;
+          else droppedTickets.push({ name: drop.name, icon: drop.icon, grade: drop.grade, dungeonKey: drop.dungeon_key, quantity: qty });
+        }
+      }
+    }
+
+    // 퀘스트 진행도 업데이트
+    if (victory) {
+      // clear_stage 'any' 타겟 (일일/업적)
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + 1
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'clear_stage' AND q.target = 'any'`,
+        [char.id]
+      );
+
+      // 처치 몬스터별 hunt 퀘스트
+      if (monstersDefeated && monstersDefeated.length > 0) {
+        for (const mName of monstersDefeated) {
+          await conn.query(
+            `UPDATE character_quests cq
+             JOIN quests q ON cq.quest_id = q.id
+             SET cq.progress = cq.progress + 1
+             WHERE cq.character_id = ? AND cq.status = 'active'
+               AND q.type = 'hunt' AND q.target = ?`,
+            [char.id, mName]
+          );
+        }
+        // hunt_location 'any' (일일/업적)
+        await conn.query(
+          `UPDATE character_quests cq
+           JOIN quests q ON cq.quest_id = q.id
+           SET cq.progress = cq.progress + ?
+           WHERE cq.character_id = ? AND cq.status = 'active'
+             AND q.type = 'hunt_location' AND q.target = 'any'`,
+          [monstersDefeated.length, char.id]
+        );
+      }
+
+      // collect_material 'any' (일일/업적)
+      if (droppedMaterials.length > 0) {
+        const totalMatQty = droppedMaterials.reduce((s, d) => s + d.quantity, 0);
+        await conn.query(
+          `UPDATE character_quests cq
+           JOIN quests q ON cq.quest_id = q.id
+           SET cq.progress = cq.progress + ?
+           WHERE cq.character_id = ? AND cq.status = 'active'
+             AND q.type = 'collect_material' AND q.target = 'any'`,
+          [totalMatQty, char.id]
+        );
+      }
+
+      // 목표 달성 시 completed
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.status = 'completed', cq.completed_at = NOW()
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND cq.progress >= q.target_count`,
+        [char.id]
+      );
+
+      // 레벨업 시 level 퀘스트 체크
+      if (newLevel > levelBefore) {
+        await conn.query(
+          `UPDATE character_quests cq
+           JOIN quests q ON cq.quest_id = q.id
+           SET cq.status = 'completed', cq.progress = 1, cq.completed_at = NOW()
+           WHERE cq.character_id = ? AND cq.status = 'active'
+             AND q.type = 'level' AND ? >= CAST(q.target AS UNSIGNED)`,
+          [char.id, newLevel]
+        );
+      }
+    }
+
+    // 소환수 최신 정보
+    let summonResults = [];
+    if (victory && activeSummonIds && activeSummonIds.length > 0) {
+      const [smList] = await conn.query(
+        `SELECT cs.id, cs.template_id, st.name, cs.level, cs.exp, st.icon, st.type
+         FROM character_summons cs
+         JOIN summon_templates st ON cs.template_id = st.id
+         WHERE cs.id IN (?) AND cs.character_id = ?`,
+        [activeSummonIds, char.id]
+      );
+      summonResults = smList.map(s => ({
+        id: s.id, templateId: s.template_id, name: s.name, level: s.level, exp: s.exp,
+        icon: s.icon, type: s.type, expNeeded: Math.floor(40 * s.level + 0.25 * s.level * s.level),
+      }));
+    }
+
+    // 용병 최신 정보
+    let mercenaryResults = [];
+    if (victory && activeMercenaryIds && activeMercenaryIds.length > 0) {
+      const [mercList] = await conn.query(
+        `SELECT cm.id, cm.template_id, cm.level, cm.exp, mt.name, mt.icon, mt.class_type
+         FROM character_mercenaries cm
+         JOIN mercenary_templates mt ON cm.template_id = mt.id
+         WHERE cm.id IN (?) AND cm.character_id = ?`,
+        [activeMercenaryIds, char.id]
+      );
+      mercenaryResults = mercList.map(m => ({
+        id: m.id, templateId: m.template_id, name: m.name, level: m.level, exp: m.exp,
+        icon: m.icon, classType: m.class_type, expNeeded: Math.floor(40 * m.level + 0.25 * m.level * m.level),
+      }));
+    }
+
+    // 운세 버프 remaining_battles 차감 (스테이지 전투)
+    await conn.query(
+      'UPDATE character_fortunes SET remaining_battles = remaining_battles - 1 WHERE character_id = ? AND remaining_battles > 0',
+      [char.id]
+    );
+    await conn.query(
+      'DELETE FROM character_fortunes WHERE character_id = ? AND remaining_battles <= 0',
+      [char.id]
+    );
+
     await conn.commit();
-    res.json({ success: true, droppedMaterials });
+    res.json({
+      droppedMaterials,
+      droppedTickets,
+      leveledUp: newLevel > levelBefore,
+      levelBefore,
+      character: {
+        level: newLevel, exp: newExp, gold: newGold,
+        hp: newMaxHp, mp: newMaxMp, attack: newAtk, defense: newDef,
+        phys_attack: newPhysAtk, phys_defense: newPhysDef,
+        mag_attack: newMagAtk, mag_defense: newMagDef,
+        crit_rate: newCritRate, evasion: newEvasion,
+        current_hp: finalHp, current_mp: finalMp,
+      },
+      summonResults,
+      mercenaryResults,
+    });
   } catch (err) {
     await conn.rollback();
     console.error('Stage battle result error:', err);

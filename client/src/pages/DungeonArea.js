@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Badge } from 'react-bootstrap';
 import api from '../api';
+import { ELITE_TIERS } from '../srpg/battleEngine';
 import './DungeonArea.css';
 import './MonsterBestiary.css';
 
@@ -17,6 +18,24 @@ const DUNGEON_THEMES = {
   temple: { accent: '#f472b6' },
   demon: { accent: '#f87171' },
   dragon: { accent: '#fbbf24' },
+  // 한국 던전
+  kr_forest: { accent: '#86efac' },
+  kr_mountain: { accent: '#bfdbfe' },
+  kr_swamp: { accent: '#d9f99d' },
+  kr_temple: { accent: '#fda4af' },
+  kr_spirit: { accent: '#e9d5ff' },
+  // 일본 던전
+  jp_forest: { accent: '#fca5a5' },
+  jp_mountain: { accent: '#fdba74' },
+  jp_temple: { accent: '#f9a8d4' },
+  jp_ocean: { accent: '#7dd3fc' },
+  jp_spirit: { accent: '#d4d4d8' },
+  // 중국 던전
+  cn_forest: { accent: '#6ee7b7' },
+  cn_mountain: { accent: '#fde68a' },
+  cn_temple: { accent: '#fca5a5' },
+  cn_swamp: { accent: '#bef264' },
+  cn_spirit: { accent: '#c4b5fd' },
 };
 
 const ELEMENT_INFO = {
@@ -107,6 +126,10 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
 
   const handleStartBattle = () => {
     if (!stagePopup || !dungeonDetail) return;
+    if ((selectedDungeon?.ticketCount || 0) <= 0) return;
+    // 로컬 티켓 카운트 차감 (서버에서 실제 차감은 Home.js에서 처리)
+    setSelectedDungeon(prev => prev ? { ...prev, ticketCount: Math.max(0, (prev.ticketCount || 0) - 1) } : prev);
+    setDungeons(prev => prev.map(d => d.key_name === selectedDungeon.key_name ? { ...d, ticketCount: Math.max(0, (d.ticketCount || 0) - 1) } : d));
     setStagePopup(null);
     onStartBattle(selectedDungeon.key_name, stagePopup);
   };
@@ -219,6 +242,7 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
                     {stage.isBoss && (
                       <div className="dg-boss-frame">
                         <div className="dg-boss-tag">BOSS</div>
+                        <div className="dg-boss-horns" />
                       </div>
                     )}
                     <div className="dg-node-inner">
@@ -240,34 +264,6 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
               );
             })}
           </div>
-
-          {mySummons && mySummons.length > 0 && (
-            <div className="dg-summons">
-              <div className="dg-section-title">
-                <span className="dg-section-icon">⚔️</span>
-                소환수 동행
-                <span className="dg-section-count">({activeSummonIds.length}/{mySummons.length})</span>
-              </div>
-              <div className="dg-summon-list">
-                {mySummons.map((s) => (
-                  <button
-                    key={s.id}
-                    className={`dg-summon-btn ${activeSummonIds.includes(s.id) ? 'active' : ''}`}
-                    onClick={() => onToggleSummon(s.id)}
-                  >
-                    <span className="dg-summon-img-wrap">
-                      <img src={`/summons/${s.template_id}_icon.png`} alt="" className="dg-summon-img" onError={(e)=>{e.target.style.display='none'; e.target.parentNode.textContent=s.icon}}/>
-                    </span>
-                    <span className="dg-summon-info">
-                      <span className="dg-summon-name">{s.name}</span>
-                      <span className="dg-summon-lv">Lv.{s.level}</span>
-                    </span>
-                    {activeSummonIds.includes(s.id) && <span className="dg-summon-check">✓</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           <div className="dg-monsters">
             <div className="dg-section-title">
@@ -340,8 +336,18 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
                     <span className="dg-popup-info-value">{{ grass: '초원', stone: '바위', dirt: '흙', water: '물', dark: '암흑' }[stagePopup.baseTileType] || stagePopup.baseTileType}</span>
                   </div>
                 </div>
-                <button className="dg-popup-start-btn" onClick={handleStartBattle}>
-                  ⚔️ 전투 시작
+                <div className="dg-popup-ticket-info">
+                  <span className="dg-popup-ticket-label">입장권</span>
+                  <span className={`dg-popup-ticket-count ${(selectedDungeon?.ticketCount || 0) > 0 ? 'has' : 'empty'}`}>
+                    {selectedDungeon?.ticketIcon || '🎫'} {selectedDungeon?.ticketCount || 0}장 보유
+                  </span>
+                </div>
+                <button
+                  className={`dg-popup-start-btn ${(selectedDungeon?.ticketCount || 0) <= 0 ? 'disabled' : ''}`}
+                  onClick={handleStartBattle}
+                  disabled={(selectedDungeon?.ticketCount || 0) <= 0}
+                >
+                  {(selectedDungeon?.ticketCount || 0) > 0 ? '⚔️ 전투 시작 (입장권 1장 소모)' : '🎫 입장권이 부족합니다'}
                 </button>
               </div>
             </div>
@@ -407,6 +413,36 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
                             style={{ width: `${Math.min((stat.value / stat.max) * 100, 100)}%` }} />
                         </div>
                         <span className={`bd-stat-value bd-sv-${stat.cls}`}>{stat.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bd-section">
+                  <h3 className="bd-section-title">정예 등급 정보</h3>
+                  <p className="bd-elite-desc">이 몬스터가 정예로 등장할 경우 예상 능력치입니다.</p>
+                  <div className="bd-elite-tiers">
+                    {ELITE_TIERS.map(tier => (
+                      <div key={tier.key} className="bd-elite-tier" style={{ '--elite-color': tier.color }}>
+                        <div className="bd-elite-tier-header">
+                          <span className="bd-elite-tier-icon">{tier.icon}</span>
+                          <span className="bd-elite-tier-label" style={{ color: tier.color }}>{tier.label}</span>
+                          <span className="bd-elite-tier-chance">{Math.round(tier.chance * 100)}%</span>
+                        </div>
+                        <div className="bd-elite-tier-stats">
+                          <span className="bd-elite-stat">❤️ HP {Math.floor((monsterPopup.hp || 0) * tier.mult)}</span>
+                          <span className="bd-elite-stat">💎 MP {Math.floor((monsterPopup.mp || 0) * tier.mult)}</span>
+                          <span className="bd-elite-stat">⚔️ 물공 {Math.floor((monsterPopup.phys_attack || 0) * tier.mult)}</span>
+                          <span className="bd-elite-stat">🛡️ 물방 {Math.floor((monsterPopup.phys_defense || 0) * tier.mult)}</span>
+                          <span className="bd-elite-stat">✨ 마공 {Math.floor((monsterPopup.mag_attack || 0) * tier.mult)}</span>
+                          <span className="bd-elite-stat">🔮 마방 {Math.floor((monsterPopup.mag_defense || 0) * tier.mult)}</span>
+                          <span className="bd-elite-stat">💥 치명 {Math.floor((monsterPopup.crit_rate || 0) * tier.mult)}</span>
+                          <span className="bd-elite-stat">💨 회피 {Math.floor((monsterPopup.evasion || 0) * tier.mult)}</span>
+                        </div>
+                        <div className="bd-elite-tier-rewards">
+                          <span className="bd-elite-reward">EXP x{tier.rewardMult}</span>
+                          <span className="bd-elite-reward">Gold x{tier.rewardMult}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -502,7 +538,7 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
   return (
     <div className="dg-scene">
       <div className="dg-scene-bg">
-        <img src="/dungeons/dungeon_map_bg.png" alt="던전 월드맵" className="dg-scene-bg-img" />
+        <div className="dg-scene-bg-img" style={{ backgroundImage: 'url(/dungeons/dungeon_map_bg.png)' }} />
         <div className="dg-scene-bg-overlay" />
       </div>
       <div className="dg-title-area">
@@ -551,6 +587,9 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
                   <div className="dg-card-desc">{d.description}</div>
                   <div className="dg-card-meta">
                     <Badge bg="warning" text="dark" className="dg-card-lv">Lv.{d.required_level}+</Badge>
+                    <span className={`dg-card-ticket ${(d.ticketCount || 0) > 0 ? 'has' : 'empty'}`}>
+                      {d.ticketIcon || '🎫'} {d.ticketCount || 0}
+                    </span>
                     <span className="dg-card-progress-text">{progress}/{total}</span>
                   </div>
                   <div className="dg-card-progress-bar">

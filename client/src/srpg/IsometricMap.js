@@ -79,6 +79,10 @@ function loadCachedTexture(url) {
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(1, 1);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
+  tex.generateMipmaps = true;
   textureCache[url] = tex;
   return tex;
 }
@@ -150,6 +154,21 @@ function WaterMaterial({ isHighlight, highlightColor }) {
 }
 
 // 개별 타일 메시 (PBR 텍스처 적용, 오버레이 하이라이트)
+function PulsingOverlay({ position, color, baseOpacity }) {
+  const matRef = useRef();
+  useFrame((state) => {
+    if (matRef.current) {
+      matRef.current.opacity = baseOpacity + Math.sin(state.clock.elapsedTime * 4) * 0.15;
+    }
+  });
+  return (
+    <mesh position={position}>
+      <boxGeometry args={[TILE_SIZE * 0.95, 0.01, TILE_SIZE * 0.95]} />
+      <meshBasicMaterial ref={matRef} color={color} transparent opacity={baseOpacity} side={THREE.DoubleSide} depthWrite={false} />
+    </mesh>
+  );
+}
+
 function Tile({ tile, isMovable, isAttackable, isSelected, isHovered, onClick, onHover, onUnhover }) {
   const meshRef = useRef();
   const h = tile.height * HEIGHT_SCALE;
@@ -165,6 +184,7 @@ function Tile({ tile, isMovable, isAttackable, isSelected, isHovered, onClick, o
     isMovable ? 0.4 :
     isAttackable ? 0.45 :
     isHovered ? 0.3 : 0;
+  const shouldPulse = isMovable || isAttackable;
 
   // PBR 텍스처 로드 (물 제외)
   const textures = useMemo(() => {
@@ -198,6 +218,7 @@ function Tile({ tile, isMovable, isAttackable, isSelected, isHovered, onClick, o
       <mesh
         ref={meshRef}
         position={[0, h / 2, 0]}
+        receiveShadow
         onClick={(e) => { e.stopPropagation(); onClick(tile); }}
         onPointerOver={(e) => { e.stopPropagation(); onHover(tile); }}
         onPointerOut={(e) => { e.stopPropagation(); onUnhover(); }}
@@ -210,7 +231,10 @@ function Tile({ tile, isMovable, isAttackable, isSelected, isHovered, onClick, o
         )}
       </mesh>
       {/* 하이라이트 오버레이 (텍스처 위에 반투명 색상) */}
-      {overlayColor && !isWater && (
+      {overlayColor && !isWater && shouldPulse && (
+        <PulsingOverlay position={[0, h / 2 + 0.045, 0]} color={overlayColor} baseOpacity={overlayOpacity} />
+      )}
+      {overlayColor && !isWater && !shouldPulse && (
         <mesh position={[0, h / 2 + 0.045, 0]}>
           <boxGeometry args={[TILE_SIZE * 0.95, 0.01, TILE_SIZE * 0.95]} />
           <meshBasicMaterial color={overlayColor} transparent opacity={overlayOpacity} side={THREE.DoubleSide} depthWrite={false} />
@@ -218,15 +242,15 @@ function Tile({ tile, isMovable, isAttackable, isSelected, isHovered, onClick, o
       )}
       {/* 측면 기둥 */}
       {h > 0 && (
-        <mesh position={[0, 0, 0]}>
+        <mesh position={[0, 0, 0]} castShadow receiveShadow>
           <boxGeometry args={[TILE_SIZE * 0.95, h, TILE_SIZE * 0.95]} />
-          <meshStandardMaterial color={sideColor} roughness={0.9} metalness={0} />
+          <meshStandardMaterial color={sideColor} roughness={0.85} metalness={0.02} />
         </mesh>
       )}
-      {/* 그리드 선 */}
+      {/* 그리드 선 (타일 가장자리) */}
       <lineSegments position={[0, h / 2 + 0.05, 0]}>
         <edgesGeometry args={[new THREE.BoxGeometry(TILE_SIZE * 0.95, 0.01, TILE_SIZE * 0.95)]} />
-        <lineBasicMaterial color="#ffffff" opacity={0.12} transparent />
+        <lineBasicMaterial color="#ffffff" opacity={0.08} transparent />
       </lineSegments>
     </group>
   );
@@ -972,6 +996,11 @@ function getUnitModel(unit) {
     return 'mage';
   }
 
+  // 용병 (mercId 기반)
+  if (unit.team === 'player' && unit.id.startsWith('merc_') && unit.mercId) {
+    return `merc_${unit.mercId}`;
+  }
+
   // 소환수 (먼저 체크 - 이름/아이콘 기반)
   if (unit.team === 'player' && unit.id.startsWith('summon_')) {
     if (name.includes('떠도는 원혼')) return 'wanderingSoul';
@@ -1178,41 +1207,62 @@ function getUnitModel(unit) {
 // public/models/ 폴더에 GLB 파일이 있으면 자동으로 로드
 // 파일명 규칙: {modelType}.glb (예: wolf.glb, ghost.glb, mage.glb)
 const GLB_MODEL_SCALES = {
-  player_pungsu: 1.05, player_mudang: 1.05, player_monk: 1.05,
-  mage: 0.84, shaman: 0.84, monk: 0.84,
-  mouse: 0.63, wolf: 0.74, spider: 0.63, bat: 0.63,
-  golem: 0.95, lizard: 0.74, ghost: 0.84,
-  cursedMonk: 0.84, darkGuardian: 1.05,
-  fox: 0.74, waterElemental: 0.84, fireElemental: 0.84,
-  windElemental: 0.84, skeleton: 0.84, lich: 0.95, miniGolem: 0.63,
-  rabbit: 0.63, boar: 0.80, viper: 0.63, blackBear: 0.89, snowLeopard: 0.80,
-  grayBear: 0.95, python: 0.74, whiteTiger: 0.89, threeHeadedHound: 0.89, ancientFox: 0.80,
-  centipede: 0.63, poisonMoth: 0.68, killerBee: 0.63, scorpion: 0.68, queenAnt: 0.72,
-  stagBeetle: 0.63, spiderQueen: 0.84, mantisWarrior: 0.80,
-  zombie: 0.84, ghoul: 0.80, wraith: 0.84, vampire: 0.89, deathKnight: 0.95,
-  lichKing: 1.01, skeletalArcher: 0.80, mummy: 0.84,
-  wanderingSpirit: 0.80, maidenGhost: 0.84, yaksha: 0.95, waterGhost: 0.84,
-  blackShadow: 0.84, blindSpirit: 0.80, moonGhost: 0.84, imoogi: 0.89,
-  earthElemental: 0.89, lightningElemental: 0.84, iceElemental: 0.84,
-  lightElemental: 0.84, darkElemental: 0.84, elementalKing: 1.01,
-  imp: 0.63, succubus: 0.89, incubus: 0.89, hellHound: 0.84, balrog: 1.05,
-  demonServant: 0.84, fallenAngel: 0.89, demonKing: 1.10, gargoyle: 0.84,
-  dragonHatchling: 0.68, wyvern: 0.84, fireDragon: 1.01, iceDragon: 1.01,
-  darkDragon: 1.01, dragonKing: 1.10, drake: 0.84, hydra: 1.01,
-  magicArmor: 0.89, guardian: 0.95, homunculus: 0.63, manaGolem: 0.95,
-  unicorn: 0.84, griffin: 0.89, phoenix: 0.80, mimic: 0.68,
-  poisonMushroom: 0.59, vineMonster: 0.74, treant: 0.95, carnivorousPlant: 0.68,
-  sporeSwarm: 0.63, mandrake: 0.63, worldTreeFragment: 0.89, fungalLord: 0.84,
-  bandit: 0.80, assassin: 0.84, darkWizard: 0.89, fallenKnight: 0.89,
-  berserker: 0.89, necromancer: 0.89, grandWizard: 0.89, thiefLeader: 0.84,
-  smallDokkaebi: 0.59, fireDokkaebi: 0.68, stoneDokkaebi: 0.63, dokkaebiGeneral: 0.84,
-  dokkaebiKing: 0.95, pondDokkaebi: 0.63, dokkaebiClub: 0.68, forestDokkaebi: 0.63,
-  haetae: 0.84, bulgasari: 0.89, chimera: 0.89, minotaur: 0.95,
-  medusa: 0.89, giant: 1.05, werewolf: 0.89,
-  greenSlime: 0.59, blueSlime: 0.59, redSlime: 0.59, poisonSlime: 0.59,
-  metalSlime: 0.59, kingSlime: 0.72, jellyfish: 0.63, slimeLord: 0.80,
-  kingCrab: 0.68, shark: 0.74, giantOctopus: 0.74, mermaidWarrior: 0.80,
-  deepSeaFish: 0.63, kraken: 0.89, seahorseKnight: 0.74, seaDragon: 0.95,
+  // 플레이어 (기준 0.55)
+  player_pungsu: 0.55, player_mudang: 0.55, player_monk: 0.55,
+  mage: 0.55, shaman: 0.55, monk: 0.55,
+  // 소형 (0.35)
+  mouse: 0.35, rabbit: 0.35, mouseSummon: 0.35,
+  // 소형+ (0.40)
+  bat: 0.40, spider: 0.40, imp: 0.40, homunculus: 0.40,
+  smallDokkaebi: 0.40, poisonMushroom: 0.40, sporeSwarm: 0.40, mandrake: 0.40,
+  greenSlime: 0.40, blueSlime: 0.40, redSlime: 0.40, poisonSlime: 0.40,
+  metalSlime: 0.40, jellyfish: 0.40,
+  // 중형- (0.45)
+  viper: 0.45, centipede: 0.45, poisonMoth: 0.45, killerBee: 0.45,
+  scorpion: 0.45, stagBeetle: 0.45, mimic: 0.45, kingCrab: 0.45,
+  deepSeaFish: 0.45, dragonHatchling: 0.45,
+  fireDokkaebi: 0.45, stoneDokkaebi: 0.45, pondDokkaebi: 0.45,
+  dokkaebiClub: 0.45, forestDokkaebi: 0.45,
+  // 중형 (0.50) - 일반 몬스터/용병/소환수
+  wolf: 0.50, lizard: 0.50, boar: 0.50, python: 0.50, fox: 0.50,
+  snowLeopard: 0.50, ancientFox: 0.50, queenAnt: 0.50,
+  skeleton: 0.50, zombie: 0.50, ghoul: 0.50, skeletalArcher: 0.50, mummy: 0.50,
+  ghost: 0.50, wraith: 0.50, wanderingSpirit: 0.50, waterGhost: 0.50,
+  blackShadow: 0.50, blindSpirit: 0.50, moonGhost: 0.50,
+  waterElemental: 0.50, fireElemental: 0.50, windElemental: 0.50,
+  earthElemental: 0.50, lightningElemental: 0.50, iceElemental: 0.50,
+  lightElemental: 0.50, darkElemental: 0.50,
+  bandit: 0.50, assassin: 0.50, thiefLeader: 0.50,
+  shark: 0.50, giantOctopus: 0.50, seahorseKnight: 0.50, mermaidWarrior: 0.50,
+  vineMonster: 0.50, carnivorousPlant: 0.50, phoenix: 0.50, griffin: 0.50,
+  kingSlime: 0.50, slimeLord: 0.50,
+  wanderingSoul: 0.50, graveyardGhost: 0.50, wolfSummon: 0.50,
+  nineTailFoxSummon: 0.50, spiderQueenSummon: 0.50,
+  waterSpiritSummon: 0.50, fireSpiritSummon: 0.50, windSpiritSummon: 0.50,
+  skeletonWarriorSummon: 0.50, lichSummon: 0.50, golemFragment: 0.50,
+  merc_1: 0.55, merc_2: 0.55, merc_3: 0.55, merc_4: 0.55,
+  merc_5: 0.55, merc_6: 0.55, merc_7: 0.55, merc_8: 0.55,
+  // 중형+ (0.55)
+  cursedMonk: 0.55, blackBear: 0.55, hellHound: 0.55,
+  maidenGhost: 0.55, vampire: 0.55, deathKnight: 0.55,
+  succubus: 0.55, incubus: 0.55, demonServant: 0.55, gargoyle: 0.55,
+  wyvern: 0.55, drake: 0.55, unicorn: 0.55,
+  darkWizard: 0.55, fallenKnight: 0.55, berserker: 0.55,
+  necromancer: 0.55, grandWizard: 0.55, mantisWarrior: 0.55, spiderQueen: 0.55,
+  dokkaebiGeneral: 0.55, haetae: 0.55, medusa: 0.55, werewolf: 0.55,
+  fungalLord: 0.55, treant: 0.55, worldTreeFragment: 0.55,
+  lich: 0.55, miniGolem: 0.40,
+  kraken: 0.55, imoogi: 0.55,
+  // 대형 (0.60)
+  golem: 0.60, darkGuardian: 0.60, grayBear: 0.60,
+  whiteTiger: 0.60, threeHeadedHound: 0.60,
+  yaksha: 0.60, lichKing: 0.60, elementalKing: 0.60,
+  balrog: 0.60, fallenAngel: 0.60, demonKing: 0.65,
+  fireDragon: 0.60, iceDragon: 0.60, darkDragon: 0.60,
+  dragonKing: 0.65, hydra: 0.60, seaDragon: 0.60,
+  magicArmor: 0.55, guardian: 0.55, manaGolem: 0.55,
+  bulgasari: 0.60, chimera: 0.60, minotaur: 0.60, giant: 0.65,
+  dokkaebiKing: 0.60,
 };
 
 // GLB 모델 존재 여부 캐시
@@ -1245,7 +1295,7 @@ function GLBModelLoader({ modelType, glbUrl, fallback }) {
   }, [cacheKey, glbUrl, modelType, gltf]);
 
   if (hasGlb && gltf) {
-    const scale = GLB_MODEL_SCALES[modelType] || 0.56;
+    const scale = GLB_MODEL_SCALES[modelType] || (modelType.startsWith('monster_') ? 0.50 : 0.50);
     const clonedScene = gltf.scene.clone();
     // vertex color 지원: GLB 메시의 vertex color가 있으면 활성화
     clonedScene.traverse((child) => {
@@ -1398,6 +1448,30 @@ function UnitModelRenderer({ unit }) {
     }
   }
 
+  // 용병: mercId 기반 GLB 로드 (merc_{id}.glb)
+  if (unit.mercId && modelType.startsWith('merc_')) {
+    const mercGlbUrl = `/characters/models/merc_${unit.mercId}.glb`;
+    return (
+      <GLBModelLoader
+        modelType={`merc_${unit.mercId}`}
+        glbUrl={mercGlbUrl}
+        fallback={proceduralFallback}
+      />
+    );
+  }
+
+  // 나라별 몬스터: monsterId 기반 GLB 로드 (monster_{id}.glb)
+  if (unit.monsterId && modelType === 'default') {
+    const monsterGlbUrl = `/characters/models/monster_${unit.monsterId}.glb`;
+    return (
+      <GLBModelLoader
+        modelType={`monster_${unit.monsterId}`}
+        glbUrl={monsterGlbUrl}
+        fallback={proceduralFallback}
+      />
+    );
+  }
+
   return (
     <GLBModelLoader
       modelType={modelType}
@@ -1406,24 +1480,313 @@ function UnitModelRenderer({ unit }) {
   );
 }
 
+// HP 위험 경고 글로우
+function LowHpWarning() {
+  const matRef = useRef();
+  useFrame((state) => {
+    if (matRef.current) {
+      matRef.current.opacity = 0.3 + Math.sin(state.clock.elapsedTime * 6) * 0.25;
+    }
+  });
+  return (
+    <mesh position={[0, 0, 0.002]}>
+      <planeGeometry args={[1.5, 0.22]} />
+      <meshBasicMaterial ref={matRef} color="#ff0000" transparent opacity={0.3} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+// 활성 유닛 회전 글로우 링
+function ActiveUnitRing() {
+  const ref = useRef();
+  const matRef = useRef();
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.z = state.clock.elapsedTime * 1.5;
+    }
+    if (matRef.current) {
+      matRef.current.opacity = 0.6 + Math.sin(state.clock.elapsedTime * 4) * 0.3;
+    }
+  });
+  return (
+    <group position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} ref={ref}>
+      <mesh>
+        <ringGeometry args={[0.6, 0.7, 24]} />
+        <meshBasicMaterial ref={matRef} color="#ffeb3b" side={THREE.DoubleSide} transparent opacity={0.7} />
+      </mesh>
+      {/* 4방향 노치 */}
+      {[0, 1, 2, 3].map(i => {
+        const a = (i / 4) * Math.PI * 2;
+        return (
+          <mesh key={i} position={[Math.cos(a) * 0.65, Math.sin(a) * 0.65, 0]}>
+            <circleGeometry args={[0.06, 6]} />
+            <meshBasicMaterial color="#fff8c4" side={THREE.DoubleSide} transparent opacity={0.9} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// 이동 먼지 이펙트
+function MoveDustEffect({ x, z, mapData }) {
+  const ref = useRef();
+  const [opacity, setOpacity] = useState(0.6);
+  const age = useRef(0);
+  const tile = mapData.tiles.find(t => t.x === x && t.z === z);
+  const tileH = tile ? tile.height * HEIGHT_SCALE : 0;
+
+  useFrame((_, delta) => {
+    age.current += delta;
+    if (ref.current) {
+      const s = 0.5 + age.current * 3;
+      ref.current.scale.set(s, s * 0.5, s);
+      setOpacity(Math.max(0, 0.6 - age.current * 1.5));
+    }
+  });
+
+  if (opacity <= 0) return null;
+
+  return (
+    <group ref={ref} position={[x * TILE_SIZE, tileH + 0.2, z * TILE_SIZE]}>
+      {[0, 1, 2, 3, 4].map(i => {
+        const a = (i / 5) * Math.PI * 2;
+        const r = 0.15 + i * 0.05;
+        return (
+          <mesh key={i} position={[Math.sin(a) * r, i * 0.03, Math.cos(a) * r]}>
+            <sphereGeometry args={[0.06, 4, 4]} />
+            <meshStandardMaterial color="#b8a88a" transparent opacity={opacity * (1 - i * 0.15)} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// 사망 이펙트 (페이드 + 파편)
+function DeathEffect({ x, z, team, mapData }) {
+  const ref = useRef();
+  const [opacity, setOpacity] = useState(1);
+  const age = useRef(0);
+  const tile = mapData.tiles.find(t => t.x === x && t.z === z);
+  const tileH = tile ? tile.height * HEIGHT_SCALE : 0;
+  const color = team === 'player' ? '#4488ff' : '#ff4444';
+
+  const particles = useMemo(() => {
+    const pts = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const speed = 0.8 + Math.random() * 1.2;
+      pts.push({ a, speed, ySpeed: 1 + Math.random() * 2, size: 0.04 + Math.random() * 0.06 });
+    }
+    return pts;
+  }, []);
+
+  useFrame((_, delta) => {
+    age.current += delta;
+    setOpacity(Math.max(0, 1 - age.current * 1.2));
+  });
+
+  if (opacity <= 0) return null;
+
+  return (
+    <group ref={ref} position={[x * TILE_SIZE, tileH + 0.8, z * TILE_SIZE]}>
+      {/* 중심 플래시 */}
+      <mesh>
+        <sphereGeometry args={[0.3 + age.current * 0.5, 8, 8]} />
+        <meshStandardMaterial color="#ffffff" emissive={color} emissiveIntensity={3} transparent opacity={opacity * 0.4} />
+      </mesh>
+      {/* 파편들 */}
+      {particles.map((p, i) => {
+        const dist = age.current * p.speed;
+        return (
+          <mesh key={i} position={[Math.sin(p.a) * dist, age.current * p.ySpeed, Math.cos(p.a) * dist]}>
+            <sphereGeometry args={[p.size, 4, 4]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2} transparent opacity={opacity * 0.7} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// 씬 배경 파티클 (부유하는 먼지/빛 입자)
+function AmbientParticles({ mapWidth, mapHeight }) {
+  const count = 30;
+  const particles = useMemo(() => {
+    const pts = [];
+    for (let i = 0; i < count; i++) {
+      pts.push({
+        x: Math.random() * mapWidth * TILE_SIZE,
+        y: 1 + Math.random() * 4,
+        z: Math.random() * mapHeight * TILE_SIZE,
+        speed: 0.2 + Math.random() * 0.4,
+        phase: Math.random() * Math.PI * 2,
+        size: 0.03 + Math.random() * 0.04,
+      });
+    }
+    return pts;
+  }, [mapWidth, mapHeight]);
+
+  const ref = useRef();
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime;
+    ref.current.children.forEach((child, i) => {
+      const p = particles[i];
+      child.position.y = p.y + Math.sin(t * p.speed + p.phase) * 0.5;
+      child.position.x = p.x + Math.sin(t * 0.3 + p.phase) * 0.3;
+      child.material.opacity = 0.3 + Math.sin(t * 1.5 + p.phase) * 0.2;
+    });
+  });
+
+  return (
+    <group ref={ref}>
+      {particles.map((p, i) => (
+        <mesh key={i} position={[p.x, p.y, p.z]}>
+          <sphereGeometry args={[p.size, 4, 4]} />
+          <meshStandardMaterial color="#ffeedd" emissive="#ffddaa" emissiveIntensity={1} transparent opacity={0.3} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // 유닛 표시
 function UnitMesh({ unit, isActive, mapData }) {
   const ref = useRef();
+  const modelRef = useRef();
+  const prevPos = useRef({ x: unit.x, z: unit.z });
+  const lerpPos = useRef({ x: unit.x * TILE_SIZE, z: unit.z * TILE_SIZE });
+  const prevHp = useRef(unit.hp);
+  const prevActed = useRef(unit.acted || false);
+  const hitTime = useRef(0);
+  const atkTime = useRef(0);
+  const atkDir = useRef({ x: 0, z: 0 });
+  const deathFade = useRef(null); // 사망 페이드 시작 시간
   const tile = mapData.tiles.find(t => t.x === unit.x && t.z === unit.z);
   const tileH = tile ? tile.height * HEIGHT_SCALE : 0;
   const y = tileH + 0.15;
 
-  // 활성 유닛 바운스
-  useFrame((state) => {
-    if (ref.current && isActive) {
-      ref.current.position.y = y + Math.sin(state.clock.elapsedTime * 3) * 0.08;
+  // HP 감소 감지 → 피격 애니메이션 트리거
+  if (unit.hp < prevHp.current) {
+    hitTime.current = performance.now();
+  }
+  // 사망 감지
+  if (unit.hp <= 0 && prevHp.current > 0) {
+    deathFade.current = performance.now();
+  }
+  prevHp.current = unit.hp;
+
+  // acted 변화 감지 → 공격 모션 트리거
+  if (unit.acted && !prevActed.current) {
+    atkTime.current = performance.now();
+    // attackAnim이 있으면 그 방향으로, 없으면 기본 전방
+    if (unit.attackAnim) {
+      const dx = unit.attackAnim.tx - unit.x;
+      const dz = unit.attackAnim.tz - unit.z;
+      const len = Math.sqrt(dx * dx + dz * dz) || 1;
+      atkDir.current = { x: dx / len, z: dz / len };
+    } else {
+      atkDir.current = { x: unit.team === 'player' ? 1 : -1, z: 0 };
     }
+  }
+  prevActed.current = unit.acted || false;
+
+  // 이동 감지 + 부드러운 보간 + 피격 흔들림 + 공격 모션
+  useFrame((state, delta) => {
+    if (!ref.current) return;
+    const targetX = unit.x * TILE_SIZE;
+    const targetZ = unit.z * TILE_SIZE;
+
+    // 이동 시 부드러운 lerp
+    const speed = 8;
+    lerpPos.current.x += (targetX - lerpPos.current.x) * Math.min(1, delta * speed);
+    lerpPos.current.z += (targetZ - lerpPos.current.z) * Math.min(1, delta * speed);
+
+    if (Math.abs(targetX - lerpPos.current.x) < 0.01) lerpPos.current.x = targetX;
+    if (Math.abs(targetZ - lerpPos.current.z) < 0.01) lerpPos.current.z = targetZ;
+
+    ref.current.position.x = lerpPos.current.x;
+    ref.current.position.z = lerpPos.current.z;
+
+    // 사망 페이드아웃
+    if (deathFade.current) {
+      const deathElapsed = (performance.now() - deathFade.current) / 1000;
+      if (deathElapsed < 0.6) {
+        const fadeScale = 1 - deathElapsed / 0.6;
+        ref.current.scale.setScalar(fadeScale);
+        ref.current.position.y = y + deathElapsed * 0.5;
+        return; // 다른 애니메이션 무시
+      }
+    }
+
+    // 피격 흔들림 (0.3초간)
+    const hitElapsed = (performance.now() - hitTime.current) / 1000;
+    const isHit = hitElapsed < 0.3;
+
+    // 공격 모션 (0.4초: 돌진 0.15초 + 복귀 0.25초)
+    const atkElapsed = (performance.now() - atkTime.current) / 1000;
+    const isAttacking = atkElapsed < 0.4 && atkTime.current > 0;
+
+    // 이동 중 살짝 위로 뛰는 효과
+    const isMoving = Math.abs(targetX - lerpPos.current.x) > 0.05 || Math.abs(targetZ - lerpPos.current.z) > 0.05;
+
+    if (isAttacking && modelRef.current) {
+      // 돌진 + 복귀 (전반: 앞으로, 후반: 뒤로)
+      const lungeDistance = 0.5;
+      let lungeFactor;
+      if (atkElapsed < 0.15) {
+        // 돌진 (0~0.15초): ease-out
+        lungeFactor = Math.sin((atkElapsed / 0.15) * Math.PI * 0.5);
+      } else {
+        // 복귀 (0.15~0.4초): ease-in
+        lungeFactor = Math.cos(((atkElapsed - 0.15) / 0.25) * Math.PI * 0.5);
+      }
+      modelRef.current.position.x = atkDir.current.x * lungeDistance * lungeFactor * TILE_SIZE;
+      modelRef.current.position.z = atkDir.current.z * lungeDistance * lungeFactor * TILE_SIZE;
+      // 돌진 시 살짝 위로
+      modelRef.current.position.y = Math.sin(lungeFactor * Math.PI) * 0.1;
+      // 기울임 (찌르기 느낌)
+      modelRef.current.rotation.x = lungeFactor * 0.2 * -atkDir.current.z;
+      modelRef.current.rotation.z = lungeFactor * 0.2 * -atkDir.current.x;
+    } else if (modelRef.current) {
+      modelRef.current.position.x = 0;
+      modelRef.current.position.z = 0;
+      modelRef.current.position.y = 0;
+      modelRef.current.rotation.x = 0;
+      modelRef.current.rotation.z = 0;
+    }
+
+    // 호흡 애니메이션 (아이들 상태에서 미세한 스케일 변화)
+    const breathScale = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.015;
+    ref.current.scale.set(breathScale, breathScale, breathScale);
+
+    if (isHit) {
+      const shake = Math.sin(hitElapsed * 60) * 0.12 * (1 - hitElapsed / 0.3);
+      ref.current.position.x = lerpPos.current.x + shake;
+      ref.current.position.y = y;
+    } else if (isMoving) {
+      ref.current.position.y = y + Math.abs(Math.sin(state.clock.elapsedTime * 10)) * 0.15;
+    } else if (isActive) {
+      ref.current.position.y = y + Math.sin(state.clock.elapsedTime * 3) * 0.08;
+    } else {
+      ref.current.position.y = y;
+    }
+
+    prevPos.current = { x: unit.x, z: unit.z };
   });
 
   const hpPercent = unit.hp / unit.maxHp;
   const hpColor = hpPercent > 0.5 ? '#2ed573' : hpPercent > 0.25 ? '#ffa502' : '#e94560';
 
-  if (unit.hp <= 0) return null;
+  // 사망 페이드 완료 후 숨김
+  if (unit.hp <= 0) {
+    if (!deathFade.current) return null;
+    const deathElapsed = (performance.now() - deathFade.current) / 1000;
+    if (deathElapsed > 0.6) return null;
+  }
 
   // 모델 높이 오프셋 (큰 모델은 더 높이 배치)
   const modelType = getUnitModel(unit);
@@ -1439,45 +1802,69 @@ function UnitMesh({ unit, isActive, mapData }) {
     'minotaur', 'giant', 'werewolf',
     'elementalKing', 'gargoyle', 'medusa',
   ];
-  const nameY = tallModels.includes(modelType) ? 2.2 : 2.0;
-  const hpY = tallModels.includes(modelType) ? 2.0 : 1.8;
+  const isTall = tallModels.includes(modelType);
+  const baseY = isTall ? 2.0 : 1.8;
+  const mpY = baseY;
+  const hpY = mpY + 0.16;
+  const nameY = hpY + 0.42;
+
+  const isAlly = unit.team === 'player';
+  const nameColor = isAlly ? '#90caf9' : '#ff8a80';
+
+  const mpPercent = unit.maxMp > 0 ? unit.mp / unit.maxMp : 0;
+  const showMp = unit.maxMp > 0;
 
   return (
-    <group ref={ref} position={[unit.x * TILE_SIZE, y, unit.z * TILE_SIZE]}>
-      <group scale={[2.2, 2.2, 2.2]}>
+    <group ref={ref} position={[lerpPos.current.x, y, lerpPos.current.z]}>
+      <group ref={modelRef} scale={[2.2, 2.2, 2.2]}>
         <UnitModelRenderer unit={unit} />
       </group>
-      {/* 활성 표시 링 */}
-      {isActive && (
-        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.6, 0.68, 16]} />
-          <meshBasicMaterial color="#ffeb3b" side={THREE.DoubleSide} />
-        </mesh>
+      {/* 아군/적군 구별 링 */}
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.55, 0.62, 24]} />
+        <meshBasicMaterial color={isAlly ? '#42a5f5' : '#ef5350'} side={THREE.DoubleSide} transparent opacity={0.6} />
+      </mesh>
+      {/* 활성 표시 링 (회전 + 펄스 글로우) */}
+      {isActive && <ActiveUnitRing />}
+      {/* MP 바 (아래) */}
+      {showMp && (
+        <group position={[0, mpY, 0]}>
+          <mesh>
+            <planeGeometry args={[1.4, 0.1]} />
+            <meshBasicMaterial color="#222" side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[(mpPercent - 1) * 0.7, 0, 0.001]}>
+            <planeGeometry args={[1.4 * mpPercent, 0.1]} />
+            <meshBasicMaterial color="#4488ff" side={THREE.DoubleSide} />
+          </mesh>
+        </group>
       )}
-      {/* HP 바 */}
+      {/* HP 바 (위) */}
       <group position={[0, hpY, 0]}>
-        {/* 배경 */}
         <mesh>
-          <planeGeometry args={[0.7, 0.07]} />
+          <planeGeometry args={[1.4, 0.14]} />
           <meshBasicMaterial color="#333" side={THREE.DoubleSide} />
         </mesh>
-        {/* HP */}
-        <mesh position={[(hpPercent - 1) * 0.35, 0, 0.001]}>
-          <planeGeometry args={[0.7 * hpPercent, 0.07]} />
+        <mesh position={[(hpPercent - 1) * 0.7, 0, 0.001]}>
+          <planeGeometry args={[1.4 * hpPercent, 0.14]} />
           <meshBasicMaterial color={hpColor} side={THREE.DoubleSide} />
         </mesh>
+        {/* 위험 경고 (HP 25% 이하: 빨간 글로우) */}
+        {hpPercent <= 0.25 && hpPercent > 0 && (
+          <LowHpWarning />
+        )}
       </group>
       {/* 이름 */}
       <Text
         position={[0, nameY, 0]}
-        fontSize={0.18}
-        color="#ffffff"
+        fontSize={0.36}
+        color={nameColor}
         anchorX="center"
         anchorY="middle"
-        outlineWidth={0.025}
+        outlineWidth={0.05}
         outlineColor="#000000"
       >
-        {unit.name}
+        {unit.isBoss ? `👿 ${unit.name}` : unit.name}
       </Text>
     </group>
   );
@@ -1518,6 +1905,13 @@ function DamagePopup({ popup }) {
 
   return (
     <group ref={ref} position={[popup.x * TILE_SIZE, popup.y + 2.5, popup.z * TILE_SIZE]} scale={[scale, scale, scale]}>
+      {/* 데미지 글로우 배경 */}
+      {isDamage && (
+        <mesh>
+          <sphereGeometry args={[0.5, 8, 8]} />
+          <meshBasicMaterial color={color} transparent opacity={opacity * 0.15} />
+        </mesh>
+      )}
       <Text
         fontSize={fontSize}
         color={color}
@@ -1730,6 +2124,135 @@ function MagicEffect({ position, color = '#8844ff' }) {
   );
 }
 
+// 근접 이펙트 (칼/주먹 등 - 수평 슬래시 + 충격파)
+function MeleeEffect({ position, color = '#ff6644' }) {
+  const ref = useRef();
+  const [opacity, setOpacity] = useState(1);
+  const age = useRef(0);
+
+  useFrame((_, delta) => {
+    age.current += delta;
+    if (ref.current) {
+      const s = 0.5 + age.current * 5;
+      ref.current.scale.set(s, s, s);
+      setOpacity(Math.max(0, 1 - age.current * 3));
+    }
+  });
+
+  if (opacity <= 0) return null;
+
+  return (
+    <group ref={ref} position={position}>
+      {/* 수평 슬래시 */}
+      <mesh rotation={[0, 0, 0.2]}>
+        <boxGeometry args={[1.0, 0.08, 0.03]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} transparent opacity={opacity} />
+      </mesh>
+      {/* 충격파 링 */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.1, 0.25, 12]} />
+        <meshStandardMaterial color="#ffffff" emissive={color} emissiveIntensity={2} transparent opacity={opacity * 0.5} side={2} />
+      </mesh>
+      {/* 파편 */}
+      {[0, 1, 2, 3].map(i => {
+        const a = (i / 4) * Math.PI * 2;
+        return (
+          <mesh key={i} position={[Math.sin(a) * 0.3, Math.cos(a) * 0.15, 0]}>
+            <boxGeometry args={[0.08, 0.03, 0.02]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2} transparent opacity={opacity * 0.7} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// 원거리 이펙트 (화살/투사체 - 관통 라인 + 임팩트)
+function RangedEffect({ position, color = '#44aaff' }) {
+  const ref = useRef();
+  const [opacity, setOpacity] = useState(1);
+  const age = useRef(0);
+
+  useFrame((_, delta) => {
+    age.current += delta;
+    if (ref.current) {
+      ref.current.rotation.z += delta * 8;
+      setOpacity(Math.max(0, 1 - age.current * 2.5));
+    }
+  });
+
+  if (opacity <= 0) return null;
+
+  return (
+    <group ref={ref} position={position}>
+      {/* 관통 화살 궤적 */}
+      <mesh rotation={[0, 0, 0.4]}>
+        <boxGeometry args={[1.2, 0.04, 0.02]} />
+        <meshStandardMaterial color="#ffffff" emissive={color} emissiveIntensity={3} transparent opacity={opacity * 0.8} />
+      </mesh>
+      {/* 임팩트 원 */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.15, 0.3, 8]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2} transparent opacity={opacity * 0.6} side={2} />
+      </mesh>
+      {/* 충돌 파편 */}
+      {[0, 1, 2].map(i => {
+        const a = (i / 3) * Math.PI * 2 + 0.5;
+        return (
+          <mesh key={i} position={[Math.sin(a) * 0.2, Math.cos(a) * 0.2, 0]}>
+            <sphereGeometry args={[0.04, 4, 4]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2} transparent opacity={opacity * 0.5} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// 치명타 이펙트 (화면 진동 느낌 - 큰 별 + 스파크)
+function CritEffect({ position, color = '#ffdd00' }) {
+  const ref = useRef();
+  const [opacity, setOpacity] = useState(1);
+  const age = useRef(0);
+
+  useFrame((_, delta) => {
+    age.current += delta;
+    if (ref.current) {
+      const s = 0.3 + age.current * 6;
+      ref.current.scale.set(s, s, s);
+      ref.current.rotation.z += delta * 15;
+      setOpacity(Math.max(0, 1 - age.current * 2.5));
+    }
+  });
+
+  if (opacity <= 0) return null;
+
+  return (
+    <group ref={ref} position={position}>
+      {/* 중심 플래시 */}
+      <mesh>
+        <sphereGeometry args={[0.25, 8, 8]} />
+        <meshStandardMaterial color="#ffffff" emissive={color} emissiveIntensity={5} transparent opacity={opacity * 0.9} />
+      </mesh>
+      {/* 스타 버스트 (8방향) */}
+      {[0, 1, 2, 3, 4, 5, 6, 7].map(i => {
+        const a = (i / 8) * Math.PI * 2;
+        return (
+          <mesh key={i} position={[Math.sin(a) * 0.4, Math.cos(a) * 0.4, 0]} rotation={[0, 0, a]}>
+            <boxGeometry args={[0.5, 0.04, 0.02]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} transparent opacity={opacity * 0.7} />
+          </mesh>
+        );
+      })}
+      {/* 외곽 충격파 */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.35, 0.5, 16]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2} transparent opacity={opacity * 0.4} side={2} />
+      </mesh>
+    </group>
+  );
+}
+
 // 이펙트 렌더러
 function SkillEffectRenderer({ effect }) {
   const tile = { x: effect.x * TILE_SIZE, z: effect.z * TILE_SIZE };
@@ -1737,6 +2260,9 @@ function SkillEffectRenderer({ effect }) {
 
   switch (effect.effectType) {
     case 'slash': return <SlashEffect position={pos} color={effect.color} />;
+    case 'melee': return <MeleeEffect position={pos} color={effect.color} />;
+    case 'ranged': return <RangedEffect position={pos} color={effect.color} />;
+    case 'crit': return <CritEffect position={pos} color={effect.color} />;
     case 'explosion': return <ExplosionEffect position={pos} color={effect.color} />;
     case 'heal': return <HealEffect position={pos} />;
     case 'buff': return <BuffEffect position={pos} color={effect.color} />;
@@ -1792,6 +2318,7 @@ function UnitContextMenu({ unit, mapData, menuState, onAction, potions }) {
                   disabled={unit.mp < sk.mp_cost}
                   title={sk.description}
                 >
+                  {sk.iconUrl && <img src={sk.iconUrl} alt="" className="srpg-ctx-skill-icon" onError={(e) => { e.target.style.display='none'; }} />}
                   {sk.name}
                   <span className="srpg-ctx-mp">{sk.mp_cost}MP</span>
                 </button>
@@ -1933,6 +2460,38 @@ function MapScene({
   potions,
 }) {
   const [hoveredTile, setHoveredTile] = useState(null);
+  const [deathEffects, setDeathEffects] = useState([]);
+  const [dustEffects, setDustEffects] = useState([]);
+  const prevUnitsRef = useRef({});
+  const prevPosRef = useRef({});
+
+  // 유닛 사망/이동 감지
+  useEffect(() => {
+    const prevUnits = prevUnitsRef.current;
+    const newDeaths = [];
+    const newDusts = [];
+    units.forEach(u => {
+      // 사망 감지
+      if (u.hp <= 0 && prevUnits[u.id] && prevUnits[u.id].hp > 0) {
+        newDeaths.push({ x: u.x, z: u.z, team: u.team, time: Date.now() });
+      }
+      // 이동 감지 (먼지)
+      const prevP = prevPosRef.current[u.id];
+      if (prevP && (prevP.x !== u.x || prevP.z !== u.z)) {
+        newDusts.push({ x: prevP.x, z: prevP.z, time: Date.now() });
+      }
+      prevPosRef.current[u.id] = { x: u.x, z: u.z };
+    });
+    if (newDeaths.length > 0) {
+      setDeathEffects(prev => [...prev.slice(-3), ...newDeaths]);
+    }
+    if (newDusts.length > 0) {
+      setDustEffects(prev => [...prev.slice(-4), ...newDusts]);
+    }
+    const map = {};
+    units.forEach(u => { map[u.id] = { hp: u.hp }; });
+    prevUnitsRef.current = map;
+  }, [units]);
 
   const movableSet = useMemo(() => {
     const set = new Set();
@@ -1952,10 +2511,21 @@ function MapScene({
   return (
     <>
       <CameraController mapWidth={mapData.width} mapHeight={mapData.height} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[5, 12, 5]} intensity={1.0} castShadow />
-      <directionalLight position={[-3, 6, -3]} intensity={0.4} />
-      <hemisphereLight args={['#b1e1ff', '#4a3728', 0.3]} />
+      <ambientLight intensity={0.45} />
+      <directionalLight
+        position={[5, 12, 5]}
+        intensity={1.2}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-left={-15}
+        shadow-camera-right={15}
+        shadow-camera-top={15}
+        shadow-camera-bottom={-15}
+        shadow-bias={-0.001}
+      />
+      <directionalLight position={[-3, 6, -3]} intensity={0.35} />
+      <hemisphereLight args={['#b1e1ff', '#4a3728', 0.35]} />
 
       {/* 타일들 */}
       {mapData.tiles.map((tile) => (
@@ -1992,6 +2562,19 @@ function MapScene({
         <DamagePopup key={`popup-${i}-${p.time}`} popup={p} />
       ))}
 
+      {/* 사망 이펙트 */}
+      {deathEffects.map((de, i) => (
+        <DeathEffect key={`death-${i}-${de.time}`} x={de.x} z={de.z} team={de.team} mapData={mapData} />
+      ))}
+
+      {/* 이동 먼지 */}
+      {dustEffects.map((dust, i) => (
+        <MoveDustEffect key={`dust-${i}-${dust.time}`} x={dust.x} z={dust.z} mapData={mapData} />
+      ))}
+
+      {/* 배경 부유 파티클 */}
+      <AmbientParticles mapWidth={mapData.width} mapHeight={mapData.height} />
+
       {/* 유닛 컨텍스트 메뉴 */}
       {activeUnit && menuState && menuState.show && (
         <UnitContextMenu
@@ -2017,6 +2600,9 @@ export default function IsometricMap(props) {
       orthographic
       camera={{ zoom: 50, position: [10, 12, 10], near: 0.1, far: 100 }}
       onPointerMissed={handleMiss}
+      dpr={[1, 2]}
+      shadows
+      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
     >
       <MapScene {...props} />
     </Canvas>

@@ -10,29 +10,43 @@
 
 const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
 
-export function createCardPlayerUnit(char, skills) {
+export function createCardPlayerUnit(char, skills, passiveBonuses) {
   const classInfo = getClassInfo(char.class_type);
   const classKey = CLASS_IMAGE_MAP[char.class_type] || 'monk';
+  // 패시브 보너스 적용
+  const pb = passiveBonuses || {};
+  const applyBonus = (base, stat) => {
+    const b = pb[stat];
+    if (!b) return base;
+    let val = base + (b.flat || 0);
+    if (b.percent) val = Math.floor(val * (1 + b.percent / 100));
+    return val;
+  };
+  const maxHp = applyBonus(char.hp, 'hp');
+  const maxMp = applyBonus(char.mp, 'mp');
+  const physAttack = applyBonus(char.phys_attack || 0, 'phys_attack');
+  const magAttack = applyBonus(char.mag_attack || 0, 'mag_attack');
+  const evasion = applyBonus(char.evasion || 3, 'evasion');
   return {
     id: 'player',
     name: char.name,
     team: 'player',
     classType: char.class_type,
     level: char.level,
-    hp: char.current_hp ?? char.hp,
-    maxHp: char.hp,
-    mp: char.current_mp ?? char.mp,
-    maxMp: char.mp,
-    attack: char.attack,
-    defense: char.defense,
-    physAttack: char.phys_attack || 0,
-    physDefense: char.phys_defense || 0,
-    magAttack: char.mag_attack || 0,
-    magDefense: char.mag_defense || 0,
-    critRate: char.crit_rate || 5,
-    evasion: char.evasion || 3,
-    speed: char.mag_attack + (char.phys_attack || 0) + (char.evasion || 3),
-    skills: (skills || []).map(s => ({ ...s, currentCooldown: 0 })),
+    hp: Math.min(char.current_hp ?? char.hp, maxHp),
+    maxHp,
+    mp: Math.min(char.current_mp ?? char.mp, maxMp),
+    maxMp,
+    attack: applyBonus(char.attack, 'attack'),
+    defense: applyBonus(char.defense, 'defense'),
+    physAttack,
+    physDefense: applyBonus(char.phys_defense || 0, 'phys_defense'),
+    magAttack,
+    magDefense: applyBonus(char.mag_defense || 0, 'mag_defense'),
+    critRate: applyBonus(char.crit_rate || 5, 'crit_rate'),
+    evasion,
+    speed: magAttack + physAttack + evasion,
+    skills: (skills || []).map(s => ({ ...s, currentCooldown: 0, iconUrl: `/skills/${s.id}_icon.png` })),
     row: classInfo.defaultRow,
     rangeType: classInfo.rangeType,
     icon: classInfo.icon,
@@ -45,6 +59,7 @@ export function createCardPlayerUnit(char, skills) {
     gridRow: 0,
     gridCol: 0,
     element: char.element || 'neutral',
+    portraitEffect: null,
   };
 }
 
@@ -72,7 +87,7 @@ export function createCardSummonUnit(summon) {
     critRate: summon.crit_rate || summon.critRate || 5,
     evasion: summon.evasion || 3,
     speed: (summon.phys_attack || summon.physAttack || 0) + (summon.evasion || 3) + 5,
-    skills: skills.map(s => ({ ...s, currentCooldown: 0 })),
+    skills: skills.map(s => ({ ...s, currentCooldown: 0, iconUrl: `/summon_skills/${s.id}_icon.png` })),
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
     icon: summon.icon || '👻',
@@ -91,6 +106,7 @@ export function createCardSummonUnit(summon) {
 export function createCardMercenaryUnit(merc) {
   const weaponType = merc.weapon_type || merc.weaponType || 'sword';
   const rangeType = merc.range_type || (weaponType === 'bow' ? 'ranged' : weaponType === 'staff' || weaponType === 'talisman' ? 'magic' : 'melee');
+  const fatigued = merc.fatigue !== undefined && merc.fatigue <= 0;
   return {
     id: `merc_${merc.id}`,
     mercId: merc.id,
@@ -98,9 +114,9 @@ export function createCardMercenaryUnit(merc) {
     team: 'player',
     classType: merc.class_type || 'mercenary',
     level: merc.level,
-    hp: merc.hp,
+    hp: fatigued ? 0 : merc.hp,
     maxHp: merc.hp,
-    mp: merc.mp || 0,
+    mp: fatigued ? 0 : (merc.mp || 0),
     maxMp: merc.mp || 0,
     attack: merc.phys_attack || 0,
     defense: merc.phys_defense || 0,
@@ -111,7 +127,7 @@ export function createCardMercenaryUnit(merc) {
     critRate: merc.crit_rate || 5,
     evasion: merc.evasion || 3,
     speed: (merc.phys_attack || 0) + (merc.evasion || 3) + 3,
-    skills: [],
+    skills: (merc.learned_skills || merc.skills || []).map(s => ({ ...s, currentCooldown: 0, iconUrl: `/merc_skills/${s.id}_icon.png` })),
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
     icon: '🗡️',
@@ -124,6 +140,7 @@ export function createCardMercenaryUnit(merc) {
     gridRow: 0,
     gridCol: 0,
     element: merc.element || 'neutral',
+    portraitEffect: null,
   };
 }
 
@@ -131,6 +148,7 @@ export function createCardMonsterUnit(monster, index) {
   const rangeType = monster.rangeType || monster.range_type || detectMonsterRangeType(monster);
   return {
     id: `monster_${index}`,
+    monsterId: monster.id || monster.monsterId || null,
     name: monster.name,
     team: 'enemy',
     level: monster.level || 1,
@@ -163,6 +181,7 @@ export function createCardMonsterUnit(monster, index) {
     gridRow: 0,
     gridCol: 0,
     element: monster.element || 'neutral',
+    eliteTier: monster.eliteTier || null,
   };
 }
 
@@ -246,16 +265,33 @@ export function getValidTargets(attacker, defenders, attackType) {
   const alive = defenders.filter(u => u.hp > 0);
   if (alive.length === 0) return [];
 
-  const frontRow = alive.filter(u => u.row === 'front');
-  const backRow = alive.filter(u => u.row === 'back');
-
   if (attackType === 'ranged' || attackType === 'magic') {
     return alive; // 원거리/마법: 모두 타겟 가능
   }
 
-  // 근거리: 앞열 우선, 앞열 없으면 뒷열 타겟 가능
-  if (frontRow.length > 0) return frontRow;
-  return backRow;
+  // 근거리: gridCol 기반 전열 판정
+  // 아군(player): gridCol 큰 쪽이 전열 (col2=전, col1=중, col0=후)
+  // 적군(enemy):  gridCol 작은 쪽이 전열 (col0=전, col1=중, col2=후)
+  const defTeam = alive[0]?.team;
+  const isPlayerTeam = defTeam === 'player';
+
+  // 같은 gridRow에 있는 적 유닛들
+  const sameRow = alive.filter(u => u.gridRow === attacker.gridRow);
+
+  if (sameRow.length > 0) {
+    // 같은 행에서 가장 전열에 있는 col 찾기
+    const frontCol = isPlayerTeam
+      ? Math.max(...sameRow.map(u => u.gridCol))   // player: col 큰 쪽이 전열
+      : Math.min(...sameRow.map(u => u.gridCol));   // enemy: col 작은 쪽이 전열
+    const frontUnits = sameRow.filter(u => u.gridCol === frontCol);
+    return frontUnits;
+  }
+
+  // 같은 행에 적이 없으면 → 전체에서 가장 전열 유닛만 타겟
+  const frontCol = isPlayerTeam
+    ? Math.max(...alive.map(u => u.gridCol))
+    : Math.min(...alive.map(u => u.gridCol));
+  return alive.filter(u => u.gridCol === frontCol);
 }
 
 export function getHealTargets(healer, allies) {
@@ -274,11 +310,20 @@ export function calculateDamage(attacker, defender, skill = null) {
 
   if (skill && skill.damage_multiplier) {
     const mult = skill.damage_multiplier;
-    if (skill.type === 'attack' && (attacker.magAttack > attacker.physAttack || mult >= 1.5)) {
+    // damage_type 필드가 있으면 그에 따라 결정, 없으면 공격자 스탯 비교
+    if (skill.damage_type === 'physical') {
+      baseDmg = attacker.physAttack * mult + attacker.attack * 0.5;
+    } else if (skill.damage_type === 'magical') {
       baseDmg = attacker.magAttack * mult + attacker.attack * 0.5;
       isMagic = true;
     } else {
-      baseDmg = attacker.physAttack * mult + attacker.attack * 0.5;
+      // damage_type 미지정 시 주 스탯 기준
+      if (attacker.magAttack > attacker.physAttack) {
+        baseDmg = attacker.magAttack * mult + attacker.attack * 0.5;
+        isMagic = true;
+      } else {
+        baseDmg = attacker.physAttack * mult + attacker.attack * 0.5;
+      }
     }
   } else {
     if (attacker.magAttack > attacker.physAttack) {
@@ -304,7 +349,7 @@ export function calculateDamage(attacker, defender, skill = null) {
 
   // 랜덤 편차
   const variance = Math.floor(Math.random() * 5) - 2;
-  let damage = Math.max(1, Math.floor(baseDmg - totalDef * 0.6 + variance));
+  let damage = Math.max(1, Math.floor(baseDmg - totalDef * 0.75 + variance));
 
   // 속성 상성 적용
   let elementMult = 1.0;
@@ -325,8 +370,10 @@ export function calculateDamage(attacker, defender, skill = null) {
 
   // 크리티컬
   let isCrit = false;
-  if (Math.random() * 100 < (attacker.critRate || 5)) {
-    damage = Math.floor(damage * 1.5);
+  const critRate = attacker.critRate || 5;
+  if (Math.random() * 100 < critRate) {
+    const critMultiplier = 1.4 + Math.min(critRate, 30) * 0.01;
+    damage = Math.floor(damage * critMultiplier);
     isCrit = true;
   }
 
@@ -365,13 +412,13 @@ export function executeSkill(caster, skill, target, allUnits) {
       }
 
       if (result.isEvade) {
-        logs.push({ text: `${caster.name}의 ${skill.name} → ${actualTarget.name} 회피!`, type: 'evade' });
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${actualTarget.name} 회피!`, type: 'evade', isEvade: true, targetId: actualTarget.id });
       } else {
         actualTarget.hp = Math.max(0, actualTarget.hp - result.damage);
         let dmgText = `${caster.name}의 ${skill.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
         if (result.isCrit) dmgText += ' (치명타!)';
         if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
-        logs.push({ text: dmgText, type: 'damage', elementMult: result.elementMult, elementLabel: result.elementLabel });
+        logs.push({ text: dmgText, type: 'damage', isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
 
         // 흡혈
         if (skill.heal_amount && skill.heal_amount > 0) {
@@ -394,13 +441,14 @@ export function executeSkill(caster, skill, target, allUnits) {
       for (const enemy of enemies) {
         const result = calculateDamage(caster, enemy, skill);
         if (result.isEvade) {
-          logs.push({ text: `  → ${enemy.name} 회피!`, type: 'evade' });
+          logs.push({ text: `  → ${enemy.name} 회피!`, type: 'evade', isEvade: true, targetId: enemy.id });
         } else {
           const dmg = Math.floor(result.damage * 0.7); // AOE 감쇄
           enemy.hp = Math.max(0, enemy.hp - dmg);
           let aoeText = `  → ${enemy.name}에게 ${dmg} 피해`;
+          if (result.isCrit) aoeText += ' (치명타!)';
           if (result.elementLabel) aoeText += ` [${result.elementLabel}]`;
-          logs.push({ text: aoeText, type: 'damage', elementMult: result.elementMult, elementLabel: result.elementLabel });
+          logs.push({ text: aoeText, type: 'damage', isCrit: result.isCrit, targetId: enemy.id, elementMult: result.elementMult, elementLabel: result.elementLabel });
           if (enemy.hp <= 0) {
             logs.push({ text: `  ${enemy.name} 쓰러짐!`, type: 'kill' });
           }
@@ -474,13 +522,13 @@ export function executeAttack(attacker, target, allUnits) {
   }
 
   if (result.isEvade) {
-    logs.push({ text: `${attacker.name} → ${actualTarget.name} 회피!`, type: 'evade' });
+    logs.push({ text: `${attacker.name} → ${actualTarget.name} 회피!`, type: 'evade', isEvade: true, targetId: actualTarget.id });
   } else {
     actualTarget.hp = Math.max(0, actualTarget.hp - result.damage);
     let dmgText = `${attacker.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
     if (result.isCrit) dmgText += ' (치명타!)';
     if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
-    logs.push({ text: dmgText, type: 'damage', elementMult: result.elementMult, elementLabel: result.elementLabel });
+    logs.push({ text: dmgText, type: 'damage', isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
   }
 
   if (actualTarget.hp <= 0) {

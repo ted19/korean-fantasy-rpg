@@ -57,6 +57,12 @@
   opacity: 0.5;
 }
 
+.formation-unit-card.other-slot {
+  opacity: 0.4;
+  border-color: var(--orange);
+  border-style: dashed;
+}
+
 .formation-unit-card.is-player {
   border-left: 3px solid var(--gold);
 }
@@ -348,11 +354,130 @@
 
 .formation-msg {
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--green);
   min-height: 18px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  animation: formationMsgIn 0.4s ease-out;
+}
+
+.formation-msg.success {
+  color: #2ed573;
+  background: rgba(46, 213, 115, 0.1);
+  border: 1px solid rgba(46, 213, 115, 0.25);
+  box-shadow: 0 0 12px rgba(46, 213, 115, 0.1);
 }
 
 .formation-msg.error {
-  color: var(--red);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+@keyframes formationMsgIn {
+  0% { opacity: 0; transform: translateY(8px) scale(0.95); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Save Success Popup */
+.formation-save-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s;
+}
+.formation-save-popup {
+  background: linear-gradient(135deg, #1e1e3a, #2a2a4a);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 16px;
+  padding: 32px 40px;
+  text-align: center;
+  min-width: 280px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: popIn 0.3s ease-out;
+}
+.formation-save-popup-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+.formation-save-popup-msg {
+  font-size: 15px;
+  font-weight: 600;
+  color: #eee;
+  margin-bottom: 20px;
+}
+.formation-save-popup-btn {
+  padding: 8px 32px;
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  color: #1a1a2e;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.formation-save-popup-btn:hover {
+  box-shadow: 0 0 16px rgba(74,222,128,0.3);
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+
+/* 잠긴 진영 탭 */
+.formation-slot-tab.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, 0.2);
+  border-color: var(--border-dark);
+  position: relative;
+}
+.formation-slot-tab.locked:hover {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-muted);
+}
+.formation-slot-lock {
+  font-size: 10px;
+  margin-right: 3px;
+}
+.formation-slot-req {
+  display: block;
+  font-size: 9px;
+  color: var(--text-dark);
+  font-weight: 400;
+  margin-top: 1px;
+}
+
+/* 잠긴 셀 */
+.formation-cell.locked {
+  background: rgba(0, 0, 0, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.04);
+  border-style: solid;
+  cursor: not-allowed;
+}
+.formation-cell.locked:hover {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+.formation-cell-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.formation-cell-lock-icon {
+  font-size: 18px;
+  opacity: 0.5;
+}
+.formation-cell-lock-req {
+  font-size: 9px;
+  color: var(--text-dark);
+  font-weight: 600;
+  white-space: nowrap;
 }

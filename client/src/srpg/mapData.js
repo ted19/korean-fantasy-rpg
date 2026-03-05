@@ -51,12 +51,37 @@ export function buildMapFromDungeon(dungeon) {
     }
   }
 
+  // playerSpawns가 부족하면 기존 스폰 주변에 자동 확장 (최소 6개)
+  const MIN_PLAYER_SPAWNS = 9;
+  let spawns = playerSpawns && playerSpawns.length > 0 ? [...playerSpawns] : [{ x: 0, z: 0 }];
+  if (spawns.length < MIN_PLAYER_SPAWNS) {
+    const occupied = new Set(spawns.map(s => `${s.x},${s.z}`));
+    const waterTiles = new Set(tiles.filter(t => t.type === 'water').map(t => `${t.x},${t.z}`));
+    const dirs = [{dx:1,dz:0},{dx:-1,dz:0},{dx:0,dz:1},{dx:0,dz:-1},{dx:1,dz:1},{dx:-1,dz:1},{dx:1,dz:-1},{dx:-1,dz:-1}];
+    let queue = [...spawns];
+    while (spawns.length < MIN_PLAYER_SPAWNS && queue.length > 0) {
+      const base = queue.shift();
+      for (const d of dirs) {
+        if (spawns.length >= MIN_PLAYER_SPAWNS) break;
+        const nx = base.x + d.dx;
+        const nz = base.z + d.dz;
+        const key = `${nx},${nz}`;
+        if (nx >= 0 && nx < mapWidth && nz >= 0 && nz < mapHeight && !occupied.has(key) && !waterTiles.has(key)) {
+          occupied.add(key);
+          const newSpawn = { x: nx, z: nz };
+          spawns.push(newSpawn);
+          queue.push(newSpawn);
+        }
+      }
+    }
+  }
+
   return {
     name: dungeon.name,
     width: mapWidth,
     height: mapHeight,
     tiles,
-    playerSpawns: playerSpawns || [{ x: 0, z: 0 }],
+    playerSpawns: spawns,
     monsterSpawns: monsterSpawns || [{ x: 9, z: 9 }],
   };
 }

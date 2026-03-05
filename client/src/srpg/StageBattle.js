@@ -6,10 +6,21 @@ import {
   executeAttack, executeSkill, executeGuard,
   onTurnStart, decideAIAction, checkBattleEnd, calculateRewards,
 } from './cardBattleEngine';
+import { rollEliteTier, applyEliteStats, ELITE_TIERS } from './battleEngine';
 import api from '../api';
 import './StageBattle.css';
+import './SrpgBattle.css';
 
-function StageBattle({ stage, character, charState, learnedSkills, activeSummons, activeMercenaries, monsters, groupKey, onBattleEnd, onLog }) {
+// 속성별 기본 오라 매핑
+const ELEMENT_AURA_MAP = {
+  fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy',
+  light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
+};
+const CLASS_ELEMENT_MAP = {
+  '풍수사': 'wind', '무당': 'dark', '승려': 'light',
+};
+
+function StageBattle({ stage, character, charState, learnedSkills, passiveBonuses, activeSummons, activeMercenaries, monsters, groupKey, onBattleEnd, onLog }) {
   const [units, setUnits] = useState([]);
   const [turnOrder, setTurnOrder] = useState([]);
   const [currentTurnIdx, setCurrentTurnIdx] = useState(0);
@@ -28,7 +39,19 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
   const [showItemList, setShowItemList] = useState(false);
   const [potions, setPotions] = useState([]);
   const [droppedMaterials, setDroppedMaterials] = useState([]);
+  const [droppedTickets, setDroppedTickets] = useState([]);
+  const [resultData, setResultData] = useState(null);
+  const [totalExpGained, setTotalExpGained] = useState(0);
+  const [totalGoldGained, setTotalGoldGained] = useState(0);
   const [dropAnims, setDropAnims] = useState([]);
+  const [autoAll, setAutoAll] = useState(false); // 전체 자동전투
+  const [autoCompanion, setAutoCompanion] = useState(false); // 소환수/용병만 자동전투
+  const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
+  const [contributions, setContributions] = useState([]); // {id, name, icon, imageUrl, damage, kills, pct, exp}
+  const [eliteAlert, setEliteAlert] = useState(null); // { name, icon, monsterId, tier }
+  const battleSummonIdsRef = useRef([]);
+  const battleMercIdsRef = useRef([]);
+  const contributionRef = useRef({}); // unitId -> { damage, kills }
   const logRef = useRef(null);
   const popupId = useRef(0);
   const projectileId = useRef(0);
@@ -47,12 +70,53 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
     }, 1200);
   }, []);
 
-  // 히트 이펙트 추가
-  const addHitEffect = useCallback((unitId) => {
+  // 히트 이펙트 추가 (effectType: 'hit' | 'crit' | 'evade')
+  const addHitEffect = useCallback((unitId, effectType = 'hit') => {
     const id = ++hitEffectId.current;
-    setHitEffects(prev => [...prev, { id, unitId }]);
-    setTimeout(() => setHitEffects(prev => prev.filter(e => e.id !== id)), 600);
+    setHitEffects(prev => [...prev, { id, unitId, effectType }]);
+    setTimeout(() => setHitEffects(prev => prev.filter(e => e.id !== id)), effectType === 'crit' ? 800 : 600);
   }, []);
+
+  // 전투 로그를 팝업/이펙트로 처리하는 공통 헬퍼 (attackerId로 기여도 추적)
+  const processLogEntry = useCallback((l, targetId, attackerId) => {
+    addLog(l.text, l.type);
+    if (l.type === 'damage') {
+      const tid = l.targetId || targetId;
+      const dmgMatch = l.text.match(/(\d+) 피해/);
+      const dmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
+      addPopup(tid, `-${dmg || '?'}`, l.isCrit ? 'crit' : 'damage');
+      if (l.isCrit) {
+        addPopup(tid, '치명타!', 'crit-label');
+        addHitEffect(tid, 'crit');
+      }
+      if (l.elementLabel) addPopup(tid, l.elementLabel, l.elementMult > 1 ? 'element-strong' : 'element-weak');
+      // 기여도 기록
+      if (attackerId && dmg > 0) {
+        const c = contributionRef.current;
+        if (!c[attackerId]) c[attackerId] = { damage: 0, kills: 0 };
+        c[attackerId].damage += dmg;
+      }
+    }
+    if (l.type === 'evade') {
+      const tid = l.targetId || targetId;
+      addPopup(tid, 'MISS', 'evade');
+      addHitEffect(tid, 'evade');
+    }
+    if (l.type === 'heal') {
+      const tid = l.targetId || targetId;
+      addPopup(tid, `+${l.text.match(/\+(\d+)/)?.[1] || '?'}`, 'heal');
+    }
+    if (l.type === 'kill') {
+      const tid = l.targetId || targetId;
+      addPopup(tid, 'KO', 'kill');
+      // 킬 기여도 기록
+      if (attackerId) {
+        const c = contributionRef.current;
+        if (!c[attackerId]) c[attackerId] = { damage: 0, kills: 0 };
+        c[attackerId].kills += 1;
+      }
+    }
+  }, [addLog, addPopup, addHitEffect]);
 
   // 드랍 아이콘 애니메이션
   const addDropAnim = useCallback((unitId, icon, name) => {
@@ -140,6 +204,7 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
       setSkillCutIn({
         skillName: skill.name,
         skillIcon: skill.icon || '✨',
+        skillIconUrl: skill.iconUrl || null,
         skillType: skill.type,
         casterName: caster.name,
       });
@@ -156,26 +221,73 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
 
     const initBattle = async () => {
       const playerUnit = createCardPlayerUnit(
-        { ...character, ...charState, current_hp: charState.currentHp, current_mp: charState.currentMp },
-        learnedSkills
+        {
+          ...character,
+          level: charState.level,
+          hp: charState.maxHp, mp: charState.maxMp,
+          current_hp: charState.currentHp, current_mp: charState.currentMp,
+          attack: charState.attack, defense: charState.defense,
+          phys_attack: charState.physAttack, phys_defense: charState.physDefense,
+          mag_attack: charState.magAttack, mag_defense: charState.magDefense,
+          crit_rate: charState.critRate, evasion: charState.evasion,
+        },
+        learnedSkills,
+        passiveBonuses
       );
 
-      const summonUnits = (activeSummons || []).slice(0, 5).map(s => createCardSummonUnit(s));
-      const mercUnits = (activeMercenaries || []).slice(0, 5).map(m => createCardMercenaryUnit(m));
-      const playerTeam = [playerUnit, ...summonUnits, ...mercUnits].slice(0, 9);
-
-      // 메인 진영 데이터 로드
+      // 최신 진형/소환수/용병 데이터를 서버에서 가져오기
+      let freshSummons = activeSummons || [];
+      let freshMercenaries = activeMercenaries || [];
       let formationGrid = null;
+      let cosmeticMap = {};
       try {
-        const fRes = await api.get('/formation/list');
+        const [summonRes, mercRes, fRes, cosmeticRes] = await Promise.all([
+          api.get('/summon/my'),
+          api.get('/mercenary/my'),
+          api.get('/formation/list'),
+          api.get('/shop/cosmetics/equipped').catch(() => ({ data: { cosmetics: {} } })),
+        ]);
+        freshSummons = summonRes.data.summons || [];
+        freshMercenaries = mercRes.data.mercenaries || [];
+        cosmeticMap = cosmeticRes.data.cosmetics || {};
         const mainFormation = fRes.data.formations.find(f => f.slotIndex === 0);
         if (mainFormation && mainFormation.gridData) {
           const grid = mainFormation.gridData;
-          // 배치된 유닛이 하나라도 있는지 확인
           const hasUnits = grid.some(row => row.some(cell => cell && cell.unitId));
           if (hasUnits) formationGrid = grid;
         }
       } catch {}
+
+      // 진형에 배치된 유닛만 참전 (진형이 있는 경우)
+      const formationUnitIds = new Set();
+      if (formationGrid) {
+        formationGrid.forEach(row => row.forEach(cell => {
+          if (cell && cell.unitId) formationUnitIds.add(cell.unitId);
+        }));
+      }
+      const battleSummons = formationGrid
+        ? freshSummons.filter(s => formationUnitIds.has(`summon_${s.id}`))
+        : freshSummons;
+      const battleMercs = formationGrid
+        ? freshMercenaries.filter(m => formationUnitIds.has(`merc_${m.id}`))
+        : freshMercenaries;
+      battleSummonIdsRef.current = battleSummons.map(s => s.id);
+      battleMercIdsRef.current = battleMercs.map(m => m.id);
+
+      const summonUnits = battleSummons.slice(0, 5).map(s => createCardSummonUnit(s));
+      const mercUnits = battleMercs.slice(0, 5).map(m => createCardMercenaryUnit(m));
+      const playerTeam = [playerUnit, ...summonUnits, ...mercUnits].slice(0, 9);
+
+      // 코스메틱 효과 주입 (장착된 오라가 없으면 기본 오라 적용)
+      for (const unit of playerTeam) {
+        const cm = cosmeticMap[unit.id];
+        if (cm) {
+          unit.portraitEffect = cm.effect;
+        } else {
+          const el = unit.element || (unit.id === 'player' ? CLASS_ELEMENT_MAP[unit.classType] : null) || 'neutral';
+          unit.portraitEffect = ELEMENT_AURA_MAP[el] || 'aura_gold';
+        }
+      }
 
       // 진영 데이터가 있으면 적용
       if (formationGrid) {
@@ -245,19 +357,29 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
     const buildEnemyTeam = () => {
       const monsterCount = Math.min(stage.monsterCount || 3, 9);
       const availableMonsters = monsters || [];
+      // 정예 몬스터 결정 (한 전투에 최대 1마리)
+      const eliteTier = rollEliteTier();
+      const eliteIdx = eliteTier ? Math.floor(Math.random() * monsterCount) : -1;
+
       const enemyTeam = [];
       for (let i = 0; i < monsterCount && availableMonsters.length > 0; i++) {
         const template = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
         const levelBonus = (stage.monsterLevelMin || 1) + Math.floor(Math.random() * ((stage.monsterLevelMax || 3) - (stage.monsterLevelMin || 1) + 1));
-        const scaled = {
+        let scaled = {
           ...template,
           level: levelBonus,
-          hp: Math.floor(template.hp * (1 + (levelBonus - 1) * 0.15)),
-          attack: Math.floor(template.attack * (1 + (levelBonus - 1) * 0.1)),
+          hp: Math.floor(template.hp * (1 + (levelBonus - 1) * 0.12)),
+          attack: Math.floor(template.attack * (1 + (levelBonus - 1) * 0.08)),
           defense: Math.floor((template.defense || 0) * (1 + (levelBonus - 1) * 0.08)),
-          phys_attack: Math.floor((template.phys_attack || 0) * (1 + (levelBonus - 1) * 0.1)),
-          mag_attack: Math.floor((template.mag_attack || 0) * (1 + (levelBonus - 1) * 0.1)),
+          phys_attack: Math.floor((template.phys_attack || 0) * (1 + (levelBonus - 1) * 0.08)),
+          mag_attack: Math.floor((template.mag_attack || 0) * (1 + (levelBonus - 1) * 0.08)),
         };
+
+        if (i === eliteIdx && eliteTier) {
+          scaled = applyEliteStats(scaled, eliteTier);
+          setEliteAlert({ name: scaled.name, icon: scaled.icon, monsterId: scaled.id, tier: eliteTier });
+        }
+
         enemyTeam.push(createCardMonsterUnit(scaled, i));
       }
       return enemyTeam;
@@ -332,6 +454,10 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
   useEffect(() => { currentTurnIdxRef.current = currentTurnIdx; }, [currentTurnIdx]);
   useEffect(() => { roundRef.current = round; }, [round]);
   useEffect(() => { unitsRef.current = units; }, [units]);
+  const autoAllRef = useRef(autoAll);
+  const autoCompanionRef = useRef(autoCompanion);
+  useEffect(() => { autoAllRef.current = autoAll; }, [autoAll]);
+  useEffect(() => { autoCompanionRef.current = autoCompanion; }, [autoCompanion]);
 
   const advanceTurn = useCallback(() => {
     const currentUnits = unitsRef.current;
@@ -393,6 +519,120 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
     setPhase('battle_end');
   }, [addLog]);
 
+  // 아군 자동전투 AI 결정
+  const decidePlayerAutoAction = useCallback((unit, allUnits) => {
+    const allies = allUnits.filter(u => u.team === 'player' && u.hp > 0);
+    const enemies = allUnits.filter(u => u.team === 'enemy' && u.hp > 0);
+    if (enemies.length === 0) return { action: 'wait' };
+
+    const attackType = (unit.rangeType === 'ranged' || unit.rangeType === 'magic') ? unit.rangeType : 'melee';
+    const validTargets = getValidTargets(unit, enemies, attackType);
+
+    const usableSkills = unit.skills.filter(s =>
+      s.currentCooldown <= 0 && (s.mp_cost || 0) <= unit.mp
+    );
+
+    // 아군 체력이 50% 미만이면 치유 스킬 우선
+    const healSkill = usableSkills.find(s => s.type === 'heal');
+    if (healSkill) {
+      const hurtAlly = allies.find(u => u.hp < u.maxHp * 0.5);
+      if (hurtAlly) return { action: 'skill', skill: healSkill, target: hurtAlly };
+    }
+
+    // 버프 스킬 (30% 확률)
+    const buffSkill = usableSkills.find(s => s.type === 'buff');
+    if (buffSkill && Math.random() < 0.3) {
+      const buffTarget = allies[Math.floor(Math.random() * allies.length)];
+      return { action: 'skill', skill: buffSkill, target: buffTarget };
+    }
+
+    // 공격 스킬 (50% 확률)
+    if (usableSkills.length > 0 && Math.random() < 0.5) {
+      const atkSkills = usableSkills.filter(s => s.type === 'attack' || s.type === 'aoe' || s.type === 'debuff');
+      if (atkSkills.length > 0) {
+        const skill = atkSkills[Math.floor(Math.random() * atkSkills.length)];
+        if (skill.type === 'aoe') {
+          return { action: 'skill', skill, target: enemies[0] };
+        }
+        if (skill.type === 'debuff') {
+          if (validTargets.length > 0) {
+            return { action: 'skill', skill, target: validTargets[0] };
+          }
+          return { action: 'wait' };
+        }
+        if (validTargets.length > 0) {
+          const target = validTargets.reduce((a, b) => a.hp < b.hp ? a : b);
+          return { action: 'skill', skill, target };
+        }
+      }
+    }
+
+    // 기본 공격: HP 가장 낮은 적 우선
+    if (validTargets.length > 0) {
+      const target = validTargets.reduce((a, b) => a.hp < b.hp ? a : b);
+      return { action: 'attack', target };
+    }
+
+    return { action: 'wait' };
+  }, []);
+
+  // 아군 자동전투 실행 (autoAll 또는 autoCompanion)
+  const executeAutoPlayerTurn = useCallback(async (unit) => {
+    setAnimatingUnit(unit.id);
+    setPhase('animating');
+    const currentUnits = unitsRef.current;
+    const decision = decidePlayerAutoAction(unit, currentUnits);
+
+    if (!decision || decision.action === 'wait') {
+      addLog(`${unit.name} 대기 (자동)`, 'system');
+    } else if (decision.action === 'attack') {
+      await playCombatAnimation(unit, decision.target, unit.rangeType);
+      const attackLogs = executeAttack(unit, decision.target, currentUnits);
+      attackLogs.forEach(l => {
+        processLogEntry(l, decision.target.id, unit.id);
+        if (l.type === 'kill' && decision.target.team === 'enemy') showMonsterDropAnim(decision.target);
+      });
+    } else if (decision.action === 'skill' && decision.skill) {
+      await playSkillCutIn(decision.skill, unit);
+      const skillRange = (decision.skill.range_val || decision.skill.range || 1) >= 2 ? 'ranged' : unit.rangeType;
+      const isOffensive = decision.skill.type === 'attack' || decision.skill.type === 'aoe' || decision.skill.type === 'debuff';
+      if (isOffensive && decision.target) {
+        await playCombatAnimation(unit, decision.target, skillRange, decision.skill);
+      }
+      const result = executeSkill(unit, decision.skill, decision.target, currentUnits);
+      result.logs.forEach(l => {
+        processLogEntry(l, decision.target?.id, unit.id);
+        if (l.type === 'kill' && (l.targetId || decision.target?.id)) {
+          const deadUnit = currentUnits.find(u => u.id === (l.targetId || decision.target?.id));
+          if (deadUnit?.team === 'enemy') showMonsterDropAnim(deadUnit);
+        }
+      });
+    }
+
+    setUnits([...currentUnits]);
+    setTimeout(() => {
+      setAnimatingUnit(null);
+      advanceTurn();
+    }, 400);
+  }, [decidePlayerAutoAction, processLogEntry, playCombatAnimation, playSkillCutIn, showMonsterDropAnim, advanceTurn]);
+
+  // 자동전투: player_action일 때 자동 실행
+  useEffect(() => {
+    if (phase !== 'player_action') return;
+    const current = getCurrentUnit();
+    if (!current || current.team !== 'player') return;
+
+    // autoAll이면 모든 아군 자동
+    // autoCompanion이면 소환수/용병만 자동 (id가 'player'가 아닌 유닛)
+    const shouldAuto = autoAll || (autoCompanion && current.id !== 'player');
+    if (!shouldAuto) return;
+
+    const timer = setTimeout(() => {
+      executeAutoPlayerTurn(current);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [phase, autoAll, autoCompanion, getCurrentUnit, executeAutoPlayerTurn]);
+
   // 적 턴 자동 실행
   useEffect(() => {
     if (phase !== 'enemy_turn') return;
@@ -411,17 +651,9 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
       if (!decision || decision.action === 'wait') {
         addLog(`${current.name} 대기`, 'system');
       } else if (decision.action === 'attack') {
-        // 공격 애니메이션 실행
         await playCombatAnimation(current, decision.target, current.rangeType);
         const attackLogs = executeAttack(current, decision.target, currentUnits);
-        attackLogs.forEach(l => {
-          addLog(l.text, l.type);
-          if (l.type === 'damage') {
-            addPopup(decision.target.id, `-${l.text.match(/(\d+) 피해/)?.[1] || '?'}`, 'damage');
-            if (l.elementLabel) addPopup(decision.target.id, l.elementLabel, l.elementMult > 1 ? 'element-strong' : 'element-weak');
-          }
-          if (l.type === 'kill') addPopup(decision.target.id, 'KO', 'kill');
-        });
+        attackLogs.forEach(l => processLogEntry(l, decision.target.id, current.id));
       } else if (decision.action === 'skill') {
         await playSkillCutIn(decision.skill, current);
         const skillRange = (decision.skill.range_val || decision.skill.range || 1) >= 2 ? 'ranged' : current.rangeType;
@@ -430,14 +662,7 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
           await playCombatAnimation(current, decision.target, skillRange, decision.skill);
         }
         const result = executeSkill(current, decision.skill, decision.target, currentUnits);
-        result.logs.forEach(l => {
-          addLog(l.text, l.type);
-          if (l.type === 'damage') {
-            addPopup(decision.target.id, `-${l.text.match(/(\d+) 피해/)?.[1] || '?'}`, 'damage');
-            if (l.elementLabel) addPopup(decision.target.id, l.elementLabel, l.elementMult > 1 ? 'element-strong' : 'element-weak');
-          }
-          if (l.type === 'heal') addPopup(decision.target.id, `+${l.text.match(/\+(\d+)/)?.[1] || '?'}`, 'heal');
-        });
+        result.logs.forEach(l => processLogEntry(l, decision.target?.id, current.id));
       } else if (decision.action === 'guard') {
         const guardLogs = executeGuard(current, decision.target);
         guardLogs.forEach(l => addLog(l.text, l.type));
@@ -457,27 +682,90 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
   useEffect(() => {
     if (phase !== 'battle_end' || !battleResult) return;
     const rewards = calculateRewards(units, stage);
+    const playerUnit = units.find(u => u.id === 'player');
     if (battleResult === 'victory') {
+      setTotalExpGained(rewards.exp);
+      setTotalGoldGained(rewards.gold);
+
+      // 기여도 계산 (아군만)
+      const contribData = contributionRef.current;
+      const playerTeam = units.filter(u => u.team === 'player');
+      const totalDamage = Object.values(contribData).reduce((sum, c) => sum + c.damage, 0) || 1;
+      const contribList = playerTeam.map(u => {
+        const c = contribData[u.id] || { damage: 0, kills: 0 };
+        const rawPct = c.damage / totalDamage;
+        return { id: u.id, name: u.name, icon: u.icon, imageUrl: u.imageUrl, damage: c.damage, kills: c.kills, rawPct };
+      });
+      // 최소 참여 보너스: 살아있었던 유닛에게 최소 5% 보장
+      const participantCount = contribList.filter(c => c.damage > 0 || units.find(u => u.id === c.id)?.hp > 0).length || 1;
+      const minPct = Math.min(0.05, 1 / participantCount);
+      let adjustedPcts = contribList.map(c => {
+        const participated = c.damage > 0 || (units.find(u => u.id === c.id)?.hp ?? 0) > 0;
+        return { ...c, adjPct: participated ? Math.max(minPct, c.rawPct) : 0 };
+      });
+      const totalAdjPct = adjustedPcts.reduce((s, c) => s + c.adjPct, 0) || 1;
+      const finalContrib = adjustedPcts.map(c => ({
+        ...c,
+        pct: Math.round((c.adjPct / totalAdjPct) * 100),
+        exp: Math.floor(rewards.exp * (c.adjPct / totalAdjPct)),
+      }));
+      setContributions(finalContrib);
+
+      // 서버에 전달할 각 유닛별 경험치
+      const playerExp = finalContrib.find(c => c.id === 'player')?.exp || rewards.exp;
+      const summonExpMap = {};
+      const mercExpMap = {};
+      for (const c of finalContrib) {
+        if (c.id.startsWith('summon_')) {
+          const smId = parseInt(c.id.replace('summon_', ''));
+          summonExpMap[smId] = c.exp;
+        } else if (c.id.startsWith('merc_')) {
+          const mId = parseInt(c.id.replace('merc_', ''));
+          mercExpMap[mId] = c.exp;
+        }
+      }
+
       addLog(`\n전투 승리! EXP +${rewards.exp}, Gold +${rewards.gold}`, 'heal');
-      // 서버에 전투 결과 전송 (재료 드랍)
       const deadEnemies = units.filter(u => u.team === 'enemy' && u.hp <= 0).map(u => u.name);
       api.post('/stage/battle-result', {
         monstersDefeated: deadEnemies,
-        expGained: rewards.exp,
+        expGained: playerExp,
         goldGained: rewards.gold,
         victory: true,
+        groupKey: groupKey || null,
+        activeSummonIds: battleSummonIdsRef.current,
+        activeMercenaryIds: battleMercIdsRef.current,
+        summonExpMap,
+        mercExpMap,
+        playerHp: playerUnit ? playerUnit.hp : 0,
+        playerMp: playerUnit ? playerUnit.mp : 0,
       }).then(res => {
+        setResultData(res.data);
         if (res.data.droppedMaterials && res.data.droppedMaterials.length > 0) {
           setDroppedMaterials(res.data.droppedMaterials);
           res.data.droppedMaterials.forEach(m => {
             addLog(`  📦 ${m.icon} ${m.name} x${m.quantity} 획득!`, 'system');
           });
         }
+        if (res.data.droppedTickets && res.data.droppedTickets.length > 0) {
+          setDroppedTickets(res.data.droppedTickets);
+          res.data.droppedTickets.forEach(t => {
+            addLog(`  🎫 ${t.icon} ${t.name} x${t.quantity} 획득!`, 'system');
+          });
+        }
+        if (res.data.leveledUp) {
+          addLog(`🎉 레벨 업! Lv.${res.data.levelBefore} → Lv.${res.data.character.level}`, 'level');
+        }
       }).catch(() => {});
     } else {
       addLog(`\n전투 패배...`, 'damage');
+      api.post('/stage/battle-result', {
+        monstersDefeated: [], expGained: 0, goldGained: 0, victory: false,
+        playerHp: 0, playerMp: 0,
+        activeSummonIds: [], activeMercenaryIds: [],
+      }).catch(() => {});
     }
-  }, [phase, battleResult, units, stage, addLog]);
+  }, [phase, battleResult, units, stage, addLog]); // eslint-disable-line
 
   // === 플레이어 액션 핸들러 ===
 
@@ -489,7 +777,7 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
     setShowSkillList(false);
     setShowItemList(false);
     if (action === 'retreat') {
-      onBattleEnd('retreat', 0, 0);
+      setShowRetreatConfirm(true);
       return;
     }
     if (action === 'wait') {
@@ -566,19 +854,10 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
       await playCombatAnimation(current, target, current.rangeType);
       const attackLogs = executeAttack(current, target, currentUnits);
       attackLogs.forEach(l => {
-        addLog(l.text, l.type);
-        if (l.type === 'damage') {
-          addPopup(target.id, `-${l.text.match(/(\d+) 피해/)?.[1] || '?'}`, 'damage');
-          if (l.elementLabel) addPopup(target.id, l.elementLabel, l.elementMult > 1 ? 'element-strong' : 'element-weak');
-        }
-        if (l.type === 'kill') {
-          addPopup(target.id, 'KO', 'kill');
-          if (target.team === 'enemy') showMonsterDropAnim(target);
-        }
-        if (l.type === 'evade') addPopup(target.id, 'MISS', 'evade');
+        processLogEntry(l, target.id, current.id);
+        if (l.type === 'kill' && target.team === 'enemy') showMonsterDropAnim(target);
       });
     } else if (selectedAction === 'skill' && selectedSkill) {
-      // 스킬 발동 연출
       await playSkillCutIn(selectedSkill, current);
       const skillRange = (selectedSkill.range_val || selectedSkill.range || 1) >= 2 ? 'ranged' : current.rangeType;
       const isOffensive = selectedSkill.type === 'attack' || selectedSkill.type === 'aoe' || selectedSkill.type === 'debuff';
@@ -587,17 +866,11 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
       }
       const result = executeSkill(current, selectedSkill, target, currentUnits);
       result.logs.forEach(l => {
-        addLog(l.text, l.type);
-        if (l.type === 'damage') {
-          addPopup(target.id, `-${l.text.match(/(\d+) 피해/)?.[1] || '?'}`, 'damage');
-          if (l.elementLabel) addPopup(target.id, l.elementLabel, l.elementMult > 1 ? 'element-strong' : 'element-weak');
-        }
-        if (l.type === 'heal') addPopup(target.id, `+${l.text.match(/\+(\d+)/)?.[1] || '?'}`, 'heal');
+        processLogEntry(l, target.id, current.id);
         if (l.type === 'kill') {
-          addPopup(target.id, 'KO', 'kill');
-          if (target.team === 'enemy') showMonsterDropAnim(target);
+          const deadUnit = currentUnits.find(u => u.id === (l.targetId || target.id));
+          if (deadUnit?.team === 'enemy') showMonsterDropAnim(deadUnit);
         }
-        if (l.type === 'evade') addPopup(target.id, 'MISS', 'evade');
       });
     } else if (selectedAction === 'guard') {
       const guardLogs = executeGuard(current, target);
@@ -616,9 +889,8 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
   };
 
   const handleBattleEndClick = () => {
-    const rewards = calculateRewards(units, stage);
     if (battleResult === 'victory') {
-      onBattleEnd('victory', rewards.exp, rewards.gold);
+      onBattleEnd('victory', totalExpGained, totalGoldGained);
     } else {
       onBattleEnd('defeat', 0, 0);
     }
@@ -694,7 +966,11 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
   };
 
   const getHitAnimClass = (unitId) => {
-    return hitEffects.some(e => e.unitId === unitId) ? 'hit-flash' : '';
+    const effect = hitEffects.find(e => e.unitId === unitId);
+    if (!effect) return '';
+    if (effect.effectType === 'crit') return 'hit-crit-flash';
+    if (effect.effectType === 'evade') return 'hit-evade';
+    return 'hit-flash';
   };
 
   const renderCell = (cell, zone) => {
@@ -731,6 +1007,36 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
 
   return (
     <div className="card-battle">
+      {/* 정예 몬스터 등장 알림 */}
+      {eliteAlert && (
+        <div className="elite-alert-overlay" onClick={() => setEliteAlert(null)}>
+          <div className="elite-alert-popup" style={{ '--elite-color': eliteAlert.tier.color }}>
+            <div className="elite-alert-flash" />
+            <div className="elite-alert-icon">{eliteAlert.tier.icon}</div>
+            <div className="elite-alert-img-wrap">
+              <img
+                src={`/monsters/${eliteAlert.monsterId}_full.png`}
+                alt={eliteAlert.name}
+                className="elite-alert-img"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+              <div className="elite-alert-aura" />
+            </div>
+            <div className="elite-alert-tier" style={{ color: eliteAlert.tier.color }}>
+              {eliteAlert.tier.icon} {eliteAlert.tier.label}
+            </div>
+            <div className="elite-alert-name">
+              <span style={{ color: eliteAlert.tier.color }}>{eliteAlert.tier.label}</span> {eliteAlert.name}
+            </div>
+            <div className="elite-alert-subtitle">이(가) 등장했습니다!!</div>
+            <div className="elite-alert-mult">
+              능력치 x{eliteAlert.tier.mult} / 보상 x{eliteAlert.tier.rewardMult}
+            </div>
+            <div className="elite-alert-hint">터치하여 계속</div>
+          </div>
+        </div>
+      )}
+
       {/* 전투 배경 이미지 */}
       <div className="cb-bg-layer">
         <img src="/ui/battle/battle_bg.png" alt="" className="cb-bg-img" onError={(e) => { e.target.style.display='none'; }} />
@@ -746,7 +1052,23 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
             <img src="/ui/battle/round_badge.png" alt="" className="cb-round-icon" onError={(e) => { e.target.style.display='none'; }} />
             라운드 {round}
           </div>
-          <button className="cb-retreat-btn" onClick={() => handleSelectAction('retreat')}>
+          <div className="cb-auto-btns">
+            <button
+              className={`cb-auto-btn ${autoAll ? 'active' : ''}`}
+              onClick={() => { setAutoAll(v => !v); if (!autoAll) setAutoCompanion(false); }}
+              title="전체 자동전투"
+            >
+              {autoAll ? '⚡' : '▶'} 모두자동
+            </button>
+            <button
+              className={`cb-auto-btn companion ${autoCompanion ? 'active' : ''}`}
+              onClick={() => { setAutoCompanion(v => !v); if (!autoCompanion) setAutoAll(false); }}
+              title="소환수/용병만 자동전투"
+            >
+              {autoCompanion ? '⚡' : '▶'} 동료자동
+            </button>
+          </div>
+          <button className="cb-retreat-btn" onClick={() => setShowRetreatConfirm(true)}>
             <img src="/ui/battle/action_retreat.png" alt="" className="cb-btn-icon" onError={(e) => { e.target.style.display='none'; }} />
             후퇴
           </button>
@@ -840,7 +1162,12 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
         <div className="cb-skill-cutin">
           <div className="cb-skill-cutin-bg" />
           <div className="cb-skill-cutin-content">
-            <span className="cb-skill-cutin-icon">{skillCutIn.skillIcon}</span>
+            <span className="cb-skill-cutin-icon">
+              {skillCutIn.skillIconUrl
+                ? <img src={skillCutIn.skillIconUrl} alt="" className="cb-skill-cutin-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling && (e.target.nextSibling.style.display='inline'); }} />
+                : null}
+              <span style={skillCutIn.skillIconUrl ? {display:'none'} : {}}>{skillCutIn.skillIcon}</span>
+            </span>
             <div className="cb-skill-cutin-info">
               <div className="cb-skill-cutin-name">{skillCutIn.skillName}</div>
               <div className="cb-skill-cutin-caster">{skillCutIn.casterName}</div>
@@ -896,7 +1223,11 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
                 onClick={() => handleSelectSkill(skill)}
                 title={`MP: ${skill.mp_cost || 0} | ${skill.description || ''}`}
               >
-                {skill.icon || '✨'} {skill.name}
+                {skill.iconUrl
+                  ? <img src={skill.iconUrl} alt="" className="cb-skill-btn-img" onError={(e) => { e.target.style.display='none'; }} />
+                  : <span className="cb-skill-btn-emoji">{skill.icon || '✨'}</span>
+                }
+                {skill.name}
                 <span className="cb-skill-cost">MP {skill.mp_cost || 0}</span>
               </button>
             ))}
@@ -955,36 +1286,243 @@ function StageBattle({ stage, character, charState, learnedSkills, activeSummons
         </div>
       )}
 
-      {/* 전투 종료 */}
-      {phase === 'battle_end' && (
-        <div className="cb-result-overlay">
-          <div className={`cb-result ${battleResult}`}>
-            <img
-              src={`/ui/battle/${battleResult === 'victory' ? 'victory_bg' : 'defeat_bg'}.png`}
-              alt="" className="cb-result-bg-img"
-              onError={(e) => { e.target.style.display='none'; }}
-            />
-            <div className="cb-result-content">
-              <div className="cb-result-title">{battleResult === 'victory' ? '승리!' : '패배...'}</div>
-              {battleResult === 'victory' && (
-                <div className="cb-result-rewards">
-                  <div>EXP +{calculateRewards(units, stage).exp}</div>
-                  <div>Gold +{calculateRewards(units, stage).gold}</div>
-                  {droppedMaterials.length > 0 && (
-                    <div className="cb-result-drops">
-                      {droppedMaterials.map((m, i) => (
-                        <div key={i} className="cb-result-drop-item">
-                          <span className="cb-result-drop-icon">{m.icon}</span>
-                          <span>{m.name} x{m.quantity}</span>
+      {/* 전투 종료 화면 (던전 전투와 동일) */}
+      {phase === 'battle_end' && (() => {
+        const isVictory = battleResult === 'victory';
+        const rd = resultData;
+        const charInfo = rd?.character;
+        const leveled = rd?.leveledUp;
+        const summons = rd?.summonResults || [];
+        const mercs = rd?.mercenaryResults || [];
+        const expNeeded = charInfo ? Math.floor(80 * charInfo.level + 0.5 * charInfo.level * charInfo.level) : 100;
+        const expPct = charInfo ? Math.min(100, (charInfo.exp / expNeeded) * 100) : 0;
+
+        return (
+          <div className="srpg-result-overlay">
+            <div className={`srpg-result-screen ${isVictory ? 'victory' : 'defeat'}`}>
+              {/* 배경 이미지 */}
+              <div className="srpg-result-bg">
+                <img src={isVictory ? '/ui/victory_bg.png' : '/ui/defeat_bg.png'} alt="" />
+                <div className="srpg-result-bg-overlay" />
+              </div>
+
+              {/* 상단 타이틀 */}
+              <div className="srpg-result-title-area">
+                <h2 className={`srpg-result-title ${isVictory ? '' : 'defeat'}`}>
+                  {isVictory ? 'VICTORY' : 'DEFEAT'}
+                </h2>
+                <div className="srpg-result-subtitle">
+                  {isVictory ? '전투에서 승리했습니다!' : '전투에서 패배했습니다...'}
+                </div>
+                <div className="srpg-result-round">Round {round}</div>
+              </div>
+
+              {/* 승리 시 콘텐츠 */}
+              {isVictory && (
+                <div className="srpg-result-content">
+                  {/* 보상 섹션 */}
+                  <div className="srpg-result-rewards-panel">
+                    <div className="srpg-result-section-title">
+                      <img src="/ui/reward_chest.png" alt="" className="srpg-result-chest-icon" />
+                      <span>전투 보상</span>
+                    </div>
+                    <div className="srpg-result-reward-grid">
+                      <div className="srpg-rr-item exp">
+                        <span className="srpg-rr-label">경험치</span>
+                        <span className="srpg-rr-value">+{totalExpGained}</span>
+                      </div>
+                      <div className="srpg-rr-item gold">
+                        <span className="srpg-rr-label">골드</span>
+                        <span className="srpg-rr-value">+{totalGoldGained}</span>
+                      </div>
+                    </div>
+
+                    {droppedMaterials.length > 0 && (
+                      <div className="srpg-result-drops">
+                        <div className="srpg-result-drops-label">획득 재료</div>
+                        <div className="srpg-result-drops-list">
+                          {droppedMaterials.map((m, i) => (
+                            <div key={i} className="srpg-result-drop-chip">
+                              <span className="srpg-result-drop-icon">{m.icon}</span>
+                              <span>{m.name}</span>
+                              <span className="srpg-result-drop-qty">x{m.quantity}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                    )}
+
+                    {droppedTickets.length > 0 && (
+                      <div className="srpg-result-drops">
+                        <div className="srpg-result-drops-label">🎫 획득 던전 입장권</div>
+                        <div className="srpg-result-drops-list">
+                          {droppedTickets.map((t, i) => {
+                            const gradeColor = { '일반': '#9ca3af', '고급': '#4ade80', '희귀': '#60a5fa', '영웅': '#c084fc', '전설': '#fbbf24' }[t.grade] || '#9ca3af';
+                            return (
+                              <div key={i} className="srpg-result-drop-chip" style={{ borderColor: gradeColor }}>
+                                <span className="srpg-result-drop-icon">{t.icon}</span>
+                                <span style={{ color: gradeColor }}>{t.name}</span>
+                                <span className="srpg-result-drop-qty">x{t.quantity}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 기여도 */}
+                  {contributions.length > 0 && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>기여도 (EXP 분배)</span>
+                      </div>
+                      <div className="srpg-contrib-list">
+                        {contributions.filter(c => c.pct > 0).sort((a, b) => b.pct - a.pct).map(c => (
+                          <div key={c.id} className={`srpg-contrib-row ${c.id === 'player' ? 'player' : ''}`}>
+                            <div className="srpg-contrib-unit">
+                              <img src={c.imageUrl} alt="" className="srpg-contrib-icon" onError={e => { e.target.style.display='none'; }} />
+                              <span className="srpg-contrib-name">{c.name}</span>
+                            </div>
+                            <div className="srpg-contrib-stats">
+                              <span className="srpg-contrib-dmg">{c.damage.toLocaleString()} DMG</span>
+                              {c.kills > 0 && <span className="srpg-contrib-kills">{c.kills} Kill</span>}
+                            </div>
+                            <div className="srpg-contrib-bar-wrap">
+                              <div className="srpg-contrib-bar" style={{ width: `${c.pct}%` }} />
+                              <span className="srpg-contrib-pct">{c.pct}%</span>
+                            </div>
+                            <span className="srpg-contrib-exp">+{c.exp} EXP</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 캐릭터 성장 */}
+                  {charInfo && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>캐릭터 성장</span>
+                      </div>
+                      <div className="srpg-result-char-info">
+                        <div className="srpg-result-char-level">
+                          {leveled && <img src="/ui/levelup_effect.png" alt="" className="srpg-result-lvup-glow" />}
+                          <span className="srpg-result-char-lv">Lv.{charInfo.level}</span>
+                          {leveled && <span className="srpg-result-lvup-badge">LEVEL UP!</span>}
+                        </div>
+                        <div className="srpg-result-exp-bar">
+                          <div className="srpg-result-exp-fill" style={{ width: `${expPct}%` }} />
+                          <span className="srpg-result-exp-text">{charInfo.exp} / {expNeeded} EXP</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 캐릭터 최종 상태 */}
+                  {charInfo && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>전투 후 상태</span>
+                      </div>
+                      <div className="srpg-result-status-bars">
+                        <div className="srpg-result-status-row">
+                          <span className="srpg-result-status-label hp">HP</span>
+                          <div className="srpg-result-status-track">
+                            <div className="srpg-result-status-fill hp" style={{ width: `${Math.min(100, ((charInfo.current_hp ?? 0) / (charInfo.hp || 1)) * 100)}%` }} />
+                          </div>
+                          <span className="srpg-result-status-text">{charInfo.current_hp ?? 0} / {charInfo.hp}</span>
+                        </div>
+                        <div className="srpg-result-status-row">
+                          <span className="srpg-result-status-label mp">MP</span>
+                          <div className="srpg-result-status-track">
+                            <div className="srpg-result-status-fill mp" style={{ width: `${Math.min(100, ((charInfo.current_mp ?? 0) / (charInfo.mp || 1)) * 100)}%` }} />
+                          </div>
+                          <span className="srpg-result-status-text">{charInfo.current_mp ?? 0} / {charInfo.mp}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 소환수 성장 */}
+                  {summons.length > 0 && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>소환수 성장</span>
+                      </div>
+                      <div className="srpg-result-summon-list">
+                        {summons.map((s) => {
+                          const sPct = s.expNeeded > 0 ? Math.min(100, (s.exp / s.expNeeded) * 100) : 0;
+                          return (
+                            <div key={s.id} className="srpg-result-summon-row">
+                              <img src={`/summons/${s.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
+                              <div className="srpg-result-summon-info">
+                                <div className="srpg-result-summon-name">
+                                  {s.name} <span className="srpg-result-summon-lv">Lv.{s.level}</span>
+                                </div>
+                                <div className="srpg-result-exp-bar small">
+                                  <div className="srpg-result-exp-fill" style={{ width: `${sPct}%` }} />
+                                  <span className="srpg-result-exp-text">{s.exp}/{s.expNeeded}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 용병 성장 */}
+                  {mercs.length > 0 && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>용병 성장</span>
+                      </div>
+                      <div className="srpg-result-summon-list">
+                        {mercs.map((m) => {
+                          const mPct = m.expNeeded > 0 ? Math.min(100, (m.exp / m.expNeeded) * 100) : 0;
+                          return (
+                            <div key={m.id} className="srpg-result-summon-row">
+                              <img src={`/mercenaries/${m.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
+                              <div className="srpg-result-summon-info">
+                                <div className="srpg-result-summon-name">
+                                  {m.name} <span className="srpg-result-summon-lv">Lv.{m.level}</span>
+                                </div>
+                                <div className="srpg-result-exp-bar small">
+                                  <div className="srpg-result-exp-fill" style={{ width: `${mPct}%` }} />
+                                  <span className="srpg-result-exp-text">{m.exp}/{m.expNeeded}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
               )}
-              <button className="cb-result-btn" onClick={handleBattleEndClick}>
-                {battleResult === 'victory' ? '계속하기' : '돌아가기'}
+
+              <button
+                className={`srpg-result-continue-btn ${isVictory ? 'victory' : 'defeat'}`}
+                onClick={handleBattleEndClick}
+                disabled={isVictory && !rd}
+              >
+                {isVictory && !rd ? '저장 중...' : isVictory ? '계속하기' : '마을로 돌아가기'}
               </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 후퇴 확인 팝업 */}
+      {showRetreatConfirm && (
+        <div className="cb-result-overlay" style={{ zIndex: 60 }}>
+          <div className="cb-retreat-confirm">
+            <div className="cb-retreat-confirm-title">후퇴 확인</div>
+            <div className="cb-retreat-confirm-text">전투에서 후퇴하시겠습니까?<br/>진행 상황이 모두 사라집니다.</div>
+            <div className="cb-retreat-confirm-btns">
+              <button className="cb-retreat-confirm-yes" onClick={() => onBattleEnd('retreat', 0, 0)}>후퇴</button>
+              <button className="cb-retreat-confirm-no" onClick={() => setShowRetreatConfirm(false)}>취소</button>
             </div>
           </div>
         </div>
@@ -1022,8 +1560,9 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
 
   return (
     <div
-      className={`cb-card ${unit.team} ${isCurrent ? 'current' : ''} ${isTarget ? 'targetable' : ''} ${isDead ? 'dead' : ''} ${animating ? 'animating' : ''} ${unit.isGuarding ? 'guarding' : ''} ${animClass || ''} ${hitClass || ''}`}
+      className={`cb-card ${unit.team} ${isCurrent ? 'current' : ''} ${isTarget ? 'targetable' : ''} ${isDead ? 'dead' : ''} ${animating ? 'animating' : ''} ${unit.isGuarding ? 'guarding' : ''} ${unit.eliteTier ? 'elite' : ''} ${animClass || ''} ${hitClass || ''}`}
       onClick={isTarget && !isDead ? onSelect : undefined}
+      style={unit.eliteTier ? { '--elite-color': unit.eliteTier.color } : undefined}
     >
       {/* 데미지 팝업 */}
       {popups.map(p => (
@@ -1046,6 +1585,9 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
 
       {/* 카드 상단: 이미지 영역 */}
       <div className="cb-card-portrait">
+        {unit.portraitEffect && (
+          <div className={`cb-portrait-effect cb-effect-${unit.portraitEffect}`} />
+        )}
         {unit.imageUrl && !imgErr ? (
           <img
             src={unit.imageUrl}
@@ -1059,13 +1601,18 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
         <div className="cb-card-portrait-overlay" />
         {/* 레벨 배지 */}
         <div className="cb-card-lv-badge">Lv.{unit.level}</div>
-        {/* 열 배지 */}
-        <div className="cb-card-row-badge">{unit.row === 'front' ? '앞' : '뒤'}</div>
       </div>
+
+      {/* 정예 배지 */}
+      {unit.eliteTier && (
+        <div className="cb-elite-badge" style={{ background: unit.eliteTier.color }}>
+          {unit.eliteTier.icon} {unit.eliteTier.label}
+        </div>
+      )}
 
       {/* 카드 하단: 정보 */}
       <div className="cb-card-info">
-        <div className="cb-card-name">{unit.name}</div>
+        <div className="cb-card-name" style={unit.eliteTier ? { color: unit.eliteTier.color } : undefined}>{unit.eliteTier ? `${unit.eliteTier.label} ` : ''}{unit.name}</div>
 
         {/* HP 바 */}
         <div className="cb-card-bar hp">

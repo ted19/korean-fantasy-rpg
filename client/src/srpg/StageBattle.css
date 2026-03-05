@@ -85,6 +85,55 @@
   filter: drop-shadow(0 0 4px rgba(212,168,67,0.4));
 }
 
+/* Auto Battle Buttons */
+.cb-auto-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.cb-auto-btn {
+  background: rgba(100, 100, 120, 0.15);
+  border: 1px solid rgba(139, 164, 199, 0.2);
+  color: #8ba4c7;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.cb-auto-btn:hover {
+  background: rgba(100, 100, 120, 0.3);
+  border-color: rgba(139, 164, 199, 0.4);
+}
+.cb-auto-btn.active {
+  background: rgba(255, 165, 2, 0.15);
+  border-color: rgba(255, 165, 2, 0.5);
+  color: #ffa502;
+  box-shadow: 0 0 10px rgba(255, 165, 2, 0.15);
+  animation: autoBtnPulse 2s infinite;
+}
+.cb-auto-btn.companion.active {
+  background: rgba(46, 213, 115, 0.15);
+  border-color: rgba(46, 213, 115, 0.5);
+  color: #2ed573;
+  box-shadow: 0 0 10px rgba(46, 213, 115, 0.15);
+  animation: autoBtnPulseGreen 2s infinite;
+}
+
+@keyframes autoBtnPulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(255, 165, 2, 0.1); }
+  50% { box-shadow: 0 0 14px rgba(255, 165, 2, 0.3); }
+}
+@keyframes autoBtnPulseGreen {
+  0%, 100% { box-shadow: 0 0 6px rgba(46, 213, 115, 0.1); }
+  50% { box-shadow: 0 0 14px rgba(46, 213, 115, 0.3); }
+}
+
 .cb-retreat-btn {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.35);
@@ -344,6 +393,222 @@
   object-position: center top;
   display: block;
   transition: transform 0.3s;
+  position: relative;
+  z-index: 1;
+}
+
+/* ========== 코스메틱 초상화 효과 ========== */
+.cb-portrait-effect {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* 황금 기운 */
+.cb-effect-aura_gold {
+  background: radial-gradient(ellipse at center, rgba(255,165,2,0.35) 0%, rgba(255,215,0,0.1) 50%, transparent 70%);
+  animation: auraGoldPulse 2s ease-in-out infinite;
+  box-shadow: inset 0 0 20px rgba(255,165,2,0.3);
+}
+@keyframes auraGoldPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+/* 불꽃 오라 */
+.cb-effect-flame {
+  background: radial-gradient(ellipse at bottom, rgba(255,69,0,0.4) 0%, rgba(255,140,0,0.15) 40%, transparent 70%);
+  animation: flameFlicker 0.8s ease-in-out infinite alternate;
+  box-shadow: inset 0 0 25px rgba(255,69,0,0.25);
+}
+@keyframes flameFlicker {
+  0% { opacity: 0.5; filter: brightness(1); }
+  50% { opacity: 1; filter: brightness(1.2); }
+  100% { opacity: 0.7; filter: brightness(0.9); }
+}
+
+/* 빙결 오라 */
+.cb-effect-ice {
+  background: radial-gradient(ellipse at center, rgba(135,206,250,0.35) 0%, rgba(200,230,255,0.15) 50%, transparent 70%);
+  animation: iceShimmer 3s ease-in-out infinite;
+  box-shadow: inset 0 0 18px rgba(135,206,250,0.3);
+}
+@keyframes iceShimmer {
+  0%, 100% { opacity: 0.6; filter: hue-rotate(0deg); }
+  50% { opacity: 1; filter: hue-rotate(15deg); }
+}
+
+/* 번개 오라 */
+.cb-effect-lightning {
+  background: radial-gradient(ellipse at center, rgba(255,255,100,0.3) 0%, rgba(100,149,237,0.15) 50%, transparent 70%);
+  animation: lightningFlash 1.5s ease-in-out infinite;
+  box-shadow: inset 0 0 22px rgba(255,255,100,0.2);
+}
+@keyframes lightningFlash {
+  0%, 85%, 100% { opacity: 0.4; }
+  88% { opacity: 1; filter: brightness(1.5); }
+  91% { opacity: 0.3; }
+  94% { opacity: 0.9; filter: brightness(1.3); }
+}
+
+/* 암흑 오라 */
+.cb-effect-shadow {
+  background: radial-gradient(ellipse at center, rgba(60,0,80,0.5) 0%, rgba(30,0,50,0.2) 50%, transparent 70%);
+  animation: shadowSwirl 4s linear infinite;
+  box-shadow: inset 0 0 25px rgba(80,0,120,0.35);
+}
+@keyframes shadowSwirl {
+  0% { filter: hue-rotate(0deg); opacity: 0.6; }
+  50% { filter: hue-rotate(20deg); opacity: 0.9; }
+  100% { filter: hue-rotate(0deg); opacity: 0.6; }
+}
+
+/* 신성 오라 */
+.cb-effect-holy {
+  background: radial-gradient(ellipse at top, rgba(255,255,200,0.4) 0%, rgba(255,223,128,0.15) 50%, transparent 70%);
+  animation: holyRays 2.5s ease-in-out infinite;
+  box-shadow: inset 0 0 20px rgba(255,223,128,0.3);
+}
+@keyframes holyRays {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+/* 독기 오라 */
+.cb-effect-poison {
+  background: radial-gradient(ellipse at bottom, rgba(0,180,0,0.35) 0%, rgba(50,200,50,0.12) 50%, transparent 70%);
+  animation: poisonBubble 2s ease-in-out infinite;
+  box-shadow: inset 0 0 18px rgba(0,180,0,0.25);
+}
+@keyframes poisonBubble {
+  0%, 100% { opacity: 0.5; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-2px); }
+}
+
+/* 바람 오라 */
+.cb-effect-wind {
+  background: radial-gradient(ellipse at center, rgba(150,220,255,0.3) 0%, rgba(200,240,255,0.1) 50%, transparent 70%);
+  animation: windBreeze 2.5s ease-in-out infinite;
+  box-shadow: inset 0 0 15px rgba(150,220,255,0.2);
+}
+@keyframes windBreeze {
+  0%, 100% { opacity: 0.4; transform: translateX(0); }
+  25% { opacity: 0.8; transform: translateX(2px); }
+  75% { opacity: 0.6; transform: translateX(-2px); }
+}
+
+/* 혈기 오라 */
+.cb-effect-blood {
+  background: radial-gradient(ellipse at center, rgba(180,0,0,0.4) 0%, rgba(120,0,0,0.15) 50%, transparent 70%);
+  animation: bloodPulse 1.5s ease-in-out infinite;
+  box-shadow: inset 0 0 22px rgba(180,0,0,0.3);
+}
+@keyframes bloodPulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.01); }
+}
+
+/* 영혼 오라 */
+.cb-effect-spirit {
+  background: radial-gradient(ellipse at center, rgba(180,130,255,0.35) 0%, rgba(130,200,255,0.15) 40%, rgba(255,200,255,0.1) 60%, transparent 75%);
+  animation: spiritGlow 3s ease-in-out infinite;
+  box-shadow: inset 0 0 25px rgba(180,130,255,0.25);
+}
+@keyframes spiritGlow {
+  0%, 100% { opacity: 0.5; filter: hue-rotate(0deg); }
+  33% { opacity: 0.9; filter: hue-rotate(30deg); }
+  66% { opacity: 0.7; filter: hue-rotate(-20deg); }
+}
+
+/* ===== 프리미엄 오라 효과 ===== */
+
+/* 용의 숨결 - 황금+적색 이중 맥동 */
+.cb-effect-dragon_breath {
+  background:
+    radial-gradient(ellipse at bottom, rgba(255,69,0,0.45) 0%, transparent 50%),
+    radial-gradient(ellipse at top, rgba(255,215,0,0.4) 0%, transparent 50%);
+  animation: dragonBreath 1.5s ease-in-out infinite alternate;
+  box-shadow: inset 0 0 30px rgba(255,140,0,0.4), 0 0 15px rgba(255,69,0,0.3);
+}
+@keyframes dragonBreath {
+  0% { opacity: 0.6; transform: scale(1); filter: brightness(1); }
+  50% { opacity: 1; transform: scale(1.03); filter: brightness(1.3); }
+  100% { opacity: 0.8; transform: scale(1.01); filter: brightness(1.1); }
+}
+
+/* 천상의 빛 - 무지개 프리즘 */
+.cb-effect-celestial {
+  background:
+    conic-gradient(from 0deg, rgba(255,0,0,0.2), rgba(255,165,0,0.2), rgba(255,255,0,0.2), rgba(0,255,0,0.2), rgba(0,150,255,0.2), rgba(130,0,255,0.2), rgba(255,0,0,0.2));
+  animation: celestialSpin 4s linear infinite;
+  box-shadow: inset 0 0 20px rgba(255,255,255,0.3), 0 0 12px rgba(200,200,255,0.2);
+  filter: blur(2px);
+}
+@keyframes celestialSpin {
+  from { transform: rotate(0deg); opacity: 0.6; }
+  50% { opacity: 0.9; }
+  to { transform: rotate(360deg); opacity: 0.6; }
+}
+
+/* 심연의 화염 - 검+보라 불꽃 */
+.cb-effect-abyssal_flame {
+  background:
+    radial-gradient(ellipse at bottom, rgba(100,0,150,0.5) 0%, transparent 40%),
+    radial-gradient(ellipse at center, rgba(200,0,80,0.3) 0%, transparent 60%);
+  animation: abyssalFlame 1s ease-in-out infinite alternate;
+  box-shadow: inset 0 0 30px rgba(120,0,180,0.4), 0 0 20px rgba(80,0,120,0.3);
+}
+@keyframes abyssalFlame {
+  0% { opacity: 0.5; filter: brightness(0.9) hue-rotate(0deg); }
+  100% { opacity: 1; filter: brightness(1.3) hue-rotate(15deg); }
+}
+
+/* 별빛 오라 - 반짝이는 별 입자 */
+.cb-effect-starlight {
+  background:
+    radial-gradient(2px 2px at 20% 30%, rgba(255,255,200,0.9), transparent),
+    radial-gradient(2px 2px at 70% 20%, rgba(200,220,255,0.9), transparent),
+    radial-gradient(2px 2px at 50% 70%, rgba(255,200,255,0.9), transparent),
+    radial-gradient(3px 3px at 80% 60%, rgba(255,255,150,0.8), transparent),
+    radial-gradient(2px 2px at 30% 80%, rgba(200,255,255,0.8), transparent),
+    radial-gradient(ellipse at center, rgba(100,120,200,0.2) 0%, transparent 70%);
+  animation: starlightTwinkle 2s ease-in-out infinite;
+  box-shadow: inset 0 0 15px rgba(150,170,255,0.2);
+}
+@keyframes starlightTwinkle {
+  0%, 100% { opacity: 0.5; filter: brightness(1); }
+  25% { opacity: 0.9; filter: brightness(1.4); }
+  50% { opacity: 0.6; filter: brightness(1.1); }
+  75% { opacity: 1; filter: brightness(1.5); }
+}
+
+/* 봉황의 기운 - 금+적+주황 불꽃 날개 */
+.cb-effect-phoenix {
+  background:
+    radial-gradient(ellipse at bottom center, rgba(255,100,0,0.5) 0%, transparent 40%),
+    radial-gradient(ellipse at left, rgba(255,200,0,0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at right, rgba(255,200,0,0.3) 0%, transparent 50%);
+  animation: phoenixRise 2s ease-in-out infinite;
+  box-shadow: inset 0 0 35px rgba(255,150,0,0.35), 0 0 20px rgba(255,80,0,0.25);
+}
+@keyframes phoenixRise {
+  0%, 100% { opacity: 0.5; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); filter: brightness(1.3); }
+}
+
+/* 혼돈의 소용돌이 - 다색 회전 */
+.cb-effect-chaos_vortex {
+  background:
+    conic-gradient(from 0deg at 50% 50%, rgba(255,0,100,0.3), rgba(0,200,255,0.3), rgba(150,0,255,0.3), rgba(255,200,0,0.3), rgba(255,0,100,0.3));
+  animation: chaosVortex 2s linear infinite;
+  box-shadow: inset 0 0 25px rgba(150,0,200,0.3), 0 0 15px rgba(0,150,255,0.2);
+}
+@keyframes chaosVortex {
+  from { transform: rotate(0deg) scale(1); filter: hue-rotate(0deg); }
+  50% { transform: rotate(180deg) scale(1.05); }
+  to { transform: rotate(360deg) scale(1); filter: hue-rotate(60deg); }
 }
 
 .cb-card:hover:not(.dead) .cb-card-img {
@@ -736,6 +1001,19 @@
   padding: 8px 0;
 }
 
+.cb-skill-btn-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-right: 4px;
+  filter: drop-shadow(0 0 3px rgba(139,92,246,0.4));
+}
+.cb-skill-btn-emoji {
+  margin-right: 3px;
+  vertical-align: middle;
+}
 .cb-skill-cost {
   font-size: 0.5rem;
   color: #60a5fa;
@@ -759,6 +1037,7 @@
 .cb-cancel-btn:hover { color: #ccc; border-color: rgba(255,255,255,0.2); }
 
 /* ===== Battle Result Overlay ===== */
+/* ===== 프리미엄 승리/패배 화면 ===== */
 .cb-result-overlay {
   position: absolute;
   inset: 0;
@@ -767,8 +1046,407 @@
   align-items: center;
   justify-content: center;
   z-index: 50;
-  animation: fadeIn 0.5s;
+  animation: resultScreenIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
   backdrop-filter: blur(4px);
+}
+.cb-result-overlay.victory { background: rgba(0,0,0,0.85); }
+.cb-result-overlay.defeat { background: rgba(0,0,0,0.9); }
+
+@keyframes resultScreenIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* 풀스크린 배경 이미지 */
+.cb-result-fullbg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  animation: bgZoomIn 8s ease-out forwards;
+}
+.cb-result-overlay.victory .cb-result-fullbg { opacity: 0.4; }
+.cb-result-overlay.defeat .cb-result-fullbg { opacity: 0.35; }
+
+@keyframes bgZoomIn {
+  0% { transform: scale(1.1); }
+  100% { transform: scale(1.0); }
+}
+
+.cb-result-fullbg-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cb-result-overlay.victory .cb-result-fullbg-overlay {
+  background: radial-gradient(ellipse at center top, rgba(212,168,67,0.15) 0%, transparent 60%),
+              linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(10,8,2,0.6) 100%);
+}
+.cb-result-overlay.defeat .cb-result-fullbg-overlay {
+  background: radial-gradient(ellipse at center top, rgba(180,40,40,0.12) 0%, transparent 60%),
+              linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(15,5,5,0.7) 100%);
+}
+
+/* 파티클 */
+.cb-result-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.cb-particle {
+  position: absolute;
+  bottom: -10px;
+  border-radius: 50%;
+  animation: particleRise linear infinite;
+}
+.cb-particle.gold {
+  background: radial-gradient(circle, #ffd700, #f0a500);
+  box-shadow: 0 0 6px rgba(255,215,0,0.6);
+}
+.cb-particle.ember {
+  background: radial-gradient(circle, #ff4444, #cc2200);
+  box-shadow: 0 0 4px rgba(255,68,68,0.5);
+}
+@keyframes particleRise {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 0.6; }
+  100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; }
+}
+
+/* 메인 컨텐츠 */
+.cb-result-main {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 480px;
+  width: 90%;
+  animation: contentSlideUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+@keyframes contentSlideUp {
+  0% { opacity: 0; transform: translateY(40px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* 타이틀 섹션 */
+.cb-result-title-section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.cb-result-title-banner {
+  position: absolute;
+  width: 120%;
+  max-width: 500px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.3;
+  pointer-events: none;
+}
+.cb-result-title {
+  font-family: var(--font-title, 'serif');
+  font-weight: 900;
+  letter-spacing: 16px;
+  text-indent: 16px;
+  text-align: center;
+  position: relative;
+}
+.cb-result-title.victory {
+  font-size: 3.2rem;
+  background: linear-gradient(180deg, #fff8dc 0%, #ffd700 40%, #f0a500 70%, #d4a843 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 8px rgba(212,168,67,0.5)) drop-shadow(0 0 30px rgba(255,215,0,0.3));
+  animation: victoryTitleIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
+}
+.cb-result-title.defeat {
+  font-size: 2.8rem;
+  background: linear-gradient(180deg, #ffcccc 0%, #e74c3c 40%, #c0392b 70%, #8b1a1a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 8px rgba(231,76,60,0.4)) drop-shadow(0 0 20px rgba(200,40,40,0.2));
+  animation: defeatTitleIn 1.0s ease-out 0.4s both;
+}
+@keyframes victoryTitleIn {
+  0% { opacity: 0; transform: scale(0.5); letter-spacing: 40px; }
+  60% { transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); letter-spacing: 16px; }
+}
+@keyframes defeatTitleIn {
+  0% { opacity: 0; transform: translateY(-20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.cb-result-subtitle {
+  font-size: 0.9rem;
+  margin-top: 6px;
+  letter-spacing: 2px;
+  animation: subtitleFadeIn 0.8s ease-out 0.8s both;
+}
+.cb-result-subtitle.victory { color: rgba(212,168,67,0.7); }
+.cb-result-subtitle.defeat { color: rgba(200,120,120,0.7); }
+@keyframes subtitleFadeIn {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* 구분선 */
+.cb-result-divider {
+  width: 70%;
+  max-width: 300px;
+  height: auto;
+  opacity: 0.5;
+  margin: 4px 0;
+  animation: subtitleFadeIn 0.6s ease-out 0.9s both;
+}
+
+/* ===== 보상 섹션 ===== */
+.cb-result-rewards-section {
+  position: relative;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  animation: rewardsSlideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.0s both;
+}
+@keyframes rewardsSlideIn {
+  0% { opacity: 0; transform: translateY(20px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cb-result-rewards-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.2;
+  pointer-events: none;
+}
+.cb-result-rewards-inner {
+  position: relative;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(30,25,15,0.85), rgba(20,18,10,0.9));
+  border: 1px solid rgba(212,168,67,0.2);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+}
+.cb-result-rewards-title {
+  font-family: var(--font-title, 'serif');
+  font-size: 0.85rem;
+  color: rgba(212,168,67,0.6);
+  letter-spacing: 4px;
+  text-align: center;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+/* 보상 그리드 */
+.cb-result-rewards-grid {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+.cb-reward-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  animation: rewardPopIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.cb-reward-item.anim-delay-1 { animation-delay: 1.2s; }
+.cb-reward-item.anim-delay-2 { animation-delay: 1.4s; }
+@keyframes rewardPopIn {
+  0% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.cb-reward-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 4px rgba(212,168,67,0.3));
+}
+.cb-reward-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cb-reward-label {
+  font-size: 0.7rem;
+  color: #888;
+  letter-spacing: 1px;
+}
+.cb-reward-value {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.cb-reward-value.exp {
+  background: linear-gradient(135deg, #64b5f6, #42a5f5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cb-reward-value.gold {
+  background: linear-gradient(135deg, #ffd700, #f0a500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 드랍 아이템 */
+.cb-result-loot-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(212,168,67,0.12);
+}
+.cb-result-loot-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: rgba(255,165,2,0.7);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+.cb-loot-title-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.cb-result-loot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.cb-loot-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(255,165,2,0.08), rgba(255,165,2,0.04));
+  border: 1px solid rgba(255,165,2,0.15);
+  padding: 6px 12px;
+  border-radius: 10px;
+  animation: lootItemIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes lootItemIn {
+  0% { opacity: 0; transform: translateY(10px) scale(0.8); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cb-loot-icon { font-size: 16px; }
+.cb-loot-name {
+  font-size: 0.8rem;
+  color: #ddd;
+}
+.cb-loot-qty {
+  font-size: 0.8rem;
+  color: #ffa502;
+  font-weight: 700;
+}
+
+/* 생존 아군 */
+.cb-result-survivors {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  animation: subtitleFadeIn 0.6s ease-out 1.3s both;
+}
+.cb-survivor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  animation: survivorBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes survivorBounce {
+  0% { opacity: 0; transform: translateY(15px) scale(0.7); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cb-survivor-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(212,168,67,0.4);
+  box-shadow: 0 0 12px rgba(212,168,67,0.15);
+}
+.cb-survivor-hp {
+  width: 36px;
+  height: 3px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cb-survivor-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2ed573, #7bed9f);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+/* 프리미엄 버튼 */
+.cb-result-btn-premium {
+  position: relative;
+  padding: 14px 48px;
+  border-radius: 12px;
+  border: none;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 3px;
+  overflow: hidden;
+  transition: all 0.3s;
+  animation: btnFadeIn 0.6s ease-out 1.5s both;
+}
+@keyframes btnFadeIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.cb-result-btn-premium.victory {
+  background: linear-gradient(135deg, #b8860b, #daa520, #b8860b);
+  box-shadow: 0 4px 20px rgba(218,165,32,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.cb-result-btn-premium.defeat {
+  background: linear-gradient(135deg, #555, #666, #555);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.cb-result-btn-premium::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  animation: btnShimmer 3s infinite 2s;
+}
+@keyframes btnShimmer {
+  0% { left: -100%; }
+  30% { left: 100%; }
+  100% { left: 100%; }
+}
+.cb-result-btn-premium:hover {
+  transform: translateY(-2px) scale(1.03);
+  filter: brightness(1.15);
+}
+.cb-result-btn-premium:active {
+  transform: translateY(0) scale(0.98);
 }
 
 @keyframes fadeIn {
@@ -776,77 +1454,65 @@
   to { opacity: 1; }
 }
 
-.cb-result {
-  position: relative;
+/* ===== Retreat Confirm ===== */
+.cb-retreat-confirm {
+  background: linear-gradient(135deg, rgba(20, 15, 35, 0.97), rgba(30, 20, 45, 0.97));
+  border: 2px solid rgba(239, 68, 68, 0.4);
+  border-radius: 16px;
+  padding: 32px 40px;
   text-align: center;
-  padding: 0;
-  border-radius: 18px;
-  border: 2px solid rgba(255,255,255,0.08);
-  overflow: hidden;
-  min-width: 320px;
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.15), 0 8px 32px rgba(0, 0, 0, 0.6);
+  animation: fadeIn 0.3s;
+  min-width: 280px;
 }
-
-.cb-result-bg-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.35;
-  pointer-events: none;
-}
-
-.cb-result-content {
-  position: relative;
-  padding: 44px 64px;
-  backdrop-filter: blur(10px);
-}
-
-.cb-result.victory {
-  background: linear-gradient(135deg, rgba(22, 101, 52, 0.85), rgba(20, 83, 45, 0.9));
-  border-color: rgba(46,213,115,0.5);
-  box-shadow: 0 0 40px rgba(46,213,115,0.15);
-}
-
-.cb-result.defeat {
-  background: linear-gradient(135deg, rgba(127, 29, 29, 0.85), rgba(153, 27, 27, 0.9));
-  border-color: rgba(239,68,68,0.5);
-  box-shadow: 0 0 40px rgba(239,68,68,0.15);
-}
-
-.cb-result-title {
-  font-family: var(--font-title, 'serif');
-  font-size: 2.2rem;
+.cb-retreat-confirm-title {
+  font-size: 1.3rem;
   font-weight: 900;
-  margin-bottom: 16px;
-  color: #fff;
-  text-shadow: 0 2px 16px rgba(0,0,0,0.5);
-  letter-spacing: 3px;
+  color: #ef4444;
+  margin-bottom: 12px;
+  letter-spacing: 2px;
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
 }
-
-.cb-result-rewards {
-  font-size: 1.1rem;
-  color: #d4a843;
+.cb-retreat-confirm-text {
+  font-size: 0.85rem;
+  color: #aaa;
   margin-bottom: 24px;
-  line-height: 2;
+  line-height: 1.7;
 }
-
-.cb-result-btn {
-  padding: 12px 36px;
-  border-radius: 10px;
-  border: 2px solid rgba(255,255,255,0.25);
-  background: rgba(255,255,255,0.08);
-  color: #fff;
-  font-size: 1rem;
+.cb-retreat-confirm-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.cb-retreat-confirm-yes {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
-  letter-spacing: 1px;
 }
-.cb-result-btn:hover {
-  background: rgba(255,255,255,0.18);
-  transform: scale(1.05);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+.cb-retreat-confirm-yes:hover {
+  background: rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+}
+.cb-retreat-confirm-no {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 164, 199, 0.3);
+  background: rgba(139, 164, 199, 0.08);
+  color: #8ba4c7;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.cb-retreat-confirm-no:hover {
+  background: rgba(139, 164, 199, 0.2);
+  border-color: rgba(139, 164, 199, 0.5);
 }
 
 /* ===== Battle Log ===== */
@@ -883,6 +1549,70 @@
 
 .cb-log::-webkit-scrollbar { width: 3px; }
 .cb-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* ===== Critical Hit Effect ===== */
+.cb-card.hit-crit-flash {
+  animation: critFlash 0.8s;
+}
+@keyframes critFlash {
+  0% { filter: brightness(1); }
+  10% { filter: brightness(3) saturate(0) drop-shadow(0 0 12px #ffa502); transform: scale(0.92); }
+  25% { filter: brightness(0.5) saturate(2) drop-shadow(0 0 20px #ff4444); transform: scale(1.06); }
+  40% { filter: brightness(2.5) saturate(0.3) drop-shadow(0 0 16px #ffa502); transform: scale(0.97); }
+  60% { filter: brightness(0.8) drop-shadow(0 0 8px #ff4444); transform: scale(1.02); }
+  80% { filter: brightness(1.2); transform: scale(1); }
+  100% { filter: brightness(1); }
+}
+
+/* ===== Evade Effect ===== */
+.cb-card.hit-evade {
+  animation: evadeSlide 0.6s ease-out;
+}
+@keyframes evadeSlide {
+  0% { transform: translateX(0); opacity: 1; }
+  20% { transform: translateX(18px) skewX(-5deg); opacity: 0.4; }
+  40% { transform: translateX(-12px) skewX(3deg); opacity: 0.6; }
+  60% { transform: translateX(6px); opacity: 0.8; }
+  80% { transform: translateX(-3px); opacity: 0.95; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+/* ===== Critical Popup ===== */
+.cb-popup.crit {
+  color: #ffa502;
+  font-size: 1.8rem;
+  animation: popupCrit 1.2s forwards;
+  text-shadow: 0 0 12px rgba(255,165,2,0.8), 0 2px 8px rgba(0,0,0,0.95);
+}
+.cb-popup.crit-label {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  top: 10%;
+  background: linear-gradient(90deg, transparent, rgba(255,165,2,0.3), transparent);
+  padding: 2px 10px;
+  border-radius: 4px;
+  animation: popupCritLabel 1.4s forwards;
+  text-shadow: 0 0 8px rgba(255,165,2,0.6), 0 1px 4px rgba(0,0,0,0.9);
+}
+
+@keyframes popupCrit {
+  0% { opacity: 1; transform: translateX(-50%) translateY(0) scale(2.5); color: #fff; }
+  8% { transform: translateX(-50%) translateY(-5px) scale(1.5); color: #ffa502; }
+  18% { transform: translateX(-50%) translateY(-12px) scale(1.1); }
+  30% { transform: translateX(-50%) translateY(-18px) scale(1.05); }
+  70% { opacity: 1; transform: translateX(-50%) translateY(-40px) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-60px) scale(0.9); }
+}
+
+@keyframes popupCritLabel {
+  0% { opacity: 0; transform: translateX(-50%) scaleX(0.3); }
+  15% { opacity: 1; transform: translateX(-50%) scaleX(1.15); }
+  30% { transform: translateX(-50%) scaleX(1); }
+  70% { opacity: 1; transform: translateX(-50%) translateY(-20px); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-35px); }
+}
 
 /* ===== Combat Animations ===== */
 
@@ -1204,6 +1934,14 @@
   filter: drop-shadow(0 0 12px rgba(139,92,246,0.6));
   animation: cutinIconPulse 0.6s ease-in-out;
 }
+.cb-skill-cutin-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(139,92,246,0.5);
+  box-shadow: 0 0 16px rgba(139,92,246,0.4);
+}
 @keyframes cutinIconPulse {
   0% { transform: scale(0.3) rotate(-20deg); }
   40% { transform: scale(1.3) rotate(5deg); }
@@ -1251,10 +1989,18 @@
   .cb-card-lv-badge { font-size: 0.4rem; padding: 0 4px; }
   .cb-card-row-badge { font-size: 0.35rem; padding: 0 3px; }
   .cb-card-range { font-size: 0.45rem; }
+  .cb-auto-btn { padding: 3px 7px; font-size: 0.6rem; }
+  .cb-auto-btns { gap: 3px; }
   .cb-action-btn { padding: 6px 10px; font-size: 0.7rem; }
-  .cb-result { padding: 0; min-width: 260px; }
-  .cb-result-content { padding: 28px 36px; }
-  .cb-result-title { font-size: 1.6rem; }
+  .cb-result-main { max-width: 360px; gap: 12px; }
+  .cb-result-title.victory { font-size: 2.2rem; letter-spacing: 10px; text-indent: 10px; }
+  .cb-result-title.defeat { font-size: 2rem; }
+  .cb-result-rewards-grid { gap: 12px; flex-wrap: wrap; }
+  .cb-reward-item { padding: 8px 12px; gap: 8px; }
+  .cb-reward-icon { width: 32px; height: 32px; }
+  .cb-reward-value { font-size: 1rem; }
+  .cb-survivor-img { width: 36px; height: 36px; }
+  .cb-result-btn-premium { padding: 12px 36px; font-size: 0.9rem; }
   /* 모바일에서 돌진 거리 축소 */
   @keyframes meleeRushRight {
     0% { transform: translateX(0) scale(1); }
@@ -1284,6 +2030,7 @@
   }
   .cb-skill-cutin-content { padding: 12px 24px; gap: 10px; }
   .cb-skill-cutin-icon { font-size: 1.8rem; }
+  .cb-skill-cutin-img { width: 40px; height: 40px; }
   .cb-skill-cutin-name { font-size: 1rem; }
   .cb-vs-img { width: 36px; height: 36px; }
 }
@@ -1330,29 +2077,56 @@
   100% { transform: scale(1); }
 }
 
-/* 승리 화면 드랍 아이템 */
-.cb-result-drops {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 165, 2, 0.3);
-  justify-content: center;
+/* ===== 기여도 (Contribution) ===== */
+.srpg-contrib-list {
+  display: flex; flex-direction: column; gap: 6px;
 }
-
-.cb-result-drop-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 165, 2, 0.1);
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: #ffa502;
-  border: 1px solid rgba(255, 165, 2, 0.2);
+.srpg-contrib-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  font-size: 0.78rem;
 }
-
-.cb-result-drop-icon {
-  font-size: 14px;
+.srpg-contrib-row.player {
+  background: rgba(79,195,247,0.1);
+  border: 1px solid rgba(79,195,247,0.2);
+}
+.srpg-contrib-unit {
+  display: flex; align-items: center; gap: 5px;
+  min-width: 80px; flex-shrink: 0;
+}
+.srpg-contrib-icon {
+  width: 24px; height: 24px; border-radius: 4px;
+  object-fit: cover; background: rgba(0,0,0,0.3);
+}
+.srpg-contrib-name {
+  color: #ddd; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 60px;
+}
+.srpg-contrib-stats {
+  display: flex; gap: 6px; min-width: 90px; flex-shrink: 0;
+}
+.srpg-contrib-dmg { color: #ef5350; font-size: 0.72rem; }
+.srpg-contrib-kills { color: #ffa726; font-size: 0.72rem; font-weight: 700; }
+.srpg-contrib-bar-wrap {
+  flex: 1; height: 14px; background: rgba(255,255,255,0.08);
+  border-radius: 7px; position: relative; overflow: hidden;
+  min-width: 60px;
+}
+.srpg-contrib-bar {
+  height: 100%; border-radius: 7px; min-width: 2px;
+  background: linear-gradient(90deg, #4fc3f7, #29b6f6);
+  transition: width 0.6s ease;
+}
+.srpg-contrib-row.player .srpg-contrib-bar {
+  background: linear-gradient(90deg, #ffa726, #ff9800);
+}
+.srpg-contrib-pct {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  font-size: 0.68rem; color: #fff; font-weight: 700;
+  text-shadow: 0 0 3px rgba(0,0,0,0.8);
+}
+.srpg-contrib-exp {
+  color: #81c784; font-weight: 700; font-size: 0.75rem;
+  min-width: 55px; text-align: right; flex-shrink: 0;
 }

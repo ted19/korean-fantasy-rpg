@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 
 const CLASS_IMAGES = {
@@ -7,15 +7,17 @@ const CLASS_IMAGES = {
   '승려': '/characters/monk_full.png',
 };
 
-const CLASS_ICONS = { '풍수사': '✨', '무당': '🌙', '승려': '☸️' };
+const CLASS_ICONS = { '풍수사': '⬥', '무당': '◈', '승려': '◆' };
 
 const ELEMENT_INFO = {
-  fire:    { name: '불', icon: '🔥', color: '#ff6b35' },
-  water:   { name: '물', icon: '💧', color: '#4da6ff' },
-  earth:   { name: '땅', icon: '🪨', color: '#8bc34a' },
-  wind:    { name: '바람', icon: '🌀', color: '#b388ff' },
-  neutral: { name: '중립', icon: '⚪', color: '#9ca3af' },
+  fire:    { name: '화', icon: '◆', color: '#c87a4a' },
+  water:   { name: '수', icon: '◆', color: '#5a8ab4' },
+  earth:   { name: '지', icon: '◆', color: '#7a9a5a' },
+  wind:    { name: '풍', icon: '◆', color: '#9a7ab4' },
+  neutral: { name: '무', icon: '◇', color: '#8a7a60' },
 };
+
+const MAX_CHARACTERS = 3;
 
 function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
   const [characters, setCharacters] = useState([]);
@@ -23,6 +25,10 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
   const [deleting, setDeleting] = useState(null);
   const [hoveredChar, setHoveredChar] = useState(null);
   const [bgLoaded, setBgLoaded] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteInput, setDeleteInput] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const deleteInputRef = useRef(null);
 
   useEffect(() => {
     const img = new Image();
@@ -33,33 +39,69 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
   const loadCharacters = async () => {
     try {
       const res = await api.get('/characters/list');
-      setCharacters(res.data.characters);
-    } catch {}
+      setCharacters(res.data.characters || []);
+    } catch (err) {
+      console.error('캐릭터 목록 로드 실패:', err);
+      setCharacters([]);
+    }
     setLoading(false);
   };
 
   useEffect(() => { loadCharacters(); }, []);
 
+  useEffect(() => {
+    if (deleteTarget && deleteInputRef.current) {
+      deleteInputRef.current.focus();
+    }
+  }, [deleteTarget]);
+
   const handleSelect = async (char) => {
+    if (deleteTarget) return;
     localStorage.setItem('selectedCharId', char.id);
     try {
       const res = await api.get(`/characters/me?charId=${char.id}`);
       if (res.data.character) {
         onSelectCharacter(res.data.character);
       }
-    } catch {}
+    } catch (err) {
+      console.error('캐릭터 선택 실패:', err);
+    }
   };
 
-  const handleDelete = async (charId, e) => {
+  const openDeleteModal = (char, e) => {
     e.stopPropagation();
-    setDeleting(charId);
+    setDeleteTarget(char);
+    setDeleteInput('');
+    setDeleteError('');
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteTarget(null);
+    setDeleteInput('');
+    setDeleteError('');
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    if (deleteInput !== deleteTarget.name) {
+      setDeleteError('캐릭터 이름이 일치하지 않습니다.');
+      return;
+    }
+    setDeleting(deleteTarget.id);
     try {
-      await api.delete(`/characters/me?charId=${charId}`);
+      await api.delete(`/characters/me?charId=${deleteTarget.id}`);
       localStorage.removeItem('selectedCharId');
+      closeDeleteModal();
       await loadCharacters();
-    } catch {}
+    } catch (err) {
+      console.error('캐릭터 삭제 실패:', err);
+      setDeleteError('삭제에 실패했습니다.');
+    }
     setDeleting(null);
   };
+
+  // 항상 3칸: 캐릭터 + 빈 슬롯
+  const emptySlots = MAX_CHARACTERS - characters.length;
 
   if (loading) {
     return (
@@ -98,18 +140,15 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
       <div className="charsel-main">
         {/* 상단 헤더 */}
         <div className="charsel-header">
-          <div className="charsel-header-logo">
-            <img src="/ui/auth_logo_bg.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-          </div>
+          <div className="charsel-header-ornament">— ◆ —</div>
           <h1 className="charsel-header-title">캐릭터 선택</h1>
-          <p className="charsel-header-sub">모험을 함께할 캐릭터를 선택하세요</p>
-          <div className="charsel-header-divider">
-            <img src="/ui/charsel_banner.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-          </div>
+          <p className="charsel-header-sub">모험을 함께할 캐릭터를 선택하세요 ({characters.length}/{MAX_CHARACTERS})</p>
+          <div className="charsel-header-ornament bottom">— ◇ —</div>
         </div>
 
-        {/* 캐릭터 카드 그리드 */}
+        {/* 캐릭터 카드 그리드 - 항상 3칸 */}
         <div className="charsel-cards">
+          {/* 생성된 캐릭터 (왼쪽부터) */}
           {characters.map((char, idx) => {
             const el = ELEMENT_INFO[char.element] || ELEMENT_INFO.neutral;
             const isHovered = hoveredChar === char.id;
@@ -122,16 +161,6 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
                 onMouseLeave={() => setHoveredChar(null)}
                 style={{ animationDelay: `${idx * 0.15}s` }}
               >
-                {/* 카드 프레임 */}
-                <div className="charsel-char-frame">
-                  <img src="/ui/charsel_card_frame.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-                </div>
-
-                {/* 발판 */}
-                <div className="charsel-char-pedestal">
-                  <img src="/ui/charsel_pedestal.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-                </div>
-
                 {/* 캐릭터 이미지 */}
                 <div className="charsel-char-portrait">
                   <img
@@ -161,15 +190,15 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
                   <div className="charsel-char-stats">
                     <div className="charsel-char-stat">
                       <span className="charsel-stat-label">HP</span>
-                      <span className="charsel-stat-val hp">{char.hp}</span>
+                      <span className="charsel-stat-val hp">{char.hp ?? '?'}</span>
                     </div>
                     <div className="charsel-char-stat">
                       <span className="charsel-stat-label">MP</span>
-                      <span className="charsel-stat-val mp">{char.mp}</span>
+                      <span className="charsel-stat-val mp">{char.mp ?? '?'}</span>
                     </div>
                     <div className="charsel-char-stat">
                       <span className="charsel-stat-label">ATK</span>
-                      <span className="charsel-stat-val atk">{char.attack}</span>
+                      <span className="charsel-stat-val atk">{char.attack ?? '?'}</span>
                     </div>
                   </div>
                 </div>
@@ -177,7 +206,7 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
                 {/* 삭제 */}
                 <button
                   className="charsel-char-delete"
-                  onClick={(e) => handleDelete(char.id, e)}
+                  onClick={(e) => openDeleteModal(char, e)}
                   disabled={deleting === char.id}
                   title="캐릭터 삭제"
                 >
@@ -190,14 +219,16 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
             );
           })}
 
-          {/* 빈 슬롯 */}
-          {characters.length < 3 && (
+          {/* 빈 슬롯들 (항상 3칸 채우기) */}
+          {Array.from({ length: emptySlots }).map((_, idx) => (
             <div
+              key={`empty-${idx}`}
               className="charsel-char-card charsel-new-slot"
               onClick={onCreateNew}
-              style={{ animationDelay: `${characters.length * 0.15}s` }}
+              style={{ animationDelay: `${(characters.length + idx) * 0.15}s` }}
             >
               <div className="charsel-new-inner">
+                <div className="charsel-new-slot-number">슬롯 {characters.length + idx + 1}</div>
                 <div className="charsel-new-circle">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <line x1="12" y1="5" x2="12" y2="19" />
@@ -205,10 +236,9 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
                   </svg>
                 </div>
                 <div className="charsel-new-text">새 캐릭터 생성</div>
-                <div className="charsel-new-count">{characters.length} / 3</div>
               </div>
             </div>
-          )}
+          ))}
         </div>
 
         {/* 하단 */}
@@ -223,6 +253,65 @@ function CharacterSelect({ onSelectCharacter, onCreateNew, onLogout }) {
           </button>
         </div>
       </div>
+
+      {/* 삭제 확인 모달 */}
+      {deleteTarget && (
+        <div className="charsel-delete-overlay" onClick={closeDeleteModal}>
+          <div className="charsel-delete-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="charsel-delete-modal-close" onClick={closeDeleteModal}>&times;</button>
+            <div className="charsel-delete-modal-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5">
+                <path d="M12 9v4m0 4h.01M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/>
+              </svg>
+            </div>
+            <h3 className="charsel-delete-modal-title">캐릭터 삭제</h3>
+            <p className="charsel-delete-modal-desc">
+              이 작업은 되돌릴 수 없습니다.<br/>
+              캐릭터의 모든 데이터(장비, 스킬, 소환수 등)가 영구 삭제됩니다.
+            </p>
+            <div className="charsel-delete-modal-charinfo">
+              <img
+                src={CLASS_IMAGES[deleteTarget.class_type]}
+                alt=""
+                className="charsel-delete-modal-portrait"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+              <div>
+                <div className="charsel-delete-modal-charname">{deleteTarget.name}</div>
+                <div className="charsel-delete-modal-charsub">
+                  {CLASS_ICONS[deleteTarget.class_type]} {deleteTarget.class_type} · Lv.{deleteTarget.level}
+                </div>
+              </div>
+            </div>
+            <div className="charsel-delete-modal-inputwrap">
+              <label className="charsel-delete-modal-label">
+                삭제하려면 캐릭터 이름 <strong>"{deleteTarget.name}"</strong>을(를) 입력하세요
+              </label>
+              <input
+                ref={deleteInputRef}
+                type="text"
+                className={`charsel-delete-modal-input ${deleteError ? 'error' : ''}`}
+                value={deleteInput}
+                onChange={(e) => { setDeleteInput(e.target.value); setDeleteError(''); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleDeleteConfirm(); }}
+                placeholder="캐릭터 이름 입력"
+                autoComplete="off"
+              />
+              {deleteError && <div className="charsel-delete-modal-error">{deleteError}</div>}
+            </div>
+            <div className="charsel-delete-modal-actions">
+              <button className="charsel-delete-modal-cancel" onClick={closeDeleteModal}>취소</button>
+              <button
+                className="charsel-delete-modal-confirm"
+                onClick={handleDeleteConfirm}
+                disabled={deleting || deleteInput !== deleteTarget.name}
+              >
+                {deleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

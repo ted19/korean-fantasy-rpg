@@ -52,16 +52,44 @@
   width: 48px;
   height: 48px;
   border-radius: 10px;
-  background: rgba(0,0,0,0.3);
+  background: radial-gradient(ellipse at center, rgba(99,102,241,0.3) 0%, rgba(30,30,60,0.5) 55%, rgba(0,0,0,0.3) 100%);
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: inset 0 0 12px rgba(99,102,241,0.15), 0 0 8px rgba(99,102,241,0.1);
+}
+.inn-merc-icon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: conic-gradient(from 0deg, transparent, rgba(139,92,246,0.12), transparent, rgba(99,102,241,0.1), transparent);
+  animation: mercIconSpin 6s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.inn-merc-icon::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(139,92,246,0.3), transparent 40%, transparent 60%, rgba(99,102,241,0.2));
+  animation: mercIconShimmer 3s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes mercIconSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes mercIconShimmer {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
 }
 
-.inn-merc-img { width: 100%; height: 100%; object-fit: cover; }
+.inn-merc-img { width: 100%; height: 100%; object-fit: cover; position: relative; z-index: 1; }
 
 .inn-merc-level-badge {
   position: absolute;
@@ -73,6 +101,7 @@
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 8px;
+  z-index: 2;
 }
 
 .inn-merc-info { flex: 1; min-width: 0; }
@@ -143,6 +172,56 @@
   color: #888;
 }
 
+/* ---- Fatigue (card) ---- */
+.inn-merc-fatigue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.inn-fatigue-warn {
+  font-size: 10px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  padding: 0 5px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+/* ---- Fatigue (detail) ---- */
+.inn-detail-fatigue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+.inn-fatigue-label {
+  font-size: 12px;
+  color: #aaa;
+  white-space: nowrap;
+}
+.inn-fatigue-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.inn-fatigue-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.inn-fatigue-text {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* ---- Detail Panel ---- */
 .inn-detail-header {
   display: flex;
@@ -150,6 +229,14 @@
   margin-bottom: 14px;
 }
 
+.inn-detail-portrait-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
 .inn-detail-portrait {
   width: 80px;
   height: 80px;
@@ -157,6 +244,8 @@
   object-fit: cover;
   background: rgba(0,0,0,0.3);
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .inn-detail-header h3 {
@@ -232,7 +321,128 @@
   border-radius: 4px;
 }
 
+/* ---- Rest Section ---- */
+.inn-rest-section {
+  padding: 12px 16px;
+  margin: 0 0 2px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.06), rgba(245,158,11,0.02));
+  border: 1px solid rgba(245,158,11,0.1);
+  border-radius: 12px;
+}
+
+.inn-rest-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.inn-rest-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inn-rest-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inn-rest-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  width: 22px;
+  text-align: right;
+}
+
+.inn-rest-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.inn-rest-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.inn-rest-bar-fill.hp {
+  background: linear-gradient(90deg, #e94560, #ff6b6b);
+}
+
+.inn-rest-bar-fill.mp {
+  background: linear-gradient(90deg, #1e90ff, #60a5fa);
+}
+
+.inn-rest-bar-text {
+  font-size: 11px;
+  color: #aaa;
+  min-width: 60px;
+  text-align: right;
+}
+
+.inn-rest-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.inn-rest-or {
+  font-size: 10px;
+  color: #666;
+  font-weight: 600;
+}
+
+.inn-rest-btn {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.inn-rest-btn.gold {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #000;
+}
+
+.inn-rest-btn.stamina {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+}
+
+.inn-rest-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.inn-rest-btn:disabled,
+.inn-rest-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* ---- Buttons ---- */
+.inn-slot-info {
+  text-align: center;
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 6px;
+}
+.inn-slot-next {
+  color: #f59e0b;
+}
+
 .inn-hire-btn {
   width: 100%;
   padding: 12px;
@@ -264,6 +474,171 @@
 
 .inn-fire-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
 .inn-fire-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ---- Button Row ---- */
+.inn-detail-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.inn-detail-btn-row .inn-fire-btn {
+  flex: 1;
+}
+
+.inn-rest-merc-btn {
+  flex: 1;
+  padding: 12px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inn-rest-merc-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(59,130,246,0.4); }
+.inn-rest-merc-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ---- Rest Popup ---- */
+.inn-rest-popup {
+  background: #1e1e2e;
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 14px;
+  width: 340px;
+  max-width: 90vw;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+
+.inn-rest-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(245,158,11,0.08);
+  border-bottom: 1px solid rgba(245,158,11,0.15);
+  font-weight: 700;
+  font-size: 15px;
+  color: #f59e0b;
+}
+
+.inn-rest-popup-body {
+  padding: 16px;
+}
+
+.inn-rest-fatigue-info {
+  text-align: center;
+  font-size: 14px;
+  color: #ccc;
+  margin-bottom: 14px;
+  padding: 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+}
+
+.inn-rest-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inn-rest-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #eee;
+  font-size: 13px;
+}
+
+.inn-rest-option:hover:not(:disabled) {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.inn-rest-option:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.inn-rest-option.gold:hover:not(:disabled) { border-color: rgba(245,158,11,0.4); }
+.inn-rest-option.stamina:hover:not(:disabled) { border-color: rgba(59,130,246,0.4); }
+
+.inn-rest-option-icon { font-size: 20px; flex-shrink: 0; }
+.inn-rest-option-label { flex: 1; font-weight: 600; }
+.inn-rest-option-cost { font-weight: 700; color: #f59e0b; }
+.inn-rest-option.stamina .inn-rest-option-cost { color: #60a5fa; }
+.inn-rest-option-warn { font-size: 11px; color: #ef4444; font-weight: 600; }
+
+/* ---- Fire Confirm Popup ---- */
+.inn-fire-confirm-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.inn-fire-confirm-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(0,0,0,0.3);
+}
+
+.inn-fire-confirm-warn {
+  text-align: center;
+  font-size: 13px;
+  color: #ccc;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.inn-fire-confirm-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.inn-fire-confirm-cancel {
+  flex: 1;
+  padding: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #aaa;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inn-fire-confirm-cancel:hover { background: rgba(255,255,255,0.1); color: #eee; }
+
+.inn-fire-confirm-ok {
+  flex: 1;
+  padding: 10px;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inn-fire-confirm-ok:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239,68,68,0.4); }
+.inn-fire-confirm-ok:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ---- Responsive ---- */
 @media (max-width: 768px) {

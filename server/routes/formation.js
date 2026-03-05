@@ -19,17 +19,61 @@ function auth(req, res, next) {
 const SLOT_NAMES = ['메인 진영', '진영 2', '진영 3', '진영 4'];
 const MAX_SLOTS = 4;
 
+// 진영 탭 해금 조건 (레벨)
+const SLOT_UNLOCK_LEVELS = [0, 100, 200, 300];
+
+// 3x3 그리드 셀 해금 조건: [row, col] => { level, dungeonClears }
+// 후열(row0) → 중열(row1) → 전열(row2) 순으로 해금
+const CELL_UNLOCK = [
+  // [row, col, requiredLevel, requiredDungeonClears]
+  [0, 1, 1,  0],   // 후열 중앙 - 기본
+  [0, 0, 5,  0],   // 후열 좌
+  [0, 2, 10, 0],   // 후열 우
+  [1, 1, 15, 3],   // 중열 중앙
+  [1, 0, 25, 5],   // 중열 좌
+  [1, 2, 35, 8],   // 중열 우
+  [2, 1, 45, 12],  // 전열 중앙
+  [2, 0, 55, 18],  // 전열 좌
+  [2, 2, 70, 25],  // 전열 우
+];
+
 // 진영 목록 조회
 router.get('/list', auth, async (req, res) => {
   try {
     const [chars] = await pool.query(
       req.selectedCharId
-        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
-        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+        ? 'SELECT id, level FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id, level FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
       req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
     );
-    if (chars.length === 0) return res.json({ formations: [] });
+    if (chars.length === 0) return res.json({ formations: [], unlockInfo: {} });
     const charId = chars[0].id;
+    const charLevel = chars[0].level || 1;
+
+    // 던전 클리어 수 (전체 스테이지 클리어 횟수)
+    const [clearRows] = await pool.query(
+      'SELECT COALESCE(SUM(stage_number), 0) AS total_clears FROM character_stage_progress WHERE character_id = ?',
+      [charId]
+    );
+    const totalDungeonClears = clearRows[0].total_clears || 0;
+
+    // 해금된 셀 계산
+    const unlockedCells = [];
+    for (const [row, col, reqLv, reqClears] of CELL_UNLOCK) {
+      unlockedCells.push({
+        row, col,
+        unlocked: charLevel >= reqLv && totalDungeonClears >= reqClears,
+        reqLevel: reqLv,
+        reqClears,
+      });
+    }
+
+    // 해금된 진영 탭
+    const unlockedSlots = SLOT_UNLOCK_LEVELS.map((reqLv, i) => ({
+      slotIndex: i,
+      unlocked: charLevel >= reqLv,
+      reqLevel: reqLv,
+    }));
 
     const [formations] = await pool.query(
       'SELECT * FROM character_formations WHERE character_id = ? ORDER BY slot_index',
@@ -59,7 +103,15 @@ router.get('/list', auth, async (req, res) => {
       }
     }
 
-    res.json({ formations: result });
+    res.json({
+      formations: result,
+      unlockInfo: {
+        level: charLevel,
+        totalDungeonClears,
+        cells: unlockedCells,
+        slots: unlockedSlots,
+      },
+    });
   } catch (err) {
     console.error('Formation list error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
@@ -76,16 +128,65 @@ router.post('/save', auth, async (req, res) => {
 
     const [chars] = await pool.query(
       req.selectedCharId
-        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
-        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+        ? 'SELECT id, level FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id, level FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
       req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
     );
     if (chars.length === 0) return res.status(400).json({ message: '캐릭터가 없습니다.' });
     const charId = chars[0].id;
+    const charLevel = chars[0].level || 1;
+
+    // 진영 탭 해금 검증
+    if (charLevel < SLOT_UNLOCK_LEVELS[slotIndex]) {
+      return res.status(400).json({ message: `진영 ${slotIndex + 1}은(는) Lv.${SLOT_UNLOCK_LEVELS[slotIndex]}에 해금됩니다.` });
+    }
+
+    // 셀 해금 검증
+    const [clearRows] = await pool.query(
+      'SELECT COALESCE(SUM(stage_number), 0) AS total_clears FROM character_stage_progress WHERE character_id = ?',
+      [charId]
+    );
+    const totalDungeonClears = clearRows[0].total_clears || 0;
 
     // gridData 검증: 3x3 배열
     if (!Array.isArray(gridData) || gridData.length !== 3) {
       return res.status(400).json({ message: '진영 데이터가 올바르지 않습니다.' });
+    }
+
+    // 잠긴 셀에 유닛 배치 검증
+    for (const [row, col, reqLv, reqClears] of CELL_UNLOCK) {
+      const cell = gridData[row] && gridData[row][col];
+      if (cell && cell.unitId) {
+        if (charLevel < reqLv || totalDungeonClears < reqClears) {
+          return res.status(400).json({ message: '아직 해금되지 않은 슬롯에 배치할 수 없습니다.' });
+        }
+      }
+    }
+
+    // 다른 슬롯에 배치된 유닛과 중복 검사
+    const newUnitIds = [];
+    gridData.forEach(row => row.forEach(cell => {
+      if (cell && cell.unitId) newUnitIds.push(cell.unitId);
+    }));
+
+    if (newUnitIds.length > 0) {
+      const [otherFormations] = await pool.query(
+        'SELECT slot_index, grid_data FROM character_formations WHERE character_id = ? AND slot_index != ?',
+        [charId, slotIndex]
+      );
+      const otherUnitIds = new Set();
+      for (const f of otherFormations) {
+        const gd = typeof f.grid_data === 'string' ? JSON.parse(f.grid_data) : f.grid_data;
+        if (Array.isArray(gd)) {
+          gd.forEach(row => row.forEach(cell => {
+            if (cell && cell.unitId) otherUnitIds.add(cell.unitId);
+          }));
+        }
+      }
+      const duplicates = newUnitIds.filter(id => otherUnitIds.has(id));
+      if (duplicates.length > 0) {
+        return res.status(400).json({ message: '다른 진영에 이미 배치된 유닛이 포함되어 있습니다.' });
+      }
     }
 
     const gridJson = JSON.stringify(gridData);

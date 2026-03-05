@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Badge, Button, ProgressBar } from 'react-bootstrap';
+import { Badge } from 'react-bootstrap';
 import api from '../api';
-import SummonEquipment from './SummonEquipment';
+import './InnArea.css';
 
 const TYPE_FILTERS = ['전체', '귀신', '몬스터', '정령', '언데드'];
 
@@ -27,16 +27,49 @@ function SummonImg({ src, fallback, className }) {
 
 const SKILL_TYPE_ICONS = { attack: '⚔️', heal: '💚', buff: '🔺' };
 
-function Summon({ charState, onCharStateUpdate, onLog }) {
-  const [tab, setTab] = useState('shop');
+function SkillIcon({ src, fallback, className }) {
+  const [err, setErr] = useState(false);
+  if (err || !src) return <span className={className}>{fallback}</span>;
+  return <img src={src} alt="" className={className} onError={() => setErr(true)} />;
+}
+
+const RANGE_INFO = {
+  melee:  { name: '근거리', icon: '⚔️', color: '#ef4444' },
+  ranged: { name: '원거리', icon: '🏹', color: '#f59e0b' },
+  magic:  { name: '마법형', icon: '🔮', color: '#a855f7' },
+};
+
+const GRADE_COLORS = {
+  '일반': '#aaa', '고급': '#4da6ff', '희귀': '#a855f7',
+  '영웅': '#f59e0b', '전설': '#ef4444', '신화': '#ff6b6b',
+};
+
+function detectSummonRangeType(summon) {
+  if (summon.range_type) return summon.range_type;
+  if (summon.type === '정령' || summon.type === '귀신') return 'magic';
+  const skills = summon.learned_skills || summon.skills || [];
+  const hasRanged = skills.some(s => (s.range_val || s.range || 1) >= 2);
+  if (hasRanged) return 'ranged';
+  // base stats로 판단: 마공 > 물공이면 magic
+  const magAtk = summon.mag_attack || summon.base_mag_attack || 0;
+  const physAtk = summon.phys_attack || summon.base_phys_attack || 0;
+  if (magAtk > physAtk) return 'magic';
+  return 'melee';
+}
+
+function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
+  const [tab, setTab] = useState(initialSummonId ? 'my' : 'shop');
   const [templates, setTemplates] = useState([]);
   const [mySummons, setMySummons] = useState([]);
+  const [summonSlots, setSummonSlots] = useState({ current: 0, max: 1, next: null });
   const [typeFilter, setTypeFilter] = useState('전체');
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [selectedSummon, setSelectedSummon] = useState(null);
-  const [showEquipment, setShowEquipment] = useState(false);
-  const [showSkills, setShowSkills] = useState(null);
+  const [showSkillPopup, setShowSkillPopup] = useState(false);
   const [skillsData, setSkillsData] = useState({ skills: [], summonLevel: 1 });
   const [npcMsg, setNpcMsg] = useState('이 세계에는 다양한 소환수가 있지...');
+  const [loading, setLoading] = useState(false);
+  const [fireConfirm, setFireConfirm] = useState(null);
 
   const NPC_MSGS = {
     shop: [
@@ -64,6 +97,7 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
     try {
       const res = await api.get('/summon/my');
       setMySummons(res.data.summons);
+      if (res.data.summonSlots) setSummonSlots(res.data.summonSlots);
     } catch {
       onLog('소환수 정보를 불러올 수 없습니다.', 'damage');
     }
@@ -71,7 +105,21 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
 
   useEffect(() => {
     loadTemplates();
-    loadMySummons();
+    loadMySummons().then(() => {
+      if (initialSummonId) {
+        // auto-select and open skill popup after summons are loaded
+        setTimeout(() => {
+          setMySummons(prev => {
+            const target = prev.find(s => s.id === initialSummonId);
+            if (target) {
+              setSelectedSummon(target);
+              loadSkills(target.id);
+            }
+            return prev;
+          });
+        }, 100);
+      }
+    });
   }, [loadTemplates, loadMySummons]);
 
   useEffect(() => {
@@ -80,35 +128,41 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
   }, [tab]);
 
   const handleBuy = async (templateId) => {
+    setLoading(true);
     try {
       const res = await api.post('/summon/buy', { templateId });
       onLog(res.data.message, 'system');
-      onCharStateUpdate({ gold: res.data.gold });
+      if (res.data.gold !== undefined) onCharStateUpdate({ gold: res.data.gold });
       setNpcMsg('좋은 선택이다. 잘 키워보거라.');
-      loadMySummons();
+      await loadMySummons();
+      await loadTemplates(); // 재료 보유량 갱신
+      setSelectedTemplate(null);
     } catch (err) {
-      onLog(err.response?.data?.message || '고용 실패', 'damage');
+      onLog(err.response?.data?.message || '소환 실패', 'damage');
       setNpcMsg('아직 준비가 되지 않은 것 같구나.');
     }
+    setLoading(false);
   };
 
   const handleSell = async (summonId) => {
+    setLoading(true);
     try {
       const res = await api.post('/summon/sell', { summonId });
       onLog(res.data.message, 'system');
-      onCharStateUpdate({ gold: res.data.gold });
-      loadMySummons();
+      setFireConfirm(null);
+      await loadMySummons();
       if (selectedSummon?.id === summonId) setSelectedSummon(null);
     } catch (err) {
       onLog(err.response?.data?.message || '해고 실패', 'damage');
     }
+    setLoading(false);
   };
 
   const loadSkills = async (summonId) => {
     try {
       const res = await api.get(`/summon/${summonId}/skills`);
       setSkillsData(res.data);
-      setShowSkills(summonId);
+      setShowSkillPopup(true);
     } catch {
       onLog('스킬 정보를 불러올 수 없습니다.', 'damage');
     }
@@ -118,6 +172,7 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
     try {
       const res = await api.post(`/summon/${summonId}/learn-skill`, { skillId });
       onLog(res.data.message, 'system');
+      if (res.data.gold !== undefined) onCharStateUpdate({ gold: res.data.gold });
       loadSkills(summonId);
       loadMySummons();
     } catch (err) {
@@ -126,87 +181,67 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
   };
 
   const ownedTemplateIds = mySummons.map((s) => s.template_id);
-  const filteredTemplates = templates.filter((t) => typeFilter === '전체' || t.type === typeFilter);
+  const filteredTemplates = templates.filter((t) => !ownedTemplateIds.includes(t.id) && (typeFilter === '전체' || t.type === typeFilter));
   const filteredSummons = mySummons.filter((s) => typeFilter === '전체' || s.type === typeFilter);
 
-  if (showEquipment && selectedSummon) {
-    return (
-      <div>
-        <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => setShowEquipment(false)}>
-          &larr; 소환수 목록으로
-        </Button>
-        <SummonEquipment
-          summon={selectedSummon}
-          onLog={onLog}
-          onSummonUpdate={() => loadMySummons()}
-        />
-      </div>
-    );
-  }
-
-  if (showSkills !== null) {
-    const summon = mySummons.find((s) => s.id === showSkills);
-    return (
-      <div className="summon-skills-view">
-        <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => setShowSkills(null)}>
-          &larr; 소환수 목록으로
-        </Button>
-        <div className="summon-skills-header">
-          <SummonImg src={summon?.icon_url_img || `/summons/${summon?.template_id}_icon.png`} fallback={summon?.icon} className="summon-card-icon" />
-          <div>
-            <div className="summon-card-name">{summon?.name}</div>
-            <div className="summon-card-type">
-              {summon?.type} · Lv.{summon?.level}
-              {summon?.element && ELEMENT_INFO[summon.element] && (
-                <span className="summon-element" style={{ color: ELEMENT_INFO[summon.element].color }}>
-                  {ELEMENT_INFO[summon.element].icon} {ELEMENT_INFO[summon.element].name}
-                </span>
-              )}
+  return (
+    <>
+    {/* 스킬 관리 레이어 팝업 */}
+    {showSkillPopup && selectedSummon && (
+      <div className="summon-equip-overlay" onClick={() => setShowSkillPopup(false)}>
+        <div className="summon-equip-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="summon-equip-modal-header">
+            <span className="summon-equip-modal-title">{selectedSummon.name} - 스킬 관리</span>
+            <button className="summon-equip-modal-close" onClick={() => setShowSkillPopup(false)}>&times;</button>
+          </div>
+          <div className="summon-equip-modal-body">
+            <div className="skill-manage-list">
+              {skillsData.skills.length === 0 ? (
+                <div style={{ color: 'var(--text-dark)', textAlign: 'center', padding: '16px 0' }}>배울 수 있는 스킬이 없습니다.</div>
+              ) : skillsData.skills.map((skill) => (
+                <div key={skill.id} className={`skill-manage-row ${skill.learned ? 'learned' : ''}`}>
+                  <SkillIcon src={`/summon_skills/${skill.id}_icon.png`} fallback={SKILL_TYPE_ICONS[skill.type] || '⚡'} className="skill-manage-icon-img" />
+                  <div className="skill-manage-info">
+                    <div className="skill-manage-name">
+                      {skill.name}
+                      <span className="skill-manage-lv">Lv.{skill.required_level}</span>
+                      <Badge bg="dark" style={{ color: '#fbbf24', background: 'rgba(245, 158, 11, 0.1)', fontSize: 10, marginLeft: 4 }}>{skill.skill_category}</Badge>
+                    </div>
+                    <div className="skill-manage-desc">{skill.description}</div>
+                    <div className="skill-manage-tags">
+                      {skill.mp_cost > 0 && <span className="skill-manage-tag mp">MP {skill.mp_cost}</span>}
+                      {skill.type === 'attack' && skill.damage_multiplier > 0 && <span className="skill-manage-tag pow">배율 x{skill.damage_multiplier}</span>}
+                      {skill.heal_amount > 0 && <span className="skill-manage-tag heal">회복 {skill.heal_amount}</span>}
+                      {skill.buff_stat && <span className="skill-manage-tag buff">{{attack:'ATK', defense:'DEF', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명', evasion:'회피'}[skill.buff_stat] || skill.buff_stat}+{skill.buff_value} ({skill.buff_duration}턴)</span>}
+                      {skill.cooldown > 0 && <span className="skill-manage-tag cd">쿨타임 {skill.cooldown}턴</span>}
+                      {!skill.learned && <span className="skill-manage-tag" style={{ color: '#ffa502', borderColor: 'rgba(255,165,2,0.2)' }}>{(skill.gold_cost || 0).toLocaleString()}G</span>}
+                    </div>
+                  </div>
+                  <div className="skill-manage-action">
+                    {skill.learned ? (
+                      <Badge bg="success" style={{ fontSize: 11 }}>습득</Badge>
+                    ) : selectedSummon.level < skill.required_level ? (
+                      <Badge bg="secondary" style={{ fontSize: 10 }}>Lv.{skill.required_level} 필요</Badge>
+                    ) : charState.gold < (skill.gold_cost || 0) ? (
+                      <Badge bg="secondary" style={{ fontSize: 10 }}>골드 부족</Badge>
+                    ) : (
+                      <button
+                        className="inn-hire-btn"
+                        style={{ padding: '6px 12px', fontSize: 12 }}
+                        onClick={() => handleLearnSkill(selectedSummon.id, skill.id)}
+                      >
+                        {(skill.gold_cost || 0).toLocaleString()}G 습득
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-        <div className="summon-skills-list">
-          {skillsData.skills.map((skill) => (
-            <div key={skill.id} className={`summon-skill-card ${skill.learned ? 'learned' : ''} ${summon?.level < skill.required_level ? 'locked' : ''}`}>
-              <div className="summon-skill-top">
-                <span className="summon-skill-type-icon">{SKILL_TYPE_ICONS[skill.type]}</span>
-                <span className="summon-skill-name">{skill.name}</span>
-                <Badge bg="dark" style={{ color: '#fbbf24', background: 'rgba(245, 158, 11, 0.1)' }}>{skill.skill_category}</Badge>
-                <Badge bg="dark" style={{ color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)' }}>{skill.mp_cost}MP</Badge>
-              </div>
-              <div className="summon-skill-desc">{skill.description}</div>
-              <div className="summon-skill-meta">
-                {skill.type === 'attack' && <span className="skill-tag atk">x{skill.damage_multiplier}</span>}
-                {skill.heal_amount > 0 && <span className="skill-tag heal">+{skill.heal_amount}HP</span>}
-                {skill.buff_stat && <span className="skill-tag buff">{{attack:'ATK', defense:'DEF', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명', evasion:'회피'}[skill.buff_stat] || skill.buff_stat}+{skill.buff_value} ({skill.buff_duration}턴)</span>}
-                {skill.cooldown > 0 && <span className="skill-tag cd">CD:{skill.cooldown}</span>}
-                <span className="skill-tag lvl">Lv.{skill.required_level}</span>
-              </div>
-              <div className="summon-skill-bottom">
-                {skill.learned ? (
-                  <Badge bg="success" className="py-1 px-3">습득 완료</Badge>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={summon?.level < skill.required_level}
-                    onClick={() => handleLearnSkill(showSkills, skill.id)}
-                  >
-                    {summon?.level < skill.required_level ? `Lv.${skill.required_level} 필요` : '습득하기'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
-          {skillsData.skills.length === 0 && (
-            <div className="facility-empty">배울 수 있는 스킬이 없습니다.</div>
-          )}
-        </div>
       </div>
-    );
-  }
-
-  return (
+    )}
+    {(
     <div className="facility-page summoner-page">
       {/* Banner */}
       <div className="facility-banner summoner-banner">
@@ -231,11 +266,11 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
 
       {/* Tabs */}
       <div className="facility-tabs">
-        <button className={`facility-tab ${tab === 'shop' ? 'active' : ''}`} onClick={() => setTab('shop')}>
+        <button className={`facility-tab ${tab === 'shop' ? 'active' : ''}`} onClick={() => { setTab('shop'); setSelectedTemplate(null); setSelectedSummon(null); }}>
           고용하기
         </button>
-        <button className={`facility-tab ${tab === 'my' ? 'active' : ''}`} onClick={() => setTab('my')}>
-          내 소환수 <span className="tab-badge">{mySummons.length}</span>
+        <button className={`facility-tab ${tab === 'my' ? 'active' : ''}`} onClick={() => { setTab('my'); setSelectedTemplate(null); setSelectedSummon(null); }}>
+          내 소환수 <span className="tab-badge">{summonSlots.current}/{summonSlots.max}</span>
         </button>
       </div>
 
@@ -252,115 +287,302 @@ function Summon({ charState, onCharStateUpdate, onLog }) {
         ))}
       </div>
 
-      {tab === 'shop' ? (
-        <div className="summon-grid">
-          {filteredTemplates.map((t) => {
-            const owned = ownedTemplateIds.includes(t.id);
-            const cantAfford = charState.gold < t.price;
-            const cantLevel = charState.level < t.required_level;
-            return (
-              <div key={t.id} className={`summon-card ${owned ? 'owned' : ''} ${cantLevel ? 'restricted' : ''}`}>
-                <div className="summon-card-top">
-                  <SummonImg src={t.icon_url || `/summons/${t.id}_icon.png`} fallback={t.icon} className="summon-card-icon" />
-                  <div className="summon-card-info">
-                    <div className="summon-card-name">
+      {/* 고용하기 탭 */}
+      {tab === 'shop' && (
+        <div className="inn-content">
+          <div className="inn-list">
+            {filteredTemplates.map((t) => {
+              const mats = t.summon_materials || [];
+              const cantAfford = mats.length > 0
+                ? mats.some(m => (m.owned || 0) < m.quantity)
+                : charState.gold < t.price;
+              const cantLevel = charState.level < t.required_level;
+              const canHire = !cantAfford && !cantLevel;
+              const el = ELEMENT_INFO[t.element] || ELEMENT_INFO.neutral;
+              const rt = detectSummonRangeType(t);
+              const ri = RANGE_INFO[rt] || RANGE_INFO.melee;
+              return (
+                <div
+                  key={t.id}
+                  className={`inn-merc-card${selectedTemplate?.id === t.id ? ' selected' : ''}${!canHire ? ' disabled' : ''}`}
+                  onClick={() => setSelectedTemplate(t)}
+                >
+                  <div className="inn-merc-icon">
+                    <SummonImg src={t.icon_url || `/summons/${t.id}_icon.png`} fallback={t.icon} className="inn-merc-img" />
+                  </div>
+                  <div className="inn-merc-info">
+                    <div className="inn-merc-name">
                       {t.name}
-                      {owned && <Badge bg="success" className="ms-1" style={{ fontSize: 10 }}>보유</Badge>}
+                      <span className="inn-merc-class">{t.type}</span>
                     </div>
-                    <div className="summon-card-type">
-                      {t.type}
-                      {t.element && ELEMENT_INFO[t.element] && (
-                        <span className="summon-element" style={{ color: ELEMENT_INFO[t.element].color }}>
-                          {ELEMENT_INFO[t.element].icon} {ELEMENT_INFO[t.element].name}
-                        </span>
+                    <div className="inn-merc-meta">
+                      <span style={{ color: el.color }}>{el.icon}{el.name}</span>
+                      <span style={{ color: ri.color }}>{ri.icon} {ri.name}</span>
+                      {cantLevel && (
+                        <span className="inn-merc-level-warn">Lv.{t.required_level} 필요</span>
                       )}
                     </div>
+                    <div className="inn-merc-desc">{t.description || `${t.type} 소환수`}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end', flexShrink: 0 }}>
+                    {mats.length > 0 ? mats.slice(0, 2).map((m, i) => (
+                      <span key={i} style={{ fontSize: 11, color: (m.owned || 0) >= m.quantity ? '#4ade80' : '#ef4444', whiteSpace: 'nowrap' }}>
+                        {m.icon}{m.quantity}
+                      </span>
+                    )) : (
+                      <span className="inn-merc-price">{t.price.toLocaleString()}G</span>
+                    )}
+                    {mats.length > 2 && <span style={{ fontSize: 10, color: '#888' }}>+{mats.length - 2}</span>}
                   </div>
                 </div>
-                <div className="summon-card-stats">
-                  <span className="eff hp">HP {t.base_hp}</span>
-                  <span className="eff mp">MP {t.base_mp}</span>
-                  <span className="eff atk">물공 {t.base_phys_attack || 0}</span>
-                  <span className="eff atk">마공 {t.base_mag_attack || 0}</span>
-                  <span className="eff def">물방 {t.base_phys_defense || 0}</span>
-                  <span className="eff def">마방 {t.base_mag_defense || 0}</span>
-                  <span className="eff mp">이동 3</span>
-                  {t.required_level > 1 && <span className="eff lvl">Lv.{t.required_level}</span>}
+              );
+            })}
+            {filteredTemplates.length === 0 && (
+              <div className="facility-empty">해당 타입의 소환수가 없습니다.</div>
+            )}
+          </div>
+
+          {selectedTemplate && (() => {
+            const el = ELEMENT_INFO[selectedTemplate.element] || ELEMENT_INFO.neutral;
+            const rt = detectSummonRangeType(selectedTemplate);
+            const ri = RANGE_INFO[rt] || RANGE_INFO.melee;
+            const mats = selectedTemplate.summon_materials || [];
+            const cantAfford = mats.length > 0
+              ? mats.some(m => (m.owned || 0) < m.quantity)
+              : charState.gold < selectedTemplate.price;
+            const cantLevel = charState.level < selectedTemplate.required_level;
+            return (
+              <div className="inn-detail">
+                <div className="inn-detail-header">
+                  <SummonImg src={selectedTemplate.icon_url || `/summons/${selectedTemplate.id}_full.png`} fallback={selectedTemplate.icon} className="inn-detail-portrait" />
+                  <div>
+                    <h3>{selectedTemplate.name}</h3>
+                    <div className="inn-detail-sub">
+                      {selectedTemplate.type} ·
+                      <span style={{ color: el.color }}> {el.icon}{el.name}</span>
+                      {' '}· <span style={{ color: ri.color }}>{ri.icon} {ri.name}</span>
+                    </div>
+                    <div className="inn-detail-desc">{selectedTemplate.description || `${selectedTemplate.type} 소환수`}</div>
+                  </div>
                 </div>
-                <div className="summon-card-bottom">
-                  <span className="fitem-price">{t.price.toLocaleString()}G</span>
-                  <button
-                    className={`fitem-btn buy ${(owned || cantAfford || cantLevel) ? 'disabled' : ''}`}
-                    disabled={owned || cantAfford || cantLevel}
-                    onClick={() => handleBuy(t.id)}
-                  >
-                    {owned ? '보유 중' : cantLevel ? `Lv.${t.required_level}` : cantAfford ? '골드 부족' : '고용'}
-                  </button>
+
+                <div className="inn-detail-stats">
+                  <div className="inn-stat-row"><span>HP</span><span>{selectedTemplate.base_hp}</span></div>
+                  <div className="inn-stat-row"><span>MP</span><span>{selectedTemplate.base_mp}</span></div>
+                  <div className="inn-stat-row"><span>물리공격</span><span>{selectedTemplate.base_phys_attack || 0}</span></div>
+                  <div className="inn-stat-row"><span>물리방어</span><span>{selectedTemplate.base_phys_defense || 0}</span></div>
+                  <div className="inn-stat-row"><span>마법공격</span><span>{selectedTemplate.base_mag_attack || 0}</span></div>
+                  <div className="inn-stat-row"><span>마법방어</span><span>{selectedTemplate.base_mag_defense || 0}</span></div>
+                  <div className="inn-stat-row"><span>치명타율</span><span>{selectedTemplate.base_crit_rate || 0}%</span></div>
+                  <div className="inn-stat-row"><span>회피율</span><span>{selectedTemplate.base_evasion || 0}%</span></div>
                 </div>
+
+                <div className="inn-detail-growth">
+                  <div className="inn-growth-title">레벨업 성장</div>
+                  <div className="inn-growth-grid">
+                    <span>HP +{selectedTemplate.growth_hp}</span>
+                    <span>MP +{selectedTemplate.growth_mp}</span>
+                    <span>물공 +{selectedTemplate.growth_phys_attack}</span>
+                    <span>물방 +{selectedTemplate.growth_phys_defense}</span>
+                    <span>마공 +{selectedTemplate.growth_mag_attack}</span>
+                    <span>마방 +{selectedTemplate.growth_mag_defense}</span>
+                  </div>
+                </div>
+
+                {/* 소환 재료 비용 */}
+                {mats.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.12)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 600, marginBottom: 8 }}>소환 재료</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {mats.map((m, i) => {
+                        const enough = (m.owned || 0) >= m.quantity;
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '3px 6px', background: 'rgba(255,255,255,0.02)', borderRadius: 4 }}>
+                            <span style={{ color: GRADE_COLORS[m.grade] || '#aaa' }}>
+                              {m.icon} {m.name}
+                            </span>
+                            <span style={{ color: enough ? '#4ade80' : '#ef4444', fontWeight: 600 }}>
+                              {m.owned || 0}/{m.quantity}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="inn-slot-info">
+                  소환수 슬롯: {summonSlots.current}/{summonSlots.max}
+                  {summonSlots.next && <span className="inn-slot-next"> (Lv.{summonSlots.next.level}에서 {summonSlots.next.slots}마리)</span>}
+                </div>
+                <button
+                  className="inn-hire-btn"
+                  disabled={loading || cantLevel || cantAfford || mySummons.length >= summonSlots.max}
+                  onClick={() => handleBuy(selectedTemplate.id)}
+                >
+                  {loading ? '소환 중...' :
+                   cantLevel ? `Lv.${selectedTemplate.required_level} 필요` :
+                   mySummons.length >= summonSlots.max ? `슬롯 부족 ${summonSlots.next ? `(Lv.${summonSlots.next.level} 해금)` : ''}` :
+                   cantAfford ? (mats.length > 0 ? '재료 부족' : '골드 부족') :
+                   mats.length > 0 ? '소환하기' :
+                   `${selectedTemplate.price.toLocaleString()}G로 소환`}
+                </button>
               </div>
             );
-          })}
-          {filteredTemplates.length === 0 && (
-            <div className="facility-empty">해당 타입의 소환수가 없습니다.</div>
-          )}
+          })()}
         </div>
-      ) : (
-        <div className="summon-grid">
-          {filteredSummons.map((s) => (
-            <div key={s.id} className="summon-card owned">
-              <div className="summon-card-top">
-                <SummonImg src={s.icon_url_img || `/summons/${s.template_id}_icon.png`} fallback={s.icon} className="summon-card-icon" />
-                <div className="summon-card-info">
-                  <div className="summon-card-name">{s.name}</div>
-                  <div className="summon-card-type">
-                    {s.type} · Lv.{s.level}
-                    {s.element && ELEMENT_INFO[s.element] && (
-                      <span className="summon-element" style={{ color: ELEMENT_INFO[s.element].color }}>
-                        {ELEMENT_INFO[s.element].icon} {ELEMENT_INFO[s.element].name}
-                      </span>
-                    )}
+      )}
+
+      {/* 내 소환수 탭 */}
+      {tab === 'my' && (
+        <div className="inn-content">
+          <div className="inn-list">
+            {filteredSummons.length === 0 ? (
+              <div className="facility-empty">보유한 소환수가 없습니다.</div>
+            ) : filteredSummons.map((s) => {
+              const el = ELEMENT_INFO[s.element] || ELEMENT_INFO.neutral;
+              const rt = detectSummonRangeType(s);
+              const ri = RANGE_INFO[rt] || RANGE_INFO.melee;
+              const expNeeded = Math.floor(40 * s.level + 0.25 * s.level * s.level);
+              return (
+                <div
+                  key={s.id}
+                  className={`inn-merc-card${selectedSummon?.id === s.id ? ' selected' : ''}`}
+                  onClick={() => setSelectedSummon(s)}
+                >
+                  <div className="inn-merc-icon">
+                    <SummonImg src={s.icon_url_img || `/summons/${s.template_id}_icon.png`} fallback={s.icon} className="inn-merc-img" />
+                    <span className="inn-merc-level-badge">Lv.{s.level}</span>
+                  </div>
+                  <div className="inn-merc-info">
+                    <div className="inn-merc-name">
+                      {s.name}
+                      <span className="inn-merc-class">{s.type}</span>
+                    </div>
+                    <div className="inn-merc-meta">
+                      <span style={{ color: el.color }}>{el.icon}{el.name}</span>
+                      <span style={{ color: ri.color }}>{ri.icon} {ri.name}</span>
+                      <span>HP {s.hp}</span>
+                      <span>물공 {s.phys_attack || 0}</span>
+                    </div>
+                    <div className="inn-merc-exp-bar">
+                      <div className="inn-merc-exp-fill" style={{ width: `${(s.exp / expNeeded) * 100}%` }} />
+                      <span className="inn-merc-exp-text">EXP {s.exp}/{expNeeded}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="summon-card-level-bar">
-                <div className="bar-label">
-                  <span>EXP</span>
-                  <span>{s.exp}/{s.level * 50}</span>
+              );
+            })}
+          </div>
+
+          {selectedSummon && (() => {
+            const el = ELEMENT_INFO[selectedSummon.element] || ELEMENT_INFO.neutral;
+            const rt = detectSummonRangeType(selectedSummon);
+            const ri = RANGE_INFO[rt] || RANGE_INFO.melee;
+            return (
+              <div className="inn-detail">
+                <div className="inn-detail-header">
+                  <SummonImg src={selectedSummon.icon_url_img || `/summons/${selectedSummon.template_id}_full.png`} fallback={selectedSummon.icon} className="inn-detail-portrait" />
+                  <div>
+                    <h3>{selectedSummon.name} <span className="inn-detail-level">Lv.{selectedSummon.level}</span></h3>
+                    <div className="inn-detail-sub">
+                      {selectedSummon.type} ·
+                      <span style={{ color: el.color }}> {el.icon}{el.name}</span>
+                      {' '}· <span style={{ color: ri.color }}>{ri.icon} {ri.name}</span>
+                    </div>
+                  </div>
                 </div>
-                <ProgressBar now={(s.exp / (s.level * 50)) * 100} variant="warning" style={{ height: 6 }} />
-              </div>
-              <div className="summon-card-stats">
-                <span className="eff hp">HP {s.hp}</span>
-                <span className="eff mp">MP {s.mp}</span>
-                <span className="eff atk">물공 {s.phys_attack || 0}</span>
-                <span className="eff atk">마공 {s.mag_attack || 0}</span>
-                <span className="eff def">물방 {s.phys_defense || 0}</span>
-                <span className="eff def">마방 {s.mag_defense || 0}</span>
-                <span className="eff mp">이동 3</span>
-              </div>
-              {s.learned_skills && s.learned_skills.length > 0 && (
-                <div className="summon-card-skills">
-                  {s.learned_skills.map((sk) => (
-                    <Badge key={sk.id} bg="dark" className="summon-skill-tag" title={sk.description}
-                      style={{ background: 'rgba(59, 130, 246, 0.08)', color: '#60a5fa' }}>
-                      {SKILL_TYPE_ICONS[sk.type]} {sk.name}
-                    </Badge>
-                  ))}
+
+                <div className="inn-detail-stats">
+                  <div className="inn-stat-row"><span>HP</span><span>{selectedSummon.hp}</span></div>
+                  <div className="inn-stat-row"><span>MP</span><span>{selectedSummon.mp}</span></div>
+                  <div className="inn-stat-row"><span>물리공격</span><span>{selectedSummon.phys_attack || 0}</span></div>
+                  <div className="inn-stat-row"><span>물리방어</span><span>{selectedSummon.phys_defense || 0}</span></div>
+                  <div className="inn-stat-row"><span>마법공격</span><span>{selectedSummon.mag_attack || 0}</span></div>
+                  <div className="inn-stat-row"><span>마법방어</span><span>{selectedSummon.mag_defense || 0}</span></div>
+                  <div className="inn-stat-row"><span>치명타율</span><span>{selectedSummon.crit_rate || 0}%</span></div>
+                  <div className="inn-stat-row"><span>회피율</span><span>{selectedSummon.evasion || 0}%</span></div>
                 </div>
-              )}
-              <div className="summon-card-actions">
-                <button className="fitem-btn buy" onClick={() => { setSelectedSummon(s); setShowEquipment(true); }}>장비</button>
-                <button className="fitem-btn buy" onClick={() => loadSkills(s.id)}>스킬</button>
-                <button className="fitem-btn sell" onClick={() => handleSell(s.id)}>해고 ({s.sell_price}G)</button>
+
+                <div className="inn-detail-growth">
+                  <div className="inn-growth-title">레벨업 성장</div>
+                  <div className="inn-growth-grid">
+                    <span>HP +{selectedSummon.growth_hp || 0}</span>
+                    <span>MP +{selectedSummon.growth_mp || 0}</span>
+                    <span>물공 +{selectedSummon.growth_phys_attack || 0}</span>
+                    <span>물방 +{selectedSummon.growth_phys_defense || 0}</span>
+                    <span>마공 +{selectedSummon.growth_mag_attack || 0}</span>
+                    <span>마방 +{selectedSummon.growth_mag_defense || 0}</span>
+                  </div>
+                </div>
+
+                {selectedSummon.learned_skills && selectedSummon.learned_skills.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>습득 스킬</div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {selectedSummon.learned_skills.map((sk) => (
+                        <Badge key={sk.id} bg="dark" title={sk.description}
+                          style={{ background: 'rgba(59, 130, 246, 0.08)', color: '#60a5fa', fontSize: 11 }}>
+                          {SKILL_TYPE_ICONS[sk.type]} {sk.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button className="inn-hire-btn" style={{ marginBottom: 8 }} onClick={() => loadSkills(selectedSummon.id)}>
+                  스킬 관리
+                </button>
+                <button
+                  className="inn-fire-btn"
+                  disabled={loading}
+                  onClick={() => setFireConfirm(selectedSummon)}
+                >
+                  해고
+                </button>
               </div>
-            </div>
-          ))}
-          {filteredSummons.length === 0 && (
-            <div className="facility-empty">보유한 소환수가 없습니다.</div>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>
+    )}
+
+    {/* 소환수 해고 확인 팝업 */}
+    {fireConfirm && (
+      <div className="aura-popup-overlay" onClick={() => setFireConfirm(null)}>
+        <div className="inn-rest-popup" onClick={e => e.stopPropagation()}>
+          <div className="inn-rest-popup-header" style={{ borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+            <span>소환수 해고 확인</span>
+            <button className="aura-popup-close" onClick={() => setFireConfirm(null)}>&times;</button>
+          </div>
+          <div className="inn-rest-popup-body">
+            <div className="inn-fire-confirm-info">
+              <SummonImg src={`/summons/${fireConfirm.template_id}_icon.png`} fallback={fireConfirm.icon || '⚔️'} className="inn-fire-confirm-img" />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#eee' }}>{fireConfirm.name}</div>
+                <div style={{ fontSize: 12, color: '#aaa' }}>{fireConfirm.type} · Lv.{fireConfirm.level}</div>
+              </div>
+            </div>
+            <div className="inn-fire-confirm-warn">
+              정말 해고하시겠습니까?<br/>
+              <span style={{ color: '#ef4444' }}>해고된 소환수는 복구할 수 없습니다.</span>
+            </div>
+            <div className="inn-fire-confirm-btns">
+              <button className="inn-fire-confirm-cancel" onClick={() => setFireConfirm(null)}>취소</button>
+              <button
+                className="inn-fire-confirm-ok"
+                disabled={loading}
+                onClick={() => handleSell(fireConfirm.id)}
+              >
+                {loading ? '해고 중...' : '해고'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 

@@ -57,6 +57,12 @@ router.get('/recipes', auth, async (req, res) => {
       `SELECT cr.id as recipe_id, cr.gold_cost, cr.required_level,
               i.id as item_id, i.name, i.type, i.grade, i.description,
               i.effect_hp, i.effect_mp, i.effect_attack, i.effect_defense,
+              IFNULL(i.effect_phys_attack,0) as effect_phys_attack,
+              IFNULL(i.effect_phys_defense,0) as effect_phys_defense,
+              IFNULL(i.effect_mag_attack,0) as effect_mag_attack,
+              IFNULL(i.effect_mag_defense,0) as effect_mag_defense,
+              IFNULL(i.effect_crit_rate,0) as effect_crit_rate,
+              IFNULL(i.effect_evasion,0) as effect_evasion,
               i.class_restriction, i.max_enhance
        FROM crafting_recipes cr
        JOIN items i ON cr.result_item_id = i.id
@@ -189,6 +195,12 @@ router.get('/enhance-list', auth, async (req, res) => {
       `SELECT inv.id as inventory_id, inv.item_id, inv.quantity, inv.enhance_level, inv.equipped,
               i.name, i.type, i.grade, i.max_enhance, i.slot,
               i.effect_hp, i.effect_mp, i.effect_attack, i.effect_defense,
+              IFNULL(i.effect_phys_attack,0) as effect_phys_attack,
+              IFNULL(i.effect_phys_defense,0) as effect_phys_defense,
+              IFNULL(i.effect_mag_attack,0) as effect_mag_attack,
+              IFNULL(i.effect_mag_defense,0) as effect_mag_defense,
+              IFNULL(i.effect_crit_rate,0) as effect_crit_rate,
+              IFNULL(i.effect_evasion,0) as effect_evasion,
               i.class_restriction
        FROM inventory inv
        JOIN items i ON inv.item_id = i.id

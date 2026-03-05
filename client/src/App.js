@@ -120,6 +120,8 @@ function App() {
             element={
               !user ? (
                 <Navigate to="/login" />
+              ) : character || showSelect ? (
+                <Navigate to="/" />
               ) : (
                 <CreateCharacter
                   onCharacterCreated={handleCharacterCreated}

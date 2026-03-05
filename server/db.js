@@ -56,6 +56,9 @@ async function initialize() {
   await addCol('current_hp', 'INT DEFAULT NULL');
   await addCol('current_mp', 'INT DEFAULT NULL');
   await addCol('element', "ENUM('fire','water','earth','wind','neutral') DEFAULT 'neutral'");
+  await addCol('stamina', 'INT DEFAULT 10');
+  await addCol('max_stamina', 'INT DEFAULT 10');
+  await addCol('last_stamina_time', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS battle_logs (
@@ -109,7 +112,7 @@ async function initialize() {
       equipped TINYINT(1) DEFAULT 0,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
       FOREIGN KEY (item_id) REFERENCES items(id),
-      UNIQUE KEY unique_char_item (character_id, item_id)
+      KEY idx_char_item (character_id, item_id)
     )
   `);
 
@@ -213,12 +216,18 @@ async function initialize() {
     }
   }
 
+  // quests 테이블이 이미 있으면 재생성하지 않음
+  const [questTableCheck] = await pool.query(`SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema = 'game' AND table_name = 'quests'`);
+  const questsExist = questTableCheck[0].cnt > 0;
+
+  if (!questsExist) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS quests (
       id INT AUTO_INCREMENT PRIMARY KEY,
       title VARCHAR(100) NOT NULL,
       description VARCHAR(300) NOT NULL,
-      type ENUM('hunt', 'hunt_location', 'level') NOT NULL,
+      category ENUM('main', 'daily', 'bounty', 'achievement') NOT NULL DEFAULT 'bounty',
+      type ENUM('hunt', 'hunt_location', 'level', 'clear_stage', 'clear_dungeon', 'collect_material') NOT NULL,
       target VARCHAR(50) NOT NULL,
       target_count INT NOT NULL DEFAULT 1,
       reward_exp INT DEFAULT 0,
@@ -226,9 +235,81 @@ async function initialize() {
       reward_item_id INT DEFAULT NULL,
       reward_item_qty INT DEFAULT 1,
       required_level INT DEFAULT 1,
-      prerequisite_quest_id INT DEFAULT NULL
+      prerequisite_quest_id INT DEFAULT NULL,
+      chapter INT DEFAULT 0,
+      sort_order INT DEFAULT 0,
+      icon VARCHAR(10) DEFAULT NULL
     )
   `);
+
+  await pool.query(`INSERT INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    -- ========== 메인 퀘스트 Chapter 1: 어둠의 시작 ==========
+    ('모험의 시작', '어둠의 숲에서 몬스터 3마리를 처치하며 실전 경험을 쌓으세요.', 'main', 'hunt_location', 'forest', 3, 80, 50, NULL, 0, 1, NULL, 1, 1, '⚔️'),
+    ('숲의 위협', '어둠의 숲에서 몬스터 8마리를 처치하고 숲을 정화하세요.', 'main', 'hunt_location', 'forest', 8, 150, 100, NULL, 0, 1, 1, 1, 2, '🌲'),
+    ('들쥐의 습격', '들쥐 5마리를 처치하여 마을의 식량을 지키세요.', 'main', 'hunt', '들쥐', 5, 100, 70, NULL, 0, 1, 2, 1, 3, '🐀'),
+    ('늑대 소탕전', '야생 늑대 5마리를 처치하여 길을 안전하게 만드세요.', 'main', 'hunt', '야생 늑대', 5, 150, 100, NULL, 0, 1, 3, 1, 4, '🐺'),
+    ('첫 번째 성장', '레벨 3을 달성하여 모험가로서의 자질을 증명하세요.', 'main', 'level', '3', 1, 120, 100, NULL, 0, 1, 4, 1, 5, '⭐'),
+
+    -- ========== 메인 퀘스트 Chapter 2: 동굴의 비밀 ==========
+    ('지하 세계로', '지하 동굴에서 몬스터 5마리를 처치하세요.', 'main', 'hunt_location', 'cave', 5, 200, 150, NULL, 0, 2, 5, 2, 1, '🕳️'),
+    ('독거미 소탕', '독거미 8마리를 처치하여 동굴 입구를 정리하세요.', 'main', 'hunt', '독거미', 8, 250, 180, 13, 3, 2, 6, 2, 2, '🕷️'),
+    ('동굴 박쥐 퇴치', '동굴 박쥐 6마리를 처치하세요.', 'main', 'hunt', '동굴 박쥐', 6, 280, 200, 14, 2, 2, 7, 2, 3, '🦇'),
+    ('슬라임 동굴 탐사', '슬라임 동굴의 스테이지를 3개 이상 클리어하세요.', 'main', 'clear_dungeon', 'slime_cave', 3, 350, 250, NULL, 0, 2, 8, 2, 4, '🟢'),
+    ('숙련 모험가', '레벨 5를 달성하세요.', 'main', 'level', '5', 1, 300, 200, NULL, 0, 2, 9, 2, 5, '⭐'),
+
+    -- ========== 메인 퀘스트 Chapter 3: 확장되는 세계 ==========
+    ('골렘 파괴자', '골렘 3마리를 처치하세요.', 'main', 'hunt', '골렘', 3, 350, 250, NULL, 0, 3, 10, 3, 1, '🪨'),
+    ('독안개 늪 진출', '독안개 늪에서 몬스터 5마리를 처치하세요.', 'main', 'hunt_location', 'swamp', 5, 400, 300, NULL, 0, 3, 11, 3, 2, '🌿'),
+    ('도깨비 마을 습격', '도깨비 마을 스테이지를 3개 클리어하세요.', 'main', 'clear_dungeon', 'goblin', 3, 450, 350, NULL, 0, 3, 12, 3, 3, '👺'),
+    ('산악 원정대', '영혼의 산에서 몬스터 5마리를 처치하세요.', 'main', 'hunt_location', 'mountain', 5, 500, 400, NULL, 0, 3, 13, 3, 4, '🏔️'),
+    ('레벨 8 달성', '레벨 8을 달성하여 전사로 거듭나세요.', 'main', 'level', '8', 1, 500, 400, NULL, 0, 3, 14, 3, 5, '⭐'),
+
+    -- ========== 메인 퀘스트 Chapter 4: 어둠의 심연 ==========
+    ('해저 유적 탐사', '해저 유적 스테이지를 5개 클리어하세요.', 'main', 'clear_dungeon', 'ocean', 5, 600, 500, NULL, 0, 4, 15, 4, 1, '🌊'),
+    ('정령의 숲 정화', '정령의 숲에서 몬스터 8마리를 처치하세요.', 'main', 'hunt_location', 'spirit_forest', 8, 700, 550, NULL, 0, 4, 16, 4, 2, '🧚'),
+    ('사원의 비밀', '폐허 사원에서 몬스터 5마리를 처치하세요.', 'main', 'hunt_location', 'temple', 5, 800, 600, NULL, 0, 4, 17, 4, 3, '🏛️'),
+    ('원혼 정화', '원혼을 4마리 처치하세요.', 'main', 'hunt', '원혼', 4, 850, 650, 15, 2, 4, 18, 4, 4, '👻'),
+    ('레벨 12 달성', '레벨 12를 달성하세요.', 'main', 'level', '12', 1, 800, 600, NULL, 0, 4, 19, 4, 5, '⭐'),
+
+    -- ========== 메인 퀘스트 Chapter 5: 최종 결전 ==========
+    ('어둠의 수호자 토벌', '어둠의 수호자를 2마리 처치하세요.', 'main', 'hunt', '어둠의 수호자', 2, 1000, 800, NULL, 0, 5, 20, 5, 1, '💀'),
+    ('마계 균열 돌파', '마계 균열 스테이지를 5개 클리어하세요.', 'main', 'clear_dungeon', 'demon', 5, 1200, 1000, NULL, 0, 5, 21, 5, 2, '😈'),
+    ('용의 둥지 도전', '용의 둥지 스테이지를 3개 클리어하세요.', 'main', 'clear_dungeon', 'dragon', 3, 1500, 1200, NULL, 0, 7, 22, 5, 3, '🐉'),
+    ('전설의 모험가', '레벨 15를 달성하세요.', 'main', 'level', '15', 1, 2000, 1500, NULL, 0, 5, 23, 5, 4, '👑'),
+
+    -- ========== 일일 퀘스트 ==========
+    ('일일 사냥', '아무 던전에서 몬스터 10마리를 처치하세요.', 'daily', 'hunt_location', 'any', 10, 100, 80, NULL, 0, 1, NULL, 0, 1, '⚔️'),
+    ('스테이지 도전', '스테이지 전투를 2회 완료하세요.', 'daily', 'clear_stage', 'any', 2, 120, 100, NULL, 0, 1, NULL, 0, 2, '🗺️'),
+    ('던전 탐험', '던전 스테이지를 2회 클리어하세요.', 'daily', 'clear_dungeon', 'any', 2, 120, 100, NULL, 0, 1, NULL, 0, 3, '🏰'),
+    ('정예 사냥꾼', '아무 던전에서 몬스터 20마리를 처치하세요.', 'daily', 'hunt_location', 'any', 20, 200, 150, NULL, 0, 3, NULL, 0, 4, '🎯'),
+    ('소재 수집가', '재료를 5개 획득하세요.', 'daily', 'collect_material', 'any', 5, 80, 120, NULL, 0, 1, NULL, 0, 5, '🧪'),
+
+    -- ========== 현상금 의뢰 (Bounty) ==========
+    ('들쥐 퇴치 의뢰', '들쥐를 10마리 처치하세요.', 'bounty', 'hunt', '들쥐', 10, 120, 80, NULL, 0, 1, NULL, 0, 1, '🐀'),
+    ('야생 늑대 현상금', '야생 늑대를 8마리 처치하세요.', 'bounty', 'hunt', '야생 늑대', 8, 180, 120, NULL, 0, 1, NULL, 0, 2, '🐺'),
+    ('독거미 구제', '독거미를 10마리 처치하세요.', 'bounty', 'hunt', '독거미', 10, 200, 150, 13, 2, 1, NULL, 0, 3, '🕷️'),
+    ('동굴 박쥐 소탕', '동굴 박쥐를 8마리 처치하세요.', 'bounty', 'hunt', '동굴 박쥐', 8, 220, 160, 14, 2, 2, NULL, 0, 4, '🦇'),
+    ('골렘 현상 수배', '골렘을 5마리 처치하세요.', 'bounty', 'hunt', '골렘', 5, 350, 250, NULL, 0, 3, NULL, 0, 5, '🪨'),
+    ('숲의 청소부', '어둠의 숲에서 몬스터 15마리를 처치하세요.', 'bounty', 'hunt_location', 'forest', 15, 200, 150, NULL, 0, 1, NULL, 0, 6, '🌲'),
+    ('동굴 탐사 의뢰', '지하 동굴에서 몬스터 15마리를 처치하세요.', 'bounty', 'hunt_location', 'cave', 15, 300, 220, NULL, 0, 2, NULL, 0, 7, '🕳️'),
+    ('늪지 정화 의뢰', '독안개 늪에서 몬스터 10마리를 처치하세요.', 'bounty', 'hunt_location', 'swamp', 10, 350, 250, NULL, 0, 2, NULL, 0, 8, '🌿'),
+    ('사원 정화 의뢰', '폐허 사원에서 몬스터 10마리를 처치하세요.', 'bounty', 'hunt_location', 'temple', 10, 500, 400, NULL, 0, 4, NULL, 0, 9, '🏛️'),
+    ('원혼 퇴마 의뢰', '원혼을 6마리 처치하세요.', 'bounty', 'hunt', '원혼', 6, 500, 400, 15, 2, 4, NULL, 0, 10, '👻'),
+    ('어둠의 수호자 현상금', '어둠의 수호자를 3마리 처치하세요.', 'bounty', 'hunt', '어둠의 수호자', 3, 800, 600, NULL, 0, 5, NULL, 0, 11, '💀'),
+
+    -- ========== 업적 (Achievement) ==========
+    ('첫 발걸음', '첫 번째 전투에서 승리하세요.', 'achievement', 'hunt_location', 'any', 1, 50, 30, NULL, 0, 1, NULL, 0, 1, '🏅'),
+    ('10킬 달성', '몬스터를 총 10마리 처치하세요.', 'achievement', 'hunt_location', 'any', 10, 100, 80, NULL, 0, 1, NULL, 0, 2, '🎖️'),
+    ('50킬 달성', '몬스터를 총 50마리 처치하세요.', 'achievement', 'hunt_location', 'any', 50, 300, 200, NULL, 0, 1, NULL, 0, 3, '🏆'),
+    ('100킬 달성', '몬스터를 총 100마리 처치하세요.', 'achievement', 'hunt_location', 'any', 100, 500, 400, NULL, 0, 1, NULL, 0, 4, '💎'),
+    ('300킬 달성', '몬스터를 총 300마리 처치하세요.', 'achievement', 'hunt_location', 'any', 300, 1000, 800, NULL, 0, 1, NULL, 0, 5, '🌟'),
+    ('던전 마스터', '던전 스테이지를 총 30개 클리어하세요.', 'achievement', 'clear_dungeon', 'any', 30, 500, 400, NULL, 0, 1, NULL, 0, 6, '🏰'),
+    ('스테이지 정복자', '스테이지를 총 30개 클리어하세요.', 'achievement', 'clear_stage', 'any', 30, 500, 400, NULL, 0, 1, NULL, 0, 7, '🗺️'),
+    ('레벨 10 달성', '레벨 10에 도달하세요.', 'achievement', 'level', '10', 1, 500, 300, NULL, 0, 1, NULL, 0, 8, '⭐'),
+    ('레벨 20 달성', '레벨 20에 도달하세요.', 'achievement', 'level', '20', 1, 1000, 600, NULL, 0, 1, NULL, 0, 9, '🌟'),
+    ('소재 수집가', '재료를 총 50개 수집하세요.', 'achievement', 'collect_material', 'any', 50, 300, 250, NULL, 0, 1, NULL, 0, 10, '🧪')
+  `);
+  } // end if (!questsExist)
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS character_quests (
@@ -245,25 +326,15 @@ async function initialize() {
     )
   `);
 
-  const [existingQuests] = await pool.query('SELECT COUNT(*) as cnt FROM quests');
-  if (existingQuests[0].cnt === 0) {
-    await pool.query(`INSERT INTO quests (title, description, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id) VALUES
-      ('첫 번째 사냥', '어둠의 숲에서 몬스터 3마리를 처치하세요.', 'hunt_location', 'forest', 3, 50, 30, NULL, 0, 1, NULL),
-      ('숲의 청소부', '어둠의 숲에서 몬스터 10마리를 처치하세요.', 'hunt_location', 'forest', 10, 150, 100, NULL, 0, 1, 1),
-      ('들쥐 퇴치', '들쥐를 5마리 처치하세요.', 'hunt', '들쥐', 5, 80, 50, NULL, 0, 1, NULL),
-      ('늑대 사냥꾼', '야생 늑대를 5마리 처치하세요.', 'hunt', '야생 늑대', 5, 120, 80, NULL, 0, 1, NULL),
-      ('동굴 탐험가', '지하 동굴에서 몬스터 5마리를 처치하세요.', 'hunt_location', 'cave', 5, 200, 150, NULL, 0, 2, 2),
-      ('골렘 파괴자', '골렘을 3마리 처치하세요.', 'hunt', '골렘', 3, 250, 200, NULL, 0, 3, NULL),
-      ('사원의 비밀', '폐허 사원에서 몬스터 5마리를 처치하세요.', 'hunt_location', 'temple', 5, 400, 300, NULL, 0, 4, 5),
-      ('어둠의 수호자 토벌', '어둠의 수호자를 2마리 처치하세요.', 'hunt', '어둠의 수호자', 2, 600, 500, NULL, 0, 5, 7),
-      ('성장의 증거', '레벨 3을 달성하세요.', 'level', '3', 1, 100, 80, NULL, 0, 1, NULL),
-      ('숙련 모험가', '레벨 5를 달성하세요.', 'level', '5', 1, 300, 200, NULL, 0, 3, 9),
-      ('전설의 시작', '레벨 8을 달성하세요.', 'level', '8', 1, 500, 400, NULL, 0, 5, 10),
-      ('독거미 소탕', '독거미를 8마리 처치하세요.', 'hunt', '독거미', 8, 150, 100, 13, 3, 1, NULL),
-      ('박쥐 퇴치 의뢰', '동굴 박쥐를 6마리 처치하세요.', 'hunt', '동굴 박쥐', 6, 250, 180, 14, 2, 2, NULL),
-      ('원혼 정화', '원혼을 4마리 처치하세요.', 'hunt', '원혼', 4, 400, 300, 15, 2, 4, 7)
-    `);
-  }
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS character_daily_reset (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      last_reset DATE NOT NULL,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_char_daily (character_id)
+    )
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS skills (
@@ -297,22 +368,22 @@ async function initialize() {
   const [existingSkills] = await pool.query('SELECT COUNT(*) as cnt FROM skills');
   if (existingSkills[0].cnt === 0) {
     await pool.query(`INSERT INTO skills (name, class_type, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown) VALUES
-      ('화염부', '풍수사', '불의 기운을 모아 적에게 화염을 날린다.', 'attack', 10, 2.0, 0, NULL, 0, 0, 1, 0),
-      ('수맥파', '풍수사', '대지의 수맥을 터뜨려 강력한 일격을 가한다.', 'attack', 20, 3.0, 0, NULL, 0, 0, 3, 1),
+      ('화염부', '풍수사', '불의 기운을 모아 적에게 화염을 날린다.', 'attack', 10, 1.8, 0, NULL, 0, 0, 1, 0),
+      ('수맥파', '풍수사', '대지의 수맥을 터뜨려 강력한 일격을 가한다.', 'attack', 20, 2.4, 0, NULL, 0, 0, 3, 1),
       ('풍수결계', '풍수사', '풍수 결계를 펼쳐 방어력을 높인다.', 'buff', 15, 0, 0, 'defense', 8, 3, 2, 2),
-      ('용맥폭발', '풍수사', '용맥의 힘을 폭발시켜 막대한 피해를 입힌다.', 'attack', 40, 5.0, 0, NULL, 0, 0, 6, 3),
+      ('용맥폭발', '풍수사', '용맥의 힘을 폭발시켜 막대한 피해를 입힌다.', 'attack', 40, 3.5, 0, NULL, 0, 0, 6, 3),
       ('기운회복', '풍수사', '자연의 기운을 흡수하여 체력을 회복한다.', 'heal', 25, 0, 60, NULL, 0, 0, 4, 2),
 
-      ('부적소환', '무당', '저주의 부적을 소환하여 적을 공격한다.', 'attack', 8, 1.8, 0, NULL, 0, 0, 1, 0),
-      ('영혼흡수', '무당', '적의 생명력을 흡수하여 피해를 주고 체력을 회복한다.', 'attack', 18, 2.2, 30, NULL, 0, 0, 3, 1),
+      ('부적소환', '무당', '저주의 부적을 소환하여 적을 공격한다.', 'attack', 8, 1.6, 0, NULL, 0, 0, 1, 0),
+      ('영혼흡수', '무당', '적의 생명력을 흡수하여 피해를 주고 체력을 회복한다.', 'attack', 18, 2.0, 30, NULL, 0, 0, 3, 1),
       ('신내림', '무당', '신의 힘을 빌려 공격력을 높인다.', 'buff', 15, 0, 0, 'attack', 8, 3, 2, 2),
-      ('강신술', '무당', '강력한 영혼을 불러 적에게 큰 피해를 입힌다.', 'attack', 35, 4.5, 0, NULL, 0, 0, 6, 3),
+      ('강신술', '무당', '강력한 영혼을 불러 적에게 큰 피해를 입힌다.', 'attack', 35, 3.2, 0, NULL, 0, 0, 6, 3),
       ('치유의식', '무당', '치유의 의식을 행하여 체력을 회복한다.', 'heal', 20, 0, 50, NULL, 0, 0, 4, 2),
 
-      ('금강권', '승려', '금강의 힘을 담은 주먹으로 적을 강타한다.', 'attack', 8, 1.8, 0, NULL, 0, 0, 1, 0),
-      ('파사권', '승려', '사악함을 부수는 강력한 권법을 펼친다.', 'attack', 18, 2.8, 0, NULL, 0, 0, 3, 1),
+      ('금강권', '승려', '금강의 힘을 담은 주먹으로 적을 강타한다.', 'attack', 8, 1.7, 0, NULL, 0, 0, 1, 0),
+      ('파사권', '승려', '사악함을 부수는 강력한 권법을 펼친다.', 'attack', 18, 2.3, 0, NULL, 0, 0, 3, 1),
       ('철벽수호', '승려', '몸을 강철처럼 단단하게 만든다.', 'buff', 12, 0, 0, 'defense', 12, 3, 2, 2),
-      ('나한신권', '승려', '나한의 힘을 깨워 초월적인 일격을 가한다.', 'attack', 35, 4.0, 0, NULL, 0, 0, 6, 3),
+      ('나한신권', '승려', '나한의 힘을 깨워 초월적인 일격을 가한다.', 'attack', 35, 3.0, 0, NULL, 0, 0, 6, 3),
       ('선정치유', '승려', '깊은 선정에 들어 체력을 크게 회복한다.', 'heal', 20, 0, 80, NULL, 0, 0, 4, 2)
     `);
   }
@@ -484,9 +555,9 @@ async function initialize() {
        phys_attack_per_level, phys_defense_per_level, mag_attack_per_level, mag_defense_per_level,
        crit_rate_per_10level, evasion_per_10level)
       VALUES
-      ('풍수사', 8, 7, 2.0, 1.0, 0.8, 0.5, 2.5, 2.0, 1, 2),
-      ('무당',  9, 6, 2.0, 1.5, 1.5, 1.0, 2.0, 1.5, 2, 2),
-      ('승려', 12, 3, 2.5, 2.0, 2.5, 2.0, 0.5, 0.5, 2, 1)
+      ('풍수사', 8, 8, 2.0, 1.2, 0.8, 0.7, 2.8, 2.2, 0.15, 0.15),
+      ('무당',  10, 6, 2.0, 1.5, 1.8, 1.2, 2.2, 1.8, 0.2, 0.2),
+      ('승려', 14, 4, 2.5, 2.5, 2.5, 2.5, 1.0, 1.5, 0.15, 0.08)
     `);
   }
 
@@ -605,6 +676,7 @@ async function initialize() {
   await pool.query('ALTER TABLE monsters ADD COLUMN category_id INT DEFAULT NULL').catch(() => {});
   await pool.query('ALTER TABLE monsters ADD COLUMN tier INT DEFAULT 1').catch(() => {});
   await pool.query('ALTER TABLE monsters ADD COLUMN description VARCHAR(200) DEFAULT NULL').catch(() => {});
+  await pool.query("ALTER TABLE monsters ADD COLUMN country VARCHAR(20) DEFAULT 'korea'").catch(() => {});
 
   const [existingDungeons] = await pool.query('SELECT COUNT(*) as cnt FROM dungeons');
   if (existingDungeons[0].cnt === 0) {
@@ -868,7 +940,8 @@ async function initialize() {
       ('마왕의 부하',  ${dMap.demon}, '😈', 160, 28, 9, 3, 100, 80, 5, ${cMap['악마/마족']}, 6, '마왕의 명을 받은 마족 전사'),
       ('타락 천사',    ${dMap.demon}, '😇', 190, 32, 8, 3, 130, 100, 4, ${cMap['악마/마족']}, 7, '천계에서 추방된 천사'),
       ('마왕',         ${dMap.demon}, '👿', 350, 45, 18, 2, 300, 250, 2, ${cMap['악마/마족']}, 10, '마계를 지배하는 절대 악의 존재'),
-      ('가고일',       ${dMap.demon}, '🗿', 90, 16, 10, 2, 45, 35, 8, ${cMap['악마/마족']}, 3, '돌에서 깨어난 악마의 하인')
+      ('가고일',       ${dMap.demon}, '🗿', 90, 16, 10, 2, 45, 35, 8, ${cMap['악마/마족']}, 3, '돌에서 깨어난 악마의 하인'),
+      ('다크 세라핌',  ${dMap.demon}, '😇', 280, 38, 14, 3, 200, 170, 3, ${cMap['악마/마족']}, 9, '타락한 상급 천사, 어둠의 날개를 펼친 존재')
     `);
 
     // 용족 (cat 7)
@@ -880,7 +953,8 @@ async function initialize() {
       ('암흑룡',       ${dMap.dragon}, '🐉', 300, 42, 15, 3, 220, 180, 2, ${cMap['용족']}, 9, '어둠의 힘을 가진 흑룡'),
       ('용왕',         ${dMap.dragon}, '🐲', 400, 50, 20, 2, 350, 300, 1, ${cMap['용족']}, 10, '모든 용을 지배하는 용왕'),
       ('드레이크',     ${dMap.dragon}, '🦎', 100, 18, 8, 3, 50, 38, 8, ${cMap['용족']}, 4, '용의 먼 친척, 날지 못하는 용'),
-      ('히드라',       ${dMap.dragon}, '🐍', 280, 36, 10, 2, 200, 160, 3, ${cMap['용족']}, 9, '머리가 여러 개인 거대한 뱀')
+      ('히드라',       ${dMap.dragon}, '🐍', 280, 36, 10, 2, 200, 160, 3, ${cMap['용족']}, 9, '머리가 여러 개인 거대한 뱀'),
+      ('뇌룡',         ${dMap.dragon}, '🐉', 270, 40, 12, 4, 190, 155, 3, ${cMap['용족']}, 9, '번개를 부리는 폭풍의 용')
     `);
 
     // 마법생물 (cat 8)
@@ -952,7 +1026,10 @@ async function initialize() {
       ('금속 슬라임',  ${dMap.slime_cave}, '⚪', 30, 5, 20, 5, 100, 80, 2, ${cMap['슬라임/연체']}, 4, '매우 단단하고 빠른 희귀 슬라임'),
       ('킹 슬라임',    ${dMap.slime_cave}, '👑', 150, 18, 8, 2, 70, 55, 4, ${cMap['슬라임/연체']}, 5, '슬라임들의 왕'),
       ('젤리피쉬',     ${dMap.ocean}, '🪼', 40, 10, 1, 4, 15, 10, 10, ${cMap['슬라임/연체']}, 1, '독침을 가진 해파리'),
-      ('점액 군주',    ${dMap.slime_cave}, '🫧', 200, 22, 10, 2, 100, 80, 3, ${cMap['슬라임/연체']}, 6, '모든 것을 녹이는 거대 슬라임')
+      ('점액 군주',    ${dMap.slime_cave}, '🫧', 200, 22, 10, 2, 100, 80, 3, ${cMap['슬라임/연체']}, 6, '모든 것을 녹이는 거대 슬라임'),
+      ('용암 슬라임',  ${dMap.cave}, '🔴', 80, 20, 5, 2, 40, 30, 6, ${cMap['슬라임/연체']}, 3, '녹은 용암으로 이루어진 뜨거운 슬라임'),
+      ('크리스탈 슬라임', ${dMap.slime_cave}, '💎', 60, 14, 15, 3, 55, 45, 4, ${cMap['슬라임/연체']}, 4, '보석처럼 빛나는 단단한 슬라임'),
+      ('포식 슬라임',  ${dMap.slime_cave}, '🟤', 170, 24, 6, 2, 85, 65, 4, ${cMap['슬라임/연체']}, 5, '모든 것을 삼키는 포식성 거대 슬라임')
     `);
 
     // 수생/해양 (cat 14)
@@ -966,6 +1043,247 @@ async function initialize() {
       ('해마 기사',    ${dMap.ocean}, '🐴', 70, 12, 5, 4, 30, 22, 10, ${cMap['수생/해양']}, 2, '해마를 타고 다니는 수중 기사'),
       ('바다 용',      ${dMap.ocean}, '🐉', 250, 36, 14, 3, 180, 140, 2, ${cMap['수생/해양']}, 8, '바다 깊은 곳에 사는 해룡')
     `);
+  }
+
+  // ========== 나라별 전용 던전 + 150 몬스터 추가 ==========
+  const [countryMonsterCheck] = await pool.query("SELECT COUNT(*) as cnt FROM monsters WHERE country IN ('japan','china')");
+  if (countryMonsterCheck[0].cnt === 0) {
+    // 나라별 전용 던전 생성
+    const countryDungeons = [
+      // 한국 전용 던전 5개
+      ['kr_forest','한국: 고조선 숲','한국 신화의 고조선 배경 숲','🌲',1,10,10,'grass'],
+      ['kr_mountain','한국: 백두산','한국 설화의 신성한 산','⛰️',3,10,10,'stone'],
+      ['kr_temple','한국: 고찰 폐허','한국 불교 설화의 폐사찰','🏚️',5,10,10,'dark'],
+      ['kr_swamp','한국: 장자못','한국 전설의 저주받은 늪','🌿',4,10,10,'grass'],
+      ['kr_spirit','한국: 신령의 숲','한국 무속신앙의 정령 숲','✨',6,10,10,'grass'],
+      // 일본 전용 던전 5개
+      ['jp_forest','일본: 아오키가하라','일본 요괴가 출몰하는 수해','🌲',1,10,10,'grass'],
+      ['jp_mountain','일본: 오에산','일본 오니가 거처하는 산','⛩️',3,10,10,'stone'],
+      ['jp_temple','일본: 폐신사','일본 원령이 서린 폐신사','⛩️',5,10,10,'dark'],
+      ['jp_ocean','일본: 용궁','일본 해저 용궁성','🌊',4,10,10,'stone'],
+      ['jp_spirit','일본: 요괴의 길','일본 백귀야행의 길','👺',6,10,10,'grass'],
+      // 중국 전용 던전 5개
+      ['cn_forest','중국: 산해경 숲','산해경에 기록된 신비의 숲','🌲',1,10,10,'grass'],
+      ['cn_mountain','중국: 곤륜산','중국 신화의 곤륜산','🏔️',3,10,10,'stone'],
+      ['cn_temple','중국: 봉신대','중국 봉신연의의 전장','🏯',5,10,10,'dark'],
+      ['cn_swamp','중국: 황천','중국 명부의 황천길','💀',4,10,10,'stone'],
+      ['cn_spirit','중국: 요계','중국 요괴들의 은신처','🐉',6,10,10,'grass'],
+    ];
+
+    const defaultSpawns = JSON.stringify([{x:0,z:0},{x:1,z:0},{x:0,z:1},{x:1,z:1}]);
+    const defaultMonsterSpawns = JSON.stringify([{x:8,z:8},{x:9,z:8},{x:8,z:9},{x:9,z:9}]);
+    const defaultOverrides = JSON.stringify([
+      {coords:[[4,4],[5,4],[4,5],[5,5]],height:2,type:'stone'},
+      {coords:[[2,2],[7,7]],height:1,type:'grass'},
+      {coords:[[7,2],[2,7]],height:0,type:'water'}
+    ]);
+
+    for (const [key, name, desc, icon, lvl, w, h, base] of countryDungeons) {
+      await pool.query(
+        `INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [key, name, desc, icon, lvl, w, h, base, defaultOverrides, defaultSpawns, defaultMonsterSpawns]
+      );
+    }
+
+    // 새 던전 ID 가져오기
+    const [allD] = await pool.query('SELECT id, key_name FROM dungeons');
+    const dm = {};
+    for (const d of allD) dm[d.key_name] = d.id;
+
+    const [catRows2] = await pool.query('SELECT id, name FROM monster_categories');
+    const cm = {};
+    for (const c of catRows2) cm[c.name] = c.id;
+
+    // ===== 한국 몬스터 50개 =====
+    await pool.query(`INSERT INTO monsters (name, dungeon_id, icon, hp, attack, defense, move_range, exp_reward, gold_reward, spawn_weight, category_id, tier, description, country) VALUES
+      ('구미호',       ${dm.kr_spirit}, '🦊', 180, 28, 6, 4, 100, 80, 4, ${cm['요괴/변이']}, 4, '아홉 꼬리를 가진 천년 여우', 'korea'),
+      ('해태',         ${dm.kr_mountain}, '🦁', 200, 26, 14, 3, 120, 95, 3, ${cm['마법생물']}, 4, '불을 먹는 신수', 'korea'),
+      ('불가사리',     ${dm.kr_mountain}, '🐃', 250, 30, 18, 2, 150, 120, 3, ${cm['요괴/변이']}, 5, '쇠를 먹는 불멸의 괴수', 'korea'),
+      ('이무기',       ${dm.kr_swamp}, '🐲', 220, 34, 12, 3, 160, 130, 3, ${cm['용족']}, 4, '용이 되지 못한 거대한 뱀', 'korea'),
+      ('용',           ${dm.kr_spirit}, '🐉', 350, 45, 18, 3, 300, 250, 2, ${cm['용족']}, 5, '수호와 비를 관장하는 신룡', 'korea'),
+      ('천리마',       ${dm.kr_spirit}, '🐴', 300, 40, 14, 5, 250, 200, 2, ${cm['마법생물']}, 5, '하루에 천리를 달리는 신마', 'korea'),
+      ('봉황',         ${dm.kr_spirit}, '🐦', 320, 42, 16, 4, 280, 220, 2, ${cm['마법생물']}, 5, '태평성대에 나타나는 신조', 'korea'),
+      ('삼족오',       ${dm.kr_spirit}, '🐦', 200, 32, 10, 4, 130, 100, 3, ${cm['마법생물']}, 4, '태양 속에 사는 세 발 까마귀', 'korea'),
+      ('불개',         ${dm.kr_mountain}, '🐕', 140, 24, 8, 4, 80, 60, 5, ${cm['야수']}, 3, '태양과 달을 쫓는 화염의 개', 'korea'),
+      ('삼족구',       ${dm.kr_forest}, '🐕', 90, 16, 6, 4, 45, 35, 8, ${cm['야수']}, 2, '악귀를 보는 세 발 개', 'korea'),
+      ('처녀귀신',     ${dm.kr_temple}, '👻', 120, 22, 4, 4, 65, 50, 6, ${cm['귀신/원혼']}, 3, '한을 품은 처녀의 원혼', 'korea'),
+      ('물귀신',       ${dm.kr_swamp}, '👻', 110, 20, 5, 3, 55, 42, 7, ${cm['귀신/원혼']}, 3, '물에 빠져 죽은 영혼', 'korea'),
+      ('몽달귀신',     ${dm.kr_temple}, '👻', 80, 14, 3, 3, 35, 25, 8, ${cm['귀신/원혼']}, 2, '총각으로 죽은 외로운 귀신', 'korea'),
+      ('달걀귀신',     ${dm.kr_temple}, '👻', 100, 18, 3, 4, 50, 38, 7, ${cm['귀신/원혼']}, 3, '눈코입이 없는 공포의 귀신', 'korea'),
+      ('원혼',         ${dm.kr_temple}, '👻', 160, 26, 6, 3, 85, 65, 5, ${cm['귀신/원혼']}, 4, '억울하게 죽어 복수를 꿈꾸는 영', 'korea'),
+      ('저승사자',     ${dm.kr_spirit}, '🖤', 200, 30, 10, 3, 120, 95, 3, ${cm['귀신/원혼']}, 4, '영혼을 인도하는 저승의 사자', 'korea'),
+      ('야광귀',       ${dm.kr_forest}, '👻', 50, 8, 2, 4, 18, 12, 10, ${cm['귀신/원혼']}, 1, '밤에 신발을 신어보는 귀신', 'korea'),
+      ('강림도령',     ${dm.kr_spirit}, '⚔️', 280, 38, 14, 3, 200, 160, 2, ${cm['귀신/원혼']}, 5, '염라대왕도 잡은 저승차사의 수장', 'korea'),
+      ('도깨비',       ${dm.kr_forest}, '👺', 100, 16, 6, 3, 48, 35, 8, ${cm['도깨비']}, 3, '피 묻은 물건에서 태어난 장난꾸러기', 'korea'),
+      ('참도깨비',     ${dm.kr_forest}, '👺', 120, 18, 8, 3, 55, 42, 7, ${cm['도깨비']}, 3, '선한 사람에게 복을 주는 진짜 도깨비', 'korea'),
+      ('각시도깨비',   ${dm.kr_forest}, '👺', 80, 14, 4, 3, 38, 28, 8, ${cm['도깨비']}, 2, '아름다운 여인으로 변신하는 도깨비', 'korea'),
+      ('귀수도깨비',   ${dm.kr_swamp}, '👹', 160, 26, 8, 3, 85, 68, 5, ${cm['도깨비']}, 4, '죽은 자의 피에서 태어난 악한 도깨비', 'korea'),
+      ('산신',         ${dm.kr_mountain}, '🧓', 180, 22, 16, 2, 100, 80, 4, ${cm['마법생물']}, 4, '산을 지키는 흰수염 노인 신', 'korea'),
+      ('용왕',         ${dm.kr_swamp}, '🐲', 350, 44, 18, 2, 300, 240, 2, ${cm['용족']}, 5, '모든 물을 다스리는 해저 왕', 'korea'),
+      ('칠성신',       ${dm.kr_spirit}, '⭐', 140, 20, 8, 3, 70, 55, 5, ${cm['마법생물']}, 3, '북두칠성의 수호 정령', 'korea'),
+      ('목신',         ${dm.kr_forest}, '🌳', 90, 14, 8, 2, 40, 30, 8, ${cm['식물/균류']}, 2, '고목에 깃든 나무 정령', 'korea'),
+      ('영등할매',     ${dm.kr_mountain}, '🌪️', 150, 24, 6, 4, 80, 62, 5, ${cm['마법생물']}, 3, '제주의 바람을 다스리는 풍신', 'korea'),
+      ('인면조',       ${dm.kr_spirit}, '🐦', 120, 18, 6, 4, 60, 46, 6, ${cm['마법생물']}, 3, '사람 얼굴을 가진 새', 'korea'),
+      ('백호',         ${dm.kr_mountain}, '🐅', 300, 40, 16, 3, 250, 200, 2, ${cm['야수']}, 5, '서방의 수호신 백호', 'korea'),
+      ('현무',         ${dm.kr_swamp}, '🐢', 300, 36, 22, 2, 250, 200, 2, ${cm['마법생물']}, 5, '북방의 수호신 현무', 'korea'),
+      ('청룡',         ${dm.kr_spirit}, '🐉', 320, 42, 16, 3, 260, 210, 2, ${cm['용족']}, 5, '동방의 수호신 청룡', 'korea'),
+      ('주작',         ${dm.kr_spirit}, '🐦', 310, 44, 14, 4, 260, 210, 2, ${cm['마법생물']}, 5, '남방의 수호신 주작', 'korea'),
+      ('기린',         ${dm.kr_spirit}, '🦌', 200, 24, 16, 3, 120, 95, 3, ${cm['마법생물']}, 4, '성인이 태어날 때 나타나는 인수', 'korea'),
+      ('불여우',       ${dm.kr_mountain}, '🦊', 130, 22, 5, 4, 70, 55, 5, ${cm['야수']}, 3, '백 년을 살아 불을 부리는 여우', 'korea'),
+      ('어둑시니',     ${dm.kr_swamp}, '🌑', 120, 20, 4, 3, 60, 48, 6, ${cm['귀신/원혼']}, 3, '쳐다보면 커지는 어둠의 괴물', 'korea'),
+      ('두억시니',     ${dm.kr_mountain}, '👹', 170, 28, 10, 3, 90, 72, 4, ${cm['악마/마족']}, 4, '씨름을 좋아하는 거대한 악귀', 'korea'),
+      ('장산범',       ${dm.kr_mountain}, '🐅', 160, 26, 8, 4, 85, 68, 5, ${cm['야수']}, 4, '사람 울음을 흉내내는 흰 짐승', 'korea'),
+      ('꽝철이',       ${dm.kr_swamp}, '🐍', 130, 22, 6, 3, 68, 52, 6, ${cm['야수']}, 3, '용이 못 된 타락한 이무기', 'korea'),
+      ('장승',         ${dm.kr_forest}, '🗿', 60, 10, 10, 1, 25, 18, 10, ${cm['마법생물']}, 1, '마을을 지키는 수호 장승', 'korea'),
+      ('백사',         ${dm.kr_swamp}, '🐍', 120, 20, 5, 3, 60, 48, 6, ${cm['야수']}, 3, '천 년 수행한 흰 뱀 정령', 'korea'),
+      ('매구',         ${dm.kr_temple}, '🦊', 130, 22, 4, 4, 68, 54, 5, ${cm['악마/마족']}, 3, '사람에게 빙의하는 여우 악령', 'korea'),
+      ('살귀',         ${dm.kr_temple}, '💀', 170, 28, 6, 3, 90, 72, 4, ${cm['악마/마족']}, 4, '역병을 퍼뜨리는 역귀', 'korea'),
+      ('수귀',         ${dm.kr_swamp}, '👻', 110, 18, 5, 3, 55, 42, 7, ${cm['귀신/원혼']}, 3, '물속에서 사람을 끌어들이는 귀신', 'korea'),
+      ('바리공주',     ${dm.kr_spirit}, '👸', 200, 30, 10, 3, 120, 95, 3, ${cm['귀신/원혼']}, 4, '저승에서 생명수를 구해온 공주', 'korea'),
+      ('황금 사슴',    ${dm.kr_forest}, '🦌', 80, 12, 5, 5, 60, 80, 3, ${cm['야수']}, 2, '백두산의 행운을 가져다주는 금사슴', 'korea'),
+      ('장자마리',     ${dm.kr_swamp}, '🐸', 50, 8, 4, 2, 20, 15, 10, ${cm['수생/해양']}, 1, '해초를 뒤집어쓴 뚱뚱한 물귀신', 'korea'),
+      ('염라대왕',     ${dm.kr_spirit}, '👑', 380, 48, 20, 2, 350, 280, 1, ${cm['악마/마족']}, 5, '저승을 다스리는 심판의 왕', 'korea'),
+      ('천하대장군',   ${dm.kr_mountain}, '⚔️', 150, 24, 12, 2, 80, 62, 5, ${cm['마법생물']}, 3, '천하를 지키는 수호 장군 정령', 'korea'),
+      ('백 사슴',      ${dm.kr_forest}, '🦌', 70, 10, 4, 5, 30, 22, 10, ${cm['야수']}, 2, '하루에 오천리를 달리는 흰 사슴', 'korea'),
+      ('장자못의 뱀',  ${dm.kr_swamp}, '🐍', 180, 28, 10, 3, 100, 80, 4, ${cm['야수']}, 4, '장자못 전설의 거대한 신뱀', 'korea')
+    `);
+
+    // ===== 일본 몬스터 50개 =====
+    await pool.query(`INSERT INTO monsters (name, dungeon_id, icon, hp, attack, defense, move_range, exp_reward, gold_reward, spawn_weight, category_id, tier, description, country) VALUES
+      ('킷수네',       ${dm.jp_forest}, '🦊', 180, 28, 6, 4, 100, 80, 4, ${cm['요괴/변이']}, 4, '아홉 꼬리의 변신 여우', 'japan'),
+      ('타누키',       ${dm.jp_forest}, '🦝', 80, 14, 4, 3, 38, 28, 8, ${cm['요괴/변이']}, 2, '잎사귀로 변신하는 너구리', 'japan'),
+      ('바케네코',     ${dm.jp_spirit}, '🐱', 120, 20, 5, 4, 60, 48, 6, ${cm['요괴/변이']}, 3, '시체를 조종하는 요괴 고양이', 'japan'),
+      ('네코마타',     ${dm.jp_spirit}, '🐱', 130, 22, 5, 4, 68, 54, 5, ${cm['악마/마족']}, 3, '두 갈래 꼬리의 마성 고양이', 'japan'),
+      ('갓파',         ${dm.jp_ocean}, '🐸', 80, 14, 5, 3, 38, 28, 8, ${cm['수생/해양']}, 2, '머리에 물접시를 인 물귀신', 'japan'),
+      ('야마타노오로치', ${dm.jp_ocean}, '🐍', 380, 48, 20, 2, 350, 280, 1, ${cm['용족']}, 5, '여덟 머리 여덟 꼬리의 거대 뱀', 'japan'),
+      ('츠치구모',     ${dm.jp_mountain}, '🕷️', 170, 26, 8, 3, 90, 72, 4, ${cm['곤충/벌레']}, 4, '산속 동굴의 거대 독거미', 'japan'),
+      ('조로구모',     ${dm.jp_temple}, '🕷️', 180, 28, 6, 3, 100, 80, 4, ${cm['악마/마족']}, 4, '여인으로 변신하는 400년 거미', 'japan'),
+      ('누레온나',     ${dm.jp_ocean}, '🐍', 130, 22, 5, 3, 68, 54, 5, ${cm['요괴/변이']}, 3, '여자 머리에 뱀 몸의 강가 요괴', 'japan'),
+      ('누에',         ${dm.jp_mountain}, '🐒', 170, 26, 8, 4, 90, 72, 4, ${cm['요괴/변이']}, 4, '원숭이 얼굴에 호랑이 팔다리의 키메라', 'japan'),
+      ('아카오니',     ${dm.jp_mountain}, '👹', 130, 22, 8, 3, 68, 54, 5, ${cm['악마/마족']}, 3, '철곤봉을 든 붉은 도깨비', 'japan'),
+      ('아오오니',     ${dm.jp_mountain}, '👹', 130, 20, 10, 3, 68, 54, 5, ${cm['악마/마족']}, 3, '죄인을 벌하는 푸른 도깨비', 'japan'),
+      ('슈텐도지',     ${dm.jp_mountain}, '👹', 350, 45, 18, 2, 300, 250, 2, ${cm['악마/마족']}, 5, '술을 마시는 오니의 왕', 'japan'),
+      ('이바라키도지', ${dm.jp_mountain}, '👹', 320, 42, 16, 3, 280, 220, 2, ${cm['악마/마족']}, 5, '슈텐도지의 외팔 부장', 'japan'),
+      ('한냐',         ${dm.jp_temple}, '😈', 170, 28, 6, 3, 90, 72, 4, ${cm['악마/마족']}, 4, '질투로 변한 뿔 달린 여귀', 'japan'),
+      ('아마노자쿠',   ${dm.jp_forest}, '👿', 80, 14, 4, 4, 38, 28, 8, ${cm['악마/마족']}, 2, '사람의 어두운 욕망을 부추기는 소악마', 'japan'),
+      ('야샤',         ${dm.jp_temple}, '👹', 170, 28, 8, 3, 90, 72, 4, ${cm['악마/마족']}, 4, '불교의 사나운 수호 야차', 'japan'),
+      ('가키',         ${dm.jp_temple}, '💀', 70, 10, 3, 3, 30, 22, 10, ${cm['귀신/원혼']}, 2, '영원한 굶주림의 아귀', 'japan'),
+      ('텐구',         ${dm.jp_mountain}, '👺', 180, 28, 8, 4, 100, 80, 4, ${cm['요괴/변이']}, 4, '긴 코의 산신 검객', 'japan'),
+      ('카라스텐구',   ${dm.jp_mountain}, '🐦', 140, 24, 6, 4, 75, 58, 5, ${cm['요괴/변이']}, 3, '까마귀 머리의 하급 텐구', 'japan'),
+      ('코다마',       ${dm.jp_forest}, '✨', 40, 6, 2, 3, 15, 10, 10, ${cm['정령']}, 1, '고목에 깃든 작은 나무 정령', 'japan'),
+      ('자시키와라시', ${dm.jp_forest}, '👶', 50, 8, 2, 3, 20, 15, 10, ${cm['귀신/원혼']}, 1, '집에 행운을 가져다주는 어린 유령', 'japan'),
+      ('유키온나',     ${dm.jp_mountain}, '❄️', 180, 30, 6, 3, 100, 80, 4, ${cm['요괴/변이']}, 4, '눈보라 속의 아름다운 설녀', 'japan'),
+      ('야마우바',     ${dm.jp_mountain}, '🧓', 130, 22, 6, 3, 68, 54, 5, ${cm['요괴/변이']}, 3, '여행자를 유혹하는 산속 마녀', 'japan'),
+      ('카와히메',     ${dm.jp_ocean}, '💧', 90, 16, 4, 3, 42, 32, 8, ${cm['정령']}, 2, '달빛 강에 나타나는 아름다운 강의 공주', 'japan'),
+      ('츠쿠모가미',   ${dm.jp_forest}, '🏮', 50, 8, 3, 2, 20, 15, 10, ${cm['마법생물']}, 1, '100년 묵은 물건이 깨어난 요괴', 'japan'),
+      ('카마이타치',   ${dm.jp_spirit}, '🌪️', 90, 18, 2, 5, 42, 32, 8, ${cm['야수']}, 2, '회오리바람 속의 낫족제비', 'japan'),
+      ('우미보즈',     ${dm.jp_ocean}, '🌊', 200, 30, 12, 2, 120, 95, 3, ${cm['귀신/원혼']}, 4, '잔잔한 바다에서 솟아오르는 거대 유령', 'japan'),
+      ('유레이',       ${dm.jp_temple}, '👻', 80, 14, 2, 4, 38, 28, 8, ${cm['귀신/원혼']}, 2, '하얀 수의의 일본 전통 유령', 'japan'),
+      ('오이와',       ${dm.jp_temple}, '👻', 170, 28, 4, 3, 90, 72, 4, ${cm['귀신/원혼']}, 4, '독에 의해 변형된 원령', 'japan'),
+      ('오키쿠',       ${dm.jp_temple}, '👻', 130, 22, 4, 3, 68, 54, 5, ${cm['귀신/원혼']}, 3, '우물에서 접시를 세는 하녀 원령', 'japan'),
+      ('후나유레이',   ${dm.jp_ocean}, '👻', 120, 20, 4, 3, 60, 48, 6, ${cm['귀신/원혼']}, 3, '바다에서 배를 침몰시키는 유령들', 'japan'),
+      ('가샤도쿠로',   ${dm.jp_spirit}, '💀', 300, 40, 14, 2, 250, 200, 2, ${cm['귀신/원혼']}, 5, '굶어죽은 자들의 뼈로 이뤄진 거대 해골', 'japan'),
+      ('시니가미',     ${dm.jp_spirit}, '💀', 180, 28, 6, 4, 100, 80, 4, ${cm['귀신/원혼']}, 4, '죽음으로 이끄는 사신', 'japan'),
+      ('류진',         ${dm.jp_ocean}, '🐉', 350, 45, 18, 3, 300, 250, 2, ${cm['용족']}, 5, '해저 궁전의 용왕', 'japan'),
+      ('세이류',       ${dm.jp_spirit}, '🐉', 320, 42, 16, 3, 260, 210, 2, ${cm['용족']}, 5, '동방의 수호 청룡', 'japan'),
+      ('스자쿠',       ${dm.jp_spirit}, '🐦', 310, 44, 14, 4, 260, 210, 2, ${cm['마법생물']}, 5, '남방의 수호 주작', 'japan'),
+      ('뱌코',         ${dm.jp_spirit}, '🐅', 300, 40, 16, 3, 250, 200, 2, ${cm['야수']}, 5, '서방의 수호 백호', 'japan'),
+      ('겐부',         ${dm.jp_ocean}, '🐢', 300, 36, 22, 2, 250, 200, 2, ${cm['마법생물']}, 5, '북방의 수호 현무', 'japan'),
+      ('누라리횬',     ${dm.jp_spirit}, '🧓', 350, 44, 16, 3, 300, 240, 2, ${cm['악마/마족']}, 5, '모든 요괴의 총대장', 'japan'),
+      ('잇탄모멘',     ${dm.jp_forest}, '🧻', 70, 12, 2, 5, 30, 22, 10, ${cm['요괴/변이']}, 2, '밤하늘을 나는 살아있는 천 조각', 'japan'),
+      ('로쿠로쿠비',   ${dm.jp_forest}, '🙂', 80, 14, 3, 3, 38, 28, 8, ${cm['요괴/변이']}, 2, '목이 늘어나는 여자 요괴', 'japan'),
+      ('후타쿠치온나', ${dm.jp_temple}, '😈', 130, 22, 5, 3, 68, 54, 5, ${cm['악마/마족']}, 3, '뒷머리에 두 번째 입이 있는 저주받은 여인', 'japan'),
+      ('나마하게',     ${dm.jp_mountain}, '👹', 130, 22, 8, 3, 68, 54, 5, ${cm['악마/마족']}, 3, '게으름을 벌하는 새해 오니', 'japan'),
+      ('카샤',         ${dm.jp_spirit}, '🐱', 130, 24, 5, 4, 68, 54, 5, ${cm['악마/마족']}, 3, '장례식에서 시체를 훔치는 화염 고양이 마귀', 'japan'),
+      ('햐쿠메',       ${dm.jp_spirit}, '👁️', 120, 20, 5, 3, 60, 48, 6, ${cm['악마/마족']}, 3, '온 몸에 수백 개의 눈이 달린 괴물', 'japan'),
+      ('와뉴도',       ${dm.jp_spirit}, '🔥', 170, 28, 4, 4, 90, 72, 4, ${cm['악마/마족']}, 4, '불타는 수레바퀴에 얼굴이 박힌 요괴', 'japan'),
+      ('히히',         ${dm.jp_mountain}, '🐒', 130, 22, 6, 3, 68, 54, 5, ${cm['야수']}, 3, '인간의 감정을 읽는 거대 원숭이', 'japan'),
+      ('이츠마덴',     ${dm.jp_spirit}, '🐦', 170, 28, 6, 4, 90, 72, 4, ${cm['야수']}, 4, '사람 얼굴과 뱀 꼬리를 가진 화염 괴조', 'japan'),
+      ('우부메',       ${dm.jp_temple}, '👻', 80, 14, 3, 3, 38, 28, 8, ${cm['귀신/원혼']}, 2, '출산 중 죽은 여인의 슬픈 원령', 'japan')
+    `);
+
+    // ===== 중국 몬스터 50개 =====
+    await pool.query(`INSERT INTO monsters (name, dungeon_id, icon, hp, attack, defense, move_range, exp_reward, gold_reward, spawn_weight, category_id, tier, description, country) VALUES
+      ('도철',         ${dm.cn_mountain}, '👹', 300, 40, 16, 2, 250, 200, 2, ${cm['악마/마족']}, 5, '끝없는 탐욕의 사흉 괴수', 'china'),
+      ('혼돈',         ${dm.cn_spirit}, '🌀', 320, 38, 18, 2, 260, 210, 2, ${cm['악마/마족']}, 5, '눈코입 없는 원초적 혼돈의 화신', 'china'),
+      ('궁기',         ${dm.cn_spirit}, '🐅', 310, 42, 16, 3, 260, 210, 2, ${cm['악마/마족']}, 5, '날개 달린 사악한 호랑이', 'china'),
+      ('도올',         ${dm.cn_mountain}, '🐅', 300, 40, 14, 3, 250, 200, 2, ${cm['악마/마족']}, 5, '사람 얼굴과 뱀 꼬리의 호랑이', 'china'),
+      ('녠수',         ${dm.cn_forest}, '🦁', 170, 26, 8, 3, 90, 72, 4, ${cm['야수']}, 4, '매년 마을을 습격하는 설날의 괴수', 'china'),
+      ('기린',         ${dm.cn_spirit}, '🦌', 350, 40, 20, 3, 300, 250, 2, ${cm['마법생물']}, 5, '용 비늘과 사슴 뿔의 인수', 'china'),
+      ('비휴',         ${dm.cn_mountain}, '🦁', 180, 26, 12, 3, 100, 80, 4, ${cm['마법생물']}, 4, '금은을 먹는 날개 달린 사자', 'china'),
+      ('백택',         ${dm.cn_spirit}, '🐂', 300, 36, 18, 2, 250, 200, 2, ${cm['마법생물']}, 5, '만 가지 요괴를 아는 지혜의 신수', 'china'),
+      ('청룡',         ${dm.cn_spirit}, '🐉', 320, 42, 16, 3, 260, 210, 2, ${cm['용족']}, 5, '동방의 수호 청룡', 'china'),
+      ('상류',         ${dm.cn_swamp}, '🐍', 300, 40, 14, 2, 250, 200, 2, ${cm['야수']}, 5, '아홉 머리의 독뱀 장관', 'china'),
+      ('축음',         ${dm.cn_spirit}, '🐍', 350, 46, 18, 2, 300, 250, 2, ${cm['마법생물']}, 5, '눈을 뜨면 낮, 감으면 밤이 되는 거대 뱀신', 'china'),
+      ('백사',         ${dm.cn_swamp}, '🐍', 170, 26, 6, 3, 90, 72, 4, ${cm['요괴/변이']}, 4, '서호의 아름다운 백사 정', 'china'),
+      ('등사',         ${dm.cn_spirit}, '🐍', 140, 22, 6, 4, 75, 58, 5, ${cm['마법생물']}, 3, '안개 속을 나는 신비의 뱀', 'china'),
+      ('호리정',       ${dm.cn_forest}, '🦊', 180, 28, 6, 4, 100, 80, 4, ${cm['요괴/변이']}, 4, '인간으로 변신하는 천년 여우 요정', 'china'),
+      ('달기',         ${dm.cn_temple}, '🦊', 350, 46, 14, 3, 300, 250, 2, ${cm['악마/마족']}, 5, '상나라를 멸망시킨 천년 여우 요괴', 'china'),
+      ('호요',         ${dm.cn_mountain}, '🐅', 170, 28, 8, 3, 90, 72, 4, ${cm['악마/마족']}, 4, '인간으로 변신하는 호랑이 요괴', 'china'),
+      ('랑요',         ${dm.cn_forest}, '🐺', 130, 22, 5, 4, 68, 54, 5, ${cm['악마/마족']}, 3, '폭풍을 부르는 늑대 요마', 'china'),
+      ('거미정',       ${dm.cn_temple}, '🕷️', 180, 28, 6, 3, 100, 80, 4, ${cm['악마/마족']}, 4, '환술로 여행자를 가두는 일곱 거미 자매', 'china'),
+      ('사요',         ${dm.cn_swamp}, '🐍', 120, 20, 4, 3, 60, 48, 6, ${cm['요괴/변이']}, 3, '질병을 퍼뜨리는 뱀 요괴', 'china'),
+      ('비파정',       ${dm.cn_temple}, '🦂', 170, 28, 6, 3, 90, 72, 4, ${cm['악마/마족']}, 4, '비파 소리로 유혹하는 전갈꼬리 요괴', 'china'),
+      ('강시',         ${dm.cn_swamp}, '🧟', 120, 18, 8, 2, 60, 48, 6, ${cm['귀신/원혼']}, 3, '청나라 관복의 깡충 뛰는 시체', 'china'),
+      ('여귀',         ${dm.cn_temple}, '👻', 170, 28, 4, 3, 90, 72, 4, ${cm['귀신/원혼']}, 4, '억울함을 품은 잔혹한 복수귀', 'china'),
+      ('아귀',         ${dm.cn_swamp}, '💀', 70, 10, 3, 3, 30, 22, 10, ${cm['귀신/원혼']}, 2, '영원한 굶주림의 아귀', 'china'),
+      ('녀귀',         ${dm.cn_temple}, '👻', 130, 22, 4, 3, 68, 54, 5, ${cm['귀신/원혼']}, 3, '붉은 옷의 원한 맺힌 여귀', 'china'),
+      ('수귀',         ${dm.cn_swamp}, '👻', 110, 18, 5, 3, 55, 42, 7, ${cm['귀신/원혼']}, 3, '물속에서 익사자를 끌어당기는 물귀신', 'china'),
+      ('무두귀',       ${dm.cn_swamp}, '💀', 80, 14, 3, 3, 38, 28, 8, ${cm['귀신/원혼']}, 2, '참수당해 머리 없는 유령', 'china'),
+      ('조사귀',       ${dm.cn_swamp}, '👻', 80, 14, 2, 3, 38, 28, 8, ${cm['귀신/원혼']}, 2, '목매달아 죽은 붉은 혀의 귀신', 'china'),
+      ('백골정',       ${dm.cn_temple}, '💀', 180, 28, 6, 3, 100, 80, 4, ${cm['귀신/원혼']}, 4, '다양한 인간으로 변신하는 해골 요마', 'china'),
+      ('원귀',         ${dm.cn_temple}, '👻', 80, 14, 3, 3, 38, 28, 8, ${cm['귀신/원혼']}, 2, '억울한 죽음의 슬픈 유령', 'china'),
+      ('영령',         ${dm.cn_swamp}, '👶', 50, 8, 2, 3, 20, 15, 10, ${cm['귀신/원혼']}, 1, '어린 영혼의 작고 서글픈 유령', 'china'),
+      ('필방',         ${dm.cn_forest}, '🐦', 120, 22, 4, 4, 60, 48, 6, ${cm['야수']}, 3, '한 발의 학 모양 화조', 'china'),
+      ('비유',         ${dm.cn_forest}, '🐍', 120, 20, 4, 3, 60, 48, 6, ${cm['야수']}, 3, '네 날개 여섯 다리의 가뭄 뱀', 'china'),
+      ('희희',         ${dm.cn_swamp}, '🐟', 80, 14, 3, 3, 38, 28, 8, ${cm['수생/해양']}, 2, '날개 달린 홍수를 부르는 물고기', 'china'),
+      ('제강',         ${dm.cn_spirit}, '🔴', 170, 28, 8, 3, 90, 72, 4, ${cm['마법생물']}, 4, '얼굴 없이 노래하고 춤추는 혼돈의 존재', 'china'),
+      ('비렴',         ${dm.cn_spirit}, '🌪️', 180, 30, 6, 4, 100, 80, 4, ${cm['정령']}, 4, '사슴 머리 용 몸의 바람의 신', 'china'),
+      ('영초',         ${dm.cn_spirit}, '🐴', 180, 26, 10, 4, 100, 80, 4, ${cm['마법생물']}, 4, '사람 얼굴의 날개 달린 줄무늬 말', 'china'),
+      ('봉황',         ${dm.cn_spirit}, '🐦', 350, 44, 16, 4, 300, 250, 2, ${cm['마법생물']}, 5, '모든 새의 왕 오색 신조', 'china'),
+      ('주작',         ${dm.cn_spirit}, '🐦', 310, 44, 14, 4, 260, 210, 2, ${cm['마법생물']}, 5, '남방의 수호신 주작', 'china'),
+      ('현무',         ${dm.cn_swamp}, '🐢', 300, 36, 22, 2, 250, 200, 2, ${cm['마법생물']}, 5, '북방의 수호 거북 뱀', 'china'),
+      ('백호',         ${dm.cn_mountain}, '🐅', 300, 40, 16, 3, 250, 200, 2, ${cm['야수']}, 5, '서방의 수호 백호', 'china'),
+      ('섬서',         ${dm.cn_swamp}, '🐸', 120, 18, 6, 2, 60, 48, 6, ${cm['수생/해양']}, 3, '달에 사는 세 발 두꺼비', 'china'),
+      ('귀모',         ${dm.cn_spirit}, '💀', 320, 42, 16, 2, 280, 220, 2, ${cm['악마/마족']}, 5, '귀신을 낳고 기르는 명부의 어머니', 'china'),
+      ('발',           ${dm.cn_mountain}, '🔥', 180, 30, 4, 3, 100, 80, 4, ${cm['악마/마족']}, 4, '땅을 시들게 하는 가뭄의 마녀', 'china'),
+      ('이매',         ${dm.cn_forest}, '🌑', 120, 20, 4, 3, 60, 48, 6, ${cm['악마/마족']}, 3, '숲속에서 여행자를 미혹하는 산림 요마', 'china'),
+      ('우두마면',     ${dm.cn_swamp}, '🐂', 180, 28, 10, 2, 100, 80, 4, ${cm['귀신/원혼']}, 4, '소 머리와 말 얼굴의 지옥 문지기', 'china'),
+      ('흑백무상',     ${dm.cn_swamp}, '⚫', 180, 28, 8, 3, 100, 80, 4, ${cm['귀신/원혼']}, 4, '영혼을 잡는 흑과 백의 쌍둥이 저승사자', 'china'),
+      ('맹파',         ${dm.cn_swamp}, '🍵', 120, 16, 6, 2, 60, 48, 6, ${cm['귀신/원혼']}, 3, '망각의 차를 끓이는 저승 할머니', 'china'),
+      ('귀거',         ${dm.cn_spirit}, '🐦', 170, 28, 6, 4, 90, 72, 4, ${cm['야수']}, 4, '아홉 머리에 피를 뿌리는 흉조', 'china'),
+      ('팽후',         ${dm.cn_forest}, '🐕', 120, 20, 5, 3, 60, 48, 6, ${cm['요괴/변이']}, 3, '사람 머리의 개 모양 고목 요괴', 'china'),
+      ('망량',         ${dm.cn_swamp}, '👶', 80, 14, 3, 3, 38, 28, 8, ${cm['악마/마족']}, 2, '세 살 아이 모습의 늪지 요마', 'china')
+    `);
+
+    console.log('150 country monsters seeded');
+  }
+
+  // 나라별 던전-스테이지 그룹 매핑 업데이트
+  const [countryDungeonCheck] = await pool.query("SELECT key_name FROM dungeons WHERE key_name = 'kr_forest' LIMIT 1");
+  if (countryDungeonCheck.length > 0) {
+    const countryGroupDungeonMap = {
+      'gojoseon': 'kr_forest', 'samhan': 'kr_forest', 'goguryeo': 'kr_mountain',
+      'baekje': 'kr_swamp', 'silla': 'kr_temple', 'balhae': 'kr_mountain',
+      'goryeo': 'kr_spirit', 'joseon': 'kr_temple', 'imjin': 'kr_spirit',
+      'modern': 'kr_spirit',
+      'jomon': 'jp_forest', 'yayoi': 'jp_forest', 'yamato': 'jp_mountain',
+      'nara': 'jp_temple', 'heian': 'jp_spirit', 'kamakura': 'jp_mountain',
+      'muromachi': 'jp_ocean', 'sengoku': 'jp_mountain', 'edo': 'jp_spirit',
+      'meiji': 'jp_spirit',
+      'xia_shang': 'cn_forest', 'zhou': 'cn_mountain', 'qin': 'cn_mountain',
+      'han': 'cn_forest', 'three_kingdoms': 'cn_swamp', 'tang': 'cn_temple',
+      'song': 'cn_spirit', 'yuan': 'cn_temple', 'ming': 'cn_spirit',
+      'qing': 'cn_spirit',
+    };
+    // stage_levels의 dungeon_key 업데이트
+    for (const [groupKey, dungeonKey] of Object.entries(countryGroupDungeonMap)) {
+      await pool.query(
+        'UPDATE stage_levels sl JOIN stage_groups sg ON sl.group_id = sg.id SET sl.dungeon_key = ? WHERE sg.key_name = ?',
+        [dungeonKey, groupKey]
+      );
+    }
+    console.log('Stage dungeon keys updated to country-specific dungeons');
   }
 
   // ========== 던전 스테이지 시스템 ==========
@@ -1563,8 +1881,9 @@ async function initialize() {
     "UPDATE monsters SET ai_type='defensive' WHERE name IN ('골렘','마법 갑옷','가디언','트렌트','대지의 정령','돌 도깨비','불가사리','가고일','마나 골렘')",
     "UPDATE monsters SET ai_type='ranged' WHERE name IN ('원혼','흑마법사','네크로맨서','대마법사','불의 정령','번개 정령','빛의 정령','어둠의 정령','서큐버스','불 도깨비')",
     "UPDATE monsters SET ai_type='support' WHERE name IN ('여왕 개미','물의 정령','유니콘','처녀귀신','독 거미 여왕','연못 도깨비','인어 전사','해마 기사')",
-    "UPDATE monsters SET ai_type='boss' WHERE name IN ('어둠의 수호자','정령왕','깨비대왕','마왕','용왕','리치왕','크라켄','바다 용','암흑룡','이무기','히드라','화룡','빙룡','발록','세계수의 파편','점액 군주','균류 군주','킹 슬라임')",
-    "UPDATE monsters SET ai_type='coward' WHERE name IN ('초록 슬라임','파랑 슬라임','꼬마 도깨비','떠도는 영혼','독버섯','포자 군체','봉사귀','숲 도깨비','금속 슬라임')",
+    "UPDATE monsters SET ai_type='boss' WHERE name IN ('어둠의 수호자','정령왕','깨비대왕','마왕','용왕','리치왕','크라켄','바다 용','암흑룡','이무기','히드라','화룡','빙룡','발록','세계수의 파편','점액 군주','균류 군주','킹 슬라임','다크 세라핌','뇌룡')",
+    "UPDATE monsters SET ai_type='coward' WHERE name IN ('초록 슬라임','파랑 슬라임','꼬마 도깨비','떠도는 영혼','독버섯','포자 군체','봉사귀','숲 도깨비','금속 슬라임','크리스탈 슬라임')",
+    "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('용암 슬라임','포식 슬라임')",
     // MP 설정: tier 기반 세분화 (마법형 > 지원형 > 원거리 > 방어형 > 공격형 > 도주형)
     // 공격형: 기본 스킬 1~2회 사용 가능
     "UPDATE monsters SET mp=15 WHERE ai_type='aggressive' AND tier <= 3",
@@ -1603,6 +1922,37 @@ async function initialize() {
     // boss는 개별 설정: 마법형 보스는 magic, 원거리형은 ranged, 물리형은 melee
     "UPDATE monsters SET range_type='magic' WHERE ai_type='boss' AND name IN ('마왕','리치왕','정령왕','세계수의 파편','암흑룡')",
     "UPDATE monsters SET range_type='melee' WHERE ai_type='boss' AND range_type='melee' AND name IN ('깨비대왕','용왕','크라켄','바다 용','이무기','히드라','화룡','빙룡','발록','점액 군주','균류 군주','킹 슬라임','어둠의 수호자')",
+    // ===== 한국 몬스터 AI 타입 =====
+    "UPDATE monsters SET ai_type='ranged' WHERE name IN ('구미호','삼족오','인면조','불여우','매구','백사') AND country='korea'",
+    "UPDATE monsters SET ai_type='defensive' WHERE name IN ('해태','불가사리','산신','현무','천하대장군','장승','목신') AND country='korea'",
+    "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('이무기','천리마','불개','삼족구','도깨비','참도깨비','귀수도깨비','두억시니','장산범','꽝철이','장자못의 뱀','각시도깨비') AND country='korea'",
+    "UPDATE monsters SET ai_type='support' WHERE name IN ('칠성신','영등할매','기린','바리공주') AND country='korea'",
+    "UPDATE monsters SET ai_type='boss' WHERE name IN ('용','봉황','백호','청룡','주작','용왕','강림도령','염라대왕') AND country='korea'",
+    "UPDATE monsters SET ai_type='coward' WHERE name IN ('야광귀','황금 사슴','백 사슴','장자마리','몽달귀신') AND country='korea'",
+    "UPDATE monsters SET ai_type='ranged' WHERE name IN ('처녀귀신','물귀신','달걀귀신','원혼','저승사자','어둑시니','수귀','달귀','살귀') AND country='korea'",
+    // ===== 일본 몬스터 AI 타입 =====
+    "UPDATE monsters SET ai_type='ranged' WHERE name IN ('킷수네','바케네코','네코마타','유키온나','한냐','조로구모','오이와','시니가미','카샤','와뉴도','이츠마덴') AND country='japan'",
+    "UPDATE monsters SET ai_type='defensive' WHERE name IN ('겐부','츠쿠모가미') AND country='japan'",
+    "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('아카오니','아오오니','텐구','카라스텐구','누에','나마하게','히히','츠치구모','야샤') AND country='japan'",
+    "UPDATE monsters SET ai_type='support' WHERE name IN ('코다마','카와히메','유레이') AND country='japan'",
+    "UPDATE monsters SET ai_type='boss' WHERE name IN ('야마타노오로치','슈텐도지','이바라키도지','가샤도쿠로','류진','세이류','스자쿠','뱌코','누라리횬') AND country='japan'",
+    "UPDATE monsters SET ai_type='coward' WHERE name IN ('타누키','자시키와라시','잇탄모멘','로쿠로쿠비','우부메','가키','아마노자쿠') AND country='japan'",
+    "UPDATE monsters SET ai_type='ranged' WHERE name IN ('누레온나','갓파','오키쿠','후나유레이','우미보즈','후타쿠치온나','햐쿠메','카마이타치') AND country='japan'",
+    // ===== 중국 몬스터 AI 타입 =====
+    "UPDATE monsters SET ai_type='ranged' WHERE name IN ('호리정','백사','등사','달기','거미정','비파정','여귀','백골정','사요','발','이매','비렴') AND country='china'",
+    "UPDATE monsters SET ai_type='defensive' WHERE name IN ('현무','비휴','백택','섬서') AND country='china'",
+    "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('도철','녠수','호요','랑요','상류','우두마면','귀거','팽후','필방','비유') AND country='china'",
+    "UPDATE monsters SET ai_type='support' WHERE name IN ('기린','영초','맹파') AND country='china'",
+    "UPDATE monsters SET ai_type='boss' WHERE name IN ('혼돈','궁기','도올','축음','봉황','주작','청룡','백호','귀모') AND country='china'",
+    "UPDATE monsters SET ai_type='coward' WHERE name IN ('아귀','영령','원귀','조사귀','무두귀','망량','희희') AND country='china'",
+    "UPDATE monsters SET ai_type='ranged' WHERE name IN ('녀귀','수귀','흑백무상','제강','강시') AND country='china'",
+    // 나라별 range_type 설정
+    "UPDATE monsters SET range_type='magic' WHERE name IN ('구미호','삼족오','불여우','매구','처녀귀신','물귀신','원혼','저승사자','어둑시니','살귀','수귀','바리공주','영등할매','칠성신','달걀귀신','인면조','달귀','백사','몽달귀신') AND country='korea'",
+    "UPDATE monsters SET range_type='magic' WHERE name IN ('킷수네','바케네코','네코마타','유키온나','한냐','조로구모','오이와','시니가미','카샤','와뉴도','누레온나','오키쿠','후나유레이','우미보즈','후타쿠치온나','햐쿠메','코다마','카와히메','유레이') AND country='japan'",
+    "UPDATE monsters SET range_type='magic' WHERE name IN ('호리정','백사','등사','달기','거미정','비파정','여귀','백골정','사요','발','이매','비렴','녀귀','수귀','흑백무상','제강','맹파','기린','영초','제강') AND country='china'",
+    "UPDATE monsters SET range_type='melee' WHERE name IN ('해태','불가사리','이무기','천리마','불개','삼족구','도깨비','참도깨비','귀수도깨비','두억시니','장산범','꽝철이','장자못의 뱀','각시도깨비','용','봉황','백호','청룡','주작','현무','강림도령','용왕','염라대왕','산신','천하대장군','장승','목신') AND country='korea'",
+    "UPDATE monsters SET range_type='melee' WHERE name IN ('아카오니','아오오니','텐구','카라스텐구','누에','나마하게','히히','츠치구모','야샤','야마타노오로치','슈텐도지','이바라키도지','가샤도쿠로','류진','세이류','스자쿠','뱌코','겐부','누라리횬') AND country='japan'",
+    "UPDATE monsters SET range_type='melee' WHERE name IN ('도철','녠수','호요','랑요','상류','우두마면','귀거','팽후','필방','비유','혼돈','궁기','도올','축음','봉황','주작','청룡','백호','현무','귀모') AND country='china'",
     // 마법형으로 변경된 몬스터 MP 보정 (마법형은 스킬 위주이므로 MP 상향)
     "UPDATE monsters SET mp=GREATEST(mp, 35) WHERE range_type='magic' AND tier <= 3",
     "UPDATE monsters SET mp=GREATEST(mp, 50) WHERE range_type='magic' AND tier BETWEEN 4 AND 5",
@@ -1615,7 +1965,8 @@ async function initialize() {
   // 몬스터-스킬 연결 (INSERT IGNORE로 중복 안전)
   const [allMonsters] = await pool.query('SELECT id, name, ai_type FROM monsters');
   const [allMSkills] = await pool.query('SELECT id, name FROM monster_skills');
-  const mMap = {}; for (const m of allMonsters) mMap[m.name] = m.id;
+  // 이름이 같은 몬스터가 여러 개일 수 있으므로 배열로 저장
+  const mMap = {}; for (const m of allMonsters) { if (!mMap[m.name]) mMap[m.name] = []; mMap[m.name].push(m.id); }
   const sMap = {}; for (const s of allMSkills) sMap[s.name] = s.id;
 
   const skillAssignments = [
@@ -1668,6 +2019,7 @@ async function initialize() {
     [['타락 천사'], ['번개 강타','대치유','저주']],
     [['마왕'], ['암흑 구체','번개 강타','지진','대치유','저주','포효']],
     [['가고일'], ['할퀴기','방어 태세']],
+    [['다크 세라핌'], ['번개 강타','암흑 구체','대치유','저주','포효']],
     [['드래곤 해츨링'], ['화염 토','물기']],
     [['와이번'], ['할퀴기','돌진']],
     [['화룡'], ['화염 토','꼬리 휘두르기','포효','지진']],
@@ -1676,6 +2028,7 @@ async function initialize() {
     [['용왕'], ['화염 토','얼음 숨결','번개 강타','꼬리 휘두르기','대치유','포효']],
     [['드레이크'], ['화염 토','돌진']],
     [['히드라'], ['독 공격','물기','꼬리 휘두르기','치유']],
+    [['뇌룡'], ['번개 강타','화염 토','꼬리 휘두르기','포효']],
     [['마법 갑옷'], ['방어 태세','돌진']],
     [['가디언'], ['방어 태세','지진','돌진']],
     [['호문쿨루스'], ['독 공격']],
@@ -1722,6 +2075,9 @@ async function initialize() {
     [['금속 슬라임'], ['방어 태세']],
     [['킹 슬라임'], ['지진','돌진','포효','치유']],
     [['점액 군주'], ['독안개','지진','생명력 흡수','포효']],
+    [['용암 슬라임'], ['화염 토','돌진']],
+    [['크리스탈 슬라임'], ['방어 태세']],
+    [['포식 슬라임'], ['생명력 흡수','돌진','포효']],
     [['젤리피쉬'], ['독 공격']],
     [['대왕 게'], ['할퀴기','방어 태세']],
     [['상어'], ['물기','돌진']],
@@ -1731,22 +2087,175 @@ async function initialize() {
     [['크라켄'], ['꼬리 휘두르기','지진','생명력 흡수','포효']],
     [['해마 기사'], ['치유','돌진']],
     [['바다 용'], ['얼음 숨결','꼬리 휘두르기','지진','포효']],
+    // ===== 한국 몬스터 스킬 =====
+    [['해태'], ['화염 토','돌진','포효','방어 태세']],
+    [['불가사리'], ['지진','방어 태세','돌진','포효']],
+    [['용'], ['화염 토','얼음 숨결','번개 강타','꼬리 휘두르기','포효']],
+    [['천리마'], ['돌진','할퀴기','포효']],
+    [['봉황'], ['화염 토','대치유','포효','번개 강타']],
+    [['삼족오'], ['화염 토','마법 화살']],
+    [['불개'], ['화염 토','물기','돌진']],
+    [['삼족구'], ['물기','할퀴기']],
+    [['몽달귀신'], ['저주','암흑 구체']],
+    [['달걀귀신'], ['저주','암흑 구체','생명력 흡수']],
+    [['저승사자'], ['암흑 구체','생명력 흡수','저주','돌진']],
+    [['야광귀'], ['저주']],
+    [['강림도령'], ['번개 강타','돌진','포효','암흑 구체','대치유']],
+    [['참도깨비'], ['할퀴기','돌진']],
+    [['각시도깨비'], ['저주','할퀴기']],
+    [['귀수도깨비'], ['암흑 구체','할퀴기','포효']],
+    [['산신'], ['대치유','방어 태세','지진']],
+    [['칠성신'], ['치유','번개 강타','방어 태세']],
+    [['목신'], ['치유','방어 태세']],
+    [['영등할매'], ['얼음 숨결','치유','마법 화살']],
+    [['인면조'], ['마법 화살','저주']],
+    [['현무'], ['방어 태세','얼음 숨결','지진','대치유']],
+    [['청룡'], ['번개 강타','화염 토','꼬리 휘두르기','포효','대치유']],
+    [['주작'], ['화염 토','번개 강타','포효','마법 화살']],
+    [['기린'], ['대치유','치유','번개 강타']],
+    [['불여우'], ['화염 토','할퀴기']],
+    [['어둑시니'], ['암흑 구체','생명력 흡수']],
+    [['두억시니'], ['돌진','포효','할퀴기','지진']],
+    [['장산범'], ['할퀴기','돌진','저주']],
+    [['꽝철이'], ['독 공격','꼬리 휘두르기','물기']],
+    [['장승'], ['방어 태세']],
+    [['백사'], ['독 공격','할퀴기','저주']],
+    [['매구'], ['저주','암흑 구체','생명력 흡수']],
+    [['살귀'], ['독안개','저주','암흑 구체']],
+    [['수귀'], ['생명력 흡수','저주']],
+    [['바리공주'], ['대치유','치유','번개 강타','방어 태세']],
+    [['황금 사슴'], ['돌진']],
+    [['장자마리'], ['물기']],
+    [['염라대왕'], ['암흑 구체','번개 강타','저주','지진','대치유','포효']],
+    [['천하대장군'], ['돌진','방어 태세','포효']],
+    [['백 사슴'], ['돌진']],
+    [['장자못의 뱀'], ['독 공격','꼬리 휘두르기','돌진','포효']],
+    [['달귀'], ['암흑 구체','저주']],
+    // ===== 일본 몬스터 스킬 =====
+    [['킷수네'], ['암흑 구체','생명력 흡수','저주','화염 토']],
+    [['타누키'], ['저주']],
+    [['바케네코'], ['암흑 구체','할퀴기','저주']],
+    [['네코마타'], ['암흑 구체','할퀴기','화염 토']],
+    [['갓파'], ['물기','생명력 흡수']],
+    [['야마타노오로치'], ['독 공격','화염 토','꼬리 휘두르기','지진','포효','생명력 흡수']],
+    [['츠치구모'], ['독 공격','물기','독안개']],
+    [['조로구모'], ['독 공격','저주','생명력 흡수','암흑 구체']],
+    [['누레온나'], ['저주','생명력 흡수','물기']],
+    [['누에'], ['할퀴기','독 공격','돌진','포효']],
+    [['아카오니'], ['돌진','할퀴기','포효']],
+    [['아오오니'], ['돌진','방어 태세','할퀴기']],
+    [['슈텐도지'], ['돌진','할퀴기','포효','화염 토','대치유']],
+    [['이바라키도지'], ['할퀴기','돌진','포효','화염 토']],
+    [['한냐'], ['화염 토','저주','암흑 구체','생명력 흡수']],
+    [['아마노자쿠'], ['저주','할퀴기']],
+    [['야샤'], ['돌진','할퀴기','포효']],
+    [['가키'], ['물기','생명력 흡수']],
+    [['텐구'], ['돌진','할퀴기','마법 화살','포효']],
+    [['카라스텐구'], ['할퀴기','돌진','마법 화살']],
+    [['코다마'], ['치유']],
+    [['자시키와라시'], ['치유']],
+    [['유키온나'], ['얼음 숨결','저주','생명력 흡수']],
+    [['야마우바'], ['독 공격','저주','생명력 흡수']],
+    [['카와히메'], ['치유','얼음 숨결']],
+    [['츠쿠모가미'], ['방어 태세']],
+    [['카마이타치'], ['할퀴기','돌진']],
+    [['우미보즈'], ['지진','생명력 흡수','저주','포효']],
+    [['유레이'], ['저주','암흑 구체']],
+    [['오이와'], ['저주','암흑 구체','독안개','생명력 흡수']],
+    [['오키쿠'], ['저주','암흑 구체']],
+    [['후나유레이'], ['저주','생명력 흡수']],
+    [['가샤도쿠로'], ['지진','할퀴기','포효','돌진','생명력 흡수']],
+    [['시니가미'], ['암흑 구체','저주','생명력 흡수','마법 화살']],
+    [['류진'], ['얼음 숨결','번개 강타','꼬리 휘두르기','대치유','포효']],
+    [['세이류'], ['번개 강타','화염 토','꼬리 휘두르기','포효','대치유']],
+    [['스자쿠'], ['화염 토','번개 강타','포효','마법 화살']],
+    [['뱌코'], ['할퀴기','돌진','포효','번개 강타']],
+    [['겐부'], ['방어 태세','얼음 숨결','지진','대치유']],
+    [['누라리횬'], ['암흑 구체','저주','포효','생명력 흡수','번개 강타']],
+    [['잇탄모멘'], ['할퀴기']],
+    [['로쿠로쿠비'], ['물기','저주']],
+    [['후타쿠치온나'], ['물기','저주','생명력 흡수']],
+    [['나마하게'], ['돌진','할퀴기','포효']],
+    [['카샤'], ['화염 토','할퀴기','암흑 구체']],
+    [['햐쿠메'], ['저주','암흑 구체']],
+    [['와뉴도'], ['화염 토','돌진','암흑 구체']],
+    [['히히'], ['할퀴기','돌진','포효']],
+    [['이츠마덴'], ['화염 토','할퀴기','마법 화살']],
+    [['우부메'], ['저주']],
+    // ===== 중국 몬스터 스킬 =====
+    [['도철'], ['물기','돌진','포효','생명력 흡수']],
+    [['혼돈'], ['지진','암흑 구체','포효','저주','대치유']],
+    [['궁기'], ['할퀴기','돌진','포효','화염 토','번개 강타']],
+    [['도올'], ['할퀴기','꼬리 휘두르기','포효','독 공격']],
+    [['녠수'], ['돌진','할퀴기','포효']],
+    [['비휴'], ['방어 태세','돌진','포효']],
+    [['백택'], ['대치유','방어 태세','번개 강타','치유']],
+    [['상류'], ['독 공격','물기','꼬리 휘두르기','독안개','포효']],
+    [['축음'], ['암흑 구체','번개 강타','지진','포효','대치유']],
+    [['호리정'], ['암흑 구체','생명력 흡수','저주','할퀴기']],
+    [['달기'], ['저주','암흑 구체','생명력 흡수','화염 토','포효']],
+    [['호요'], ['할퀴기','돌진','포효','물기']],
+    [['랑요'], ['돌진','할퀴기','포효']],
+    [['거미정'], ['독 공격','저주','생명력 흡수','암흑 구체']],
+    [['사요'], ['독 공격','독안개','저주']],
+    [['비파정'], ['저주','암흑 구체','생명력 흡수']],
+    [['강시'], ['물기','돌진']],
+    [['여귀'], ['저주','암흑 구체','생명력 흡수','독안개']],
+    [['아귀'], ['물기','생명력 흡수']],
+    [['녀귀'], ['저주','암흑 구체']],
+    [['무두귀'], ['돌진','할퀴기']],
+    [['조사귀'], ['저주','생명력 흡수']],
+    [['백골정'], ['암흑 구체','저주','할퀴기','생명력 흡수']],
+    [['등사'], ['마법 화살','돌진']],
+    [['섬서'], ['방어 태세','얼음 숨결']],
+    [['도깨비'], ['할퀴기','돌진']],
+    [['원귀'], ['저주']],
+    [['영령'], ['저주']],
+    [['필방'], ['화염 토','마법 화살']],
+    [['비유'], ['독 공격','할퀴기']],
+    [['희희'], ['얼음 숨결']],
+    [['제강'], ['포효','돌진','지진']],
+    [['비렴'], ['마법 화살','돌진','포효']],
+    [['영초'], ['치유','돌진','마법 화살']],
+    [['우두마면'], ['돌진','할퀴기','포효','지진']],
+    [['흑백무상'], ['저주','암흑 구체','생명력 흡수']],
+    [['맹파'], ['저주','치유']],
+    [['귀거'], ['할퀴기','독안개','마법 화살']],
+    [['팽후'], ['물기','할퀴기']],
+    [['망량'], ['저주','독 공격']],
+    [['귀모'], ['암흑 구체','저주','생명력 흡수','포효','대치유']],
+    [['발'], ['화염 토','독안개','저주']],
+    [['이매'], ['저주','암흑 구체','독안개']],
   ];
 
   for (const [monsterNames, skillNames] of skillAssignments) {
     for (const mName of monsterNames) {
       if (!mMap[mName]) continue;
-      for (const sName of skillNames) {
-        if (!sMap[sName]) continue;
-        await pool.query(
-          'INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)',
-          [mMap[mName], sMap[sName]]
-        ).catch(() => {});
+      for (const mId of mMap[mName]) {
+        for (const sName of skillNames) {
+          if (!sMap[sName]) continue;
+          await pool.query(
+            'INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)',
+            [mId, sMap[sName]]
+          ).catch(() => {});
+        }
       }
     }
   }
 
   // ========== 히스토리 스테이지 시스템 ==========
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stage_countries (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      key_name VARCHAR(20) NOT NULL UNIQUE,
+      name VARCHAR(50) NOT NULL,
+      subtitle VARCHAR(100),
+      icon VARCHAR(10) DEFAULT '🏔️',
+      display_order INT DEFAULT 0,
+      accent_color VARCHAR(20) DEFAULT '#d4a843'
+    )
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS stage_groups (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1757,7 +2266,9 @@ async function initialize() {
       era VARCHAR(50),
       required_level INT DEFAULT 1,
       display_order INT DEFAULT 0,
-      bg_color VARCHAR(20) DEFAULT '#1a1a2e'
+      bg_color VARCHAR(20) DEFAULT '#1a1a2e',
+      country VARCHAR(20) DEFAULT 'korea',
+      accent_color VARCHAR(20) DEFAULT '#4ade80'
     )
   `);
 
@@ -1816,26 +2327,110 @@ async function initialize() {
     )
   `);
 
+  // 맵 타일 오버라이드 자동 생성 (스테이지 시드에서 사용)
+  function generateMapOverrides(w, h, base, stageNum, isBoss) {
+    const overrides = [];
+    const rng = (seed) => { let s = seed; return () => { s = (s * 16807 + 11) % 2147483647; return s / 2147483647; }; };
+    const rand = rng(stageNum * 137 + w * 31 + h * 17);
+    const types = ['grass','stone','dirt','water','dark'];
+    const obstacleCount = Math.floor(3 + rand() * (isBoss ? 6 : 4));
+    for (let i = 0; i < obstacleCount; i++) {
+      const cx = Math.floor(rand() * (w - 2)) + 1;
+      const cz = Math.floor(rand() * (h - 2)) + 1;
+      const size = Math.floor(rand() * 3) + 1;
+      const height = Math.floor(rand() * 3) + 1;
+      const type = types[Math.floor(rand() * types.length)];
+      const coords = [];
+      for (let dx = 0; dx < size && cx + dx < w; dx++) for (let dz = 0; dz < size && cz + dz < h; dz++) coords.push([cx + dx, cz + dz]);
+      if (coords.length > 0) overrides.push({ coords, height, type });
+    }
+    if (isBoss) { const cx = Math.floor(w/2); const cz = Math.floor(h/2); overrides.push({ coords: [[cx,cz],[cx-1,cz],[cx,cz-1],[cx-1,cz-1]], height: 3, type: 'stone' }); }
+    return overrides;
+  }
+  function generateSpawns(w, h, side, count) {
+    const spawns = [];
+    if (side === 'player') { for (let i = 0; i < count; i++) spawns.push({ x: i % 2, z: Math.floor(i / 2) }); }
+    else { for (let i = 0; i < count; i++) spawns.push({ x: w - 1 - (i % 2), z: h - 1 - Math.floor(i / 2) }); }
+    return spawns;
+  }
+
+  // 마이그레이션: country, accent_color 컬럼 추가
+  await pool.query("ALTER TABLE stage_groups ADD COLUMN country VARCHAR(20) DEFAULT 'korea'").catch(() => {});
+  await pool.query("ALTER TABLE stage_groups ADD COLUMN accent_color VARCHAR(20) DEFAULT '#4ade80'").catch(() => {});
+
+  // accent_color 마이그레이션 (기본값인 경우만 업데이트)
+  const accentMap = {
+    gojoseon:'#4ade80',samhan:'#60a5fa',goguryeo:'#f87171',baekje:'#fbbf24',silla:'#c084fc',
+    balhae:'#2dd4bf',goryeo:'#818cf8',joseon:'#fb923c',imjin:'#fb7185',modern:'#38bdf8',
+    jomon:'#8b9dc3',yayoi:'#6bcb77',yamato:'#e8a87c',nara:'#d4a5a5',heian:'#c9b1ff',
+    kamakura:'#ff6b6b',muromachi:'#48c9b0',sengoku:'#ff4757',edo:'#ffa502',meiji:'#70a1ff',
+    xia_shang:'#d4a574',zhou:'#7ec8e3',qin:'#c0392b',han:'#e74c3c',three_kingdoms:'#f39c12',
+    tang:'#e67e22',song:'#1abc9c',yuan:'#2c3e50',ming:'#e84393',qing:'#6c5ce7',
+  };
+  for (const [key, color] of Object.entries(accentMap)) {
+    await pool.query("UPDATE stage_groups SET accent_color = ? WHERE key_name = ? AND accent_color = '#4ade80' AND key_name != 'gojoseon'", [color, key]);
+  }
+
+  // 국가 시드
+  const [existCountries] = await pool.query('SELECT COUNT(*) as cnt FROM stage_countries');
+  if (existCountries[0].cnt === 0) {
+    const countries = [
+      ['korea', '한국 스테이지', '한국 역사 속 전장을 누비며 강해지자', '🏔️', 1, '#d4a843'],
+      ['japan', '일본 스테이지', '일본 열도의 역사를 관통하는 전장', '⛩️', 2, '#e84393'],
+      ['china', '중국 스테이지', '대륙의 영웅호걸과 맞서 싸워라', '🐉', 3, '#e74c3c'],
+    ];
+    for (const [key, name, subtitle, icon, order, accent] of countries) {
+      await pool.query(
+        'INSERT IGNORE INTO stage_countries (key_name, name, subtitle, icon, display_order, accent_color) VALUES (?,?,?,?,?,?)',
+        [key, name, subtitle, icon, order, accent]
+      );
+    }
+  }
+
   // 히스토리 스테이지 그룹 시드
   const [existGroups] = await pool.query('SELECT COUNT(*) as cnt FROM stage_groups');
   if (existGroups[0].cnt === 0) {
+    // [key, name, desc, icon, era, lvl, order, bg, country, accent]
     const groups = [
-      ['gojoseon',   '고조선',     '단군의 개국신화가 깃든 태초의 땅',                '🏔️', '고조선 (BC 2333)', 1,  1, '#2d1b0e'],
-      ['samhan',     '삼한',       '마한, 변한, 진한 세 부족의 전장',                '⚔️', '삼한시대',         3,  2, '#1a2e1a'],
-      ['goguryeo',   '고구려',     '북방의 기마민족, 광개토대왕의 영토',              '🐎', '삼국시대',         5,  3, '#2e1a1a'],
-      ['baekje',     '백제',       '한강 유역의 문화 강국',                          '🌸', '삼국시대',         7,  4, '#1a1a2e'],
-      ['silla',      '신라',       '화랑도의 정신으로 삼국을 통일',                   '👑', '삼국시대',         9,  5, '#2e2e1a'],
-      ['balhae',     '발해',       '해동성국, 고구려를 계승한 대제국',               '🦁', '남북국시대',       11, 6, '#1a2e2e'],
-      ['goryeo',     '고려',       '불교 문화가 꽃피운 고려 왕조',                   '📿', '고려시대',         13, 7, '#2e1a2e'],
-      ['joseon',     '조선',       '유교의 이상향, 오백년 조선 왕조',                '📜', '조선시대',         16, 8, '#0e1a2e'],
-      ['imjin',      '임진왜란',   '이순신 장군과 의병들의 구국 전쟁',               '🛡️', '조선시대',         19, 9, '#2e0e0e'],
-      ['modern',     '근대',       '격변의 시대, 새로운 힘이 깨어난다',              '🔥', '근대',             22, 10, '#1a0e2e'],
+      // 한국 스테이지 (display_order 1~10)
+      ['gojoseon',   '고조선',     '단군의 개국신화가 깃든 태초의 땅',                '🏔️', '고조선 (BC 2333)', 1,  1, '#2d1b0e', 'korea', '#4ade80'],
+      ['samhan',     '삼한',       '마한, 변한, 진한 세 부족의 전장',                '⚔️', '삼한시대',         3,  2, '#1a2e1a', 'korea', '#60a5fa'],
+      ['goguryeo',   '고구려',     '북방의 기마민족, 광개토대왕의 영토',              '🐎', '삼국시대',         5,  3, '#2e1a1a', 'korea', '#f87171'],
+      ['baekje',     '백제',       '한강 유역의 문화 강국',                          '🌸', '삼국시대',         7,  4, '#1a1a2e', 'korea', '#fbbf24'],
+      ['silla',      '신라',       '화랑도의 정신으로 삼국을 통일',                   '👑', '삼국시대',         9,  5, '#2e2e1a', 'korea', '#c084fc'],
+      ['balhae',     '발해',       '해동성국, 고구려를 계승한 대제국',               '🦁', '남북국시대',       11, 6, '#1a2e2e', 'korea', '#2dd4bf'],
+      ['goryeo',     '고려',       '불교 문화가 꽃피운 고려 왕조',                   '📿', '고려시대',         13, 7, '#2e1a2e', 'korea', '#818cf8'],
+      ['joseon',     '조선',       '유교의 이상향, 오백년 조선 왕조',                '📜', '조선시대',         16, 8, '#0e1a2e', 'korea', '#fb923c'],
+      ['imjin',      '임진왜란',   '이순신 장군과 의병들의 구국 전쟁',               '🛡️', '조선시대',         19, 9, '#2e0e0e', 'korea', '#fb7185'],
+      ['modern',     '근대',       '격변의 시대, 새로운 힘이 깨어난다',              '🔥', '근대',             22, 10, '#1a0e2e', 'korea', '#38bdf8'],
+      // 일본 스테이지 (display_order 11~20)
+      ['jomon',      '조몬',       '토기 문화의 여명, 고대 일본의 시작',              '🏺', '조몬시대 (BC 14000)', 1,  11, '#1a1e2e', 'japan', '#8b9dc3'],
+      ['yayoi',      '야요이',     '벼농사와 철기가 전래된 새 시대',                  '🌾', '야요이시대',         3,  12, '#1e2e1a', 'japan', '#6bcb77'],
+      ['yamato',     '야마토',     '일본 통일 왕조의 탄생',                          '⛩️', '야마토시대',         5,  13, '#2e1e1a', 'japan', '#e8a87c'],
+      ['nara',       '나라',       '불교와 율령 국가의 전성기',                      '🏛️', '나라시대',           7,  14, '#2e1a1e', 'japan', '#d4a5a5'],
+      ['heian',      '헤이안',     '귀족 문화가 꽃핀 우아한 시대',                   '🌸', '헤이안시대',         9,  15, '#1e1a2e', 'japan', '#c9b1ff'],
+      ['kamakura',   '가마쿠라',   '무사 정권의 시작, 사무라이의 시대',               '⚔️', '가마쿠라시대',       11, 16, '#2e0e0e', 'japan', '#ff6b6b'],
+      ['muromachi',  '무로마치',   '남북조의 혼란과 무사 문화',                      '🏯', '무로마치시대',       13, 17, '#0e2e1e', 'japan', '#48c9b0'],
+      ['sengoku',    '전국시대',   '천하통일을 향한 영웅들의 전쟁',                   '🔥', '전국시대',           16, 18, '#2e0e1a', 'japan', '#ff4757'],
+      ['edo',        '에도',       '도쿠가와 막부의 태평성대',                       '🎎', '에도시대',           19, 19, '#1e1a0e', 'japan', '#ffa502'],
+      ['meiji',      '메이지',     '개혁과 근대화의 격변기',                         '⚡', '메이지시대',         22, 20, '#0e1a2e', 'japan', '#70a1ff'],
+      // 중국 스테이지 (display_order 21~30)
+      ['xia_shang',  '하·상',      '중화 문명의 여명, 청동기의 시대',                '🐉', '하·상 (BC 2070)',    1,  21, '#2e1e0e', 'china', '#d4a574'],
+      ['zhou',       '주',         '봉건제와 제자백가의 시대',                       '📜', '주나라',             3,  22, '#0e1e2e', 'china', '#7ec8e3'],
+      ['qin',        '진',         '시황제의 천하통일 제국',                         '🏰', '진나라',             5,  23, '#2e0e0e', 'china', '#c0392b'],
+      ['han',        '한',         '유방의 대한제국 400년',                          '🐎', '한나라',             7,  24, '#2e1a0e', 'china', '#e74c3c'],
+      ['three_kingdoms','삼국',    '위·촉·오 영웅들의 시대',                         '⚔️', '삼국시대',           9,  25, '#1e2e0e', 'china', '#f39c12'],
+      ['tang',       '당',         '세계 최대 제국, 찬란한 문화',                    '👑', '당나라',             11, 26, '#2e1e1e', 'china', '#e67e22'],
+      ['song',       '송',         '문치주의와 과학 기술의 황금기',                   '🧭', '송나라',             13, 27, '#0e2e2e', 'china', '#1abc9c'],
+      ['yuan',       '원',         '몽골 대제국의 중원 정복',                        '🏹', '원나라',             16, 28, '#1a0e2e', 'china', '#2c3e50'],
+      ['ming',       '명',         '한족의 부흥, 정화의 대항해',                     '⛵', '명나라',             19, 29, '#2e0e1e', 'china', '#e84393'],
+      ['qing',       '청',         '만주족의 마지막 왕조',                           '🐲', '청나라',             22, 30, '#1e0e2e', 'china', '#6c5ce7'],
     ];
 
-    for (const [key, name, desc, icon, era, lvl, order, bg] of groups) {
+    for (const [key, name, desc, icon, era, lvl, order, bg, country, accent] of groups) {
       await pool.query(
-        'INSERT IGNORE INTO stage_groups (key_name, name, description, icon, era, required_level, display_order, bg_color) VALUES (?,?,?,?,?,?,?,?)',
-        [key, name, desc, icon, era, lvl, order, bg]
+        'INSERT IGNORE INTO stage_groups (key_name, name, description, icon, era, required_level, display_order, bg_color, country, accent_color) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [key, name, desc, icon, era, lvl, order, bg, country, accent]
       );
     }
 
@@ -1844,18 +2439,41 @@ async function initialize() {
     const gMap = {};
     for (const g of gRows) gMap[g.key_name] = g.id;
 
-    // 던전 키 매핑 (몬스터 소스)
+    // 던전 키 매핑 (나라별 전용 던전)
     const groupDungeonMap = {
-      'gojoseon':  'forest',
-      'samhan':    'slime_cave',
-      'goguryeo':  'cave',
-      'baekje':    'swamp',
-      'silla':     'goblin',
-      'balhae':    'mountain',
-      'goryeo':    'spirit_forest',
-      'joseon':    'temple',
-      'imjin':     'demon',
-      'modern':    'dragon',
+      // 한국
+      'gojoseon':  'kr_forest',
+      'samhan':    'kr_forest',
+      'goguryeo':  'kr_mountain',
+      'baekje':    'kr_swamp',
+      'silla':     'kr_temple',
+      'balhae':    'kr_mountain',
+      'goryeo':    'kr_spirit',
+      'joseon':    'kr_temple',
+      'imjin':     'kr_spirit',
+      'modern':    'kr_spirit',
+      // 일본
+      'jomon':     'jp_forest',
+      'yayoi':     'jp_forest',
+      'yamato':    'jp_mountain',
+      'nara':      'jp_temple',
+      'heian':     'jp_spirit',
+      'kamakura':  'jp_mountain',
+      'muromachi': 'jp_ocean',
+      'sengoku':   'jp_mountain',
+      'edo':       'jp_spirit',
+      'meiji':     'jp_spirit',
+      // 중국
+      'xia_shang':       'cn_forest',
+      'zhou':            'cn_mountain',
+      'qin':             'cn_mountain',
+      'han':             'cn_forest',
+      'three_kingdoms':  'cn_swamp',
+      'tang':            'cn_temple',
+      'song':            'cn_spirit',
+      'yuan':            'cn_temple',
+      'ming':            'cn_spirit',
+      'qing':            'cn_spirit',
     };
 
     const stageData = {
@@ -1894,8 +2512,8 @@ async function initialize() {
         { n:8,  name:'광개토대왕릉',      desc:'대왕의 위엄이 서린 전장',      boss:0, mc:4, lmin:8,  lmax:10, exp:235,  gold:110, w:10, h:10, base:'stone' },
         { n:9,  name:'장수왕의 남진',     desc:'한강을 향한 대진격',           boss:0, mc:4, lmin:8,  lmax:11, exp:250,  gold:115, w:10, h:10, base:'grass' },
         { n:10, name:'을지문덕의 결전',    desc:'살수에서의 최후 결전',         boss:0, mc:5, lmin:8,  lmax:11, exp:280,  gold:125, w:12, h:10, base:'grass' },
-        { n:11, name:'연개소문의 시련',    desc:'독재자의 야망이 깃든 전장',    boss:0, mc:5, lmin:9,  lmax:12, exp:310,  gold:135, w:12, h:10, base:'stone' },
-        { n:12, name:'고구려 최후의 전투', desc:'동방의 대제국 최후의 날',      boss:1, mc:6, lmin:9,  lmax:13, exp:400,  gold:200, w:12, h:12, base:'stone' },
+        { n:11, name:'연개소문의 시련',    desc:'독재자의 야망이 깃든 전장',    boss:0, mc:5, lmin:9,  lmax:11, exp:310,  gold:135, w:12, h:10, base:'stone' },
+        { n:12, name:'고구려 최후의 전투', desc:'동방의 대제국 최후의 날',      boss:1, mc:6, lmin:9,  lmax:11, exp:400,  gold:200, w:12, h:12, base:'stone' },
       ],
       'baekje': [
         { n:1,  name:'위례성',            desc:'한강 유역의 첫 도읍',          boss:0, mc:3, lmin:7,  lmax:9,  exp:170,  gold:85,  w:9,  h:9,  base:'grass' },
@@ -1907,7 +2525,7 @@ async function initialize() {
         { n:7,  name:'백마강 전투',       desc:'낙화암의 슬픔이 서린 강가',    boss:0, mc:4, lmin:9,  lmax:12, exp:250,  gold:120, w:10, h:10, base:'grass' },
         { n:8,  name:'관산성',           desc:'성왕의 비극이 있던 전장',       boss:0, mc:4, lmin:9,  lmax:12, exp:265,  gold:125, w:10, h:10, base:'stone' },
         { n:9,  name:'황산벌 전야',       desc:'결사대 5천의 최후 전투',       boss:0, mc:5, lmin:10, lmax:13, exp:280,  gold:135, w:12, h:10, base:'grass' },
-        { n:10, name:'계백 장군의 결전',   desc:'충의의 장군과의 결전',         boss:1, mc:5, lmin:10, lmax:14, exp:420,  gold:210, w:12, h:12, base:'grass' },
+        { n:10, name:'계백 장군의 결전',   desc:'충의의 장군과의 결전',         boss:1, mc:5, lmin:10, lmax:13, exp:420,  gold:210, w:12, h:12, base:'grass' },
       ],
       'silla': [
         { n:1,  name:'경주 남산',         desc:'신라의 성스러운 산',           boss:0, mc:3, lmin:9,  lmax:11, exp:200,  gold:100, w:9,  h:9,  base:'grass' },
@@ -1920,8 +2538,8 @@ async function initialize() {
         { n:8,  name:'매소성 전투',       desc:'당군을 몰아낸 결전지',         boss:0, mc:4, lmin:11, lmax:14, exp:295,  gold:140, w:10, h:10, base:'grass' },
         { n:9,  name:'기벌포 해전',       desc:'바다 위의 최종 결전',          boss:0, mc:5, lmin:12, lmax:15, exp:310,  gold:150, w:12, h:10, base:'stone' },
         { n:10, name:'비담의 난',         desc:'여왕을 향한 반란의 전장',      boss:0, mc:5, lmin:12, lmax:15, exp:330,  gold:155, w:12, h:10, base:'stone' },
-        { n:11, name:'문무왕 해중릉',     desc:'바다 용이 된 왕의 시련',       boss:0, mc:5, lmin:13, lmax:16, exp:350,  gold:165, w:12, h:10, base:'stone' },
-        { n:12, name:'삼국통일 대전',     desc:'천년 전쟁의 종결',             boss:1, mc:6, lmin:13, lmax:17, exp:500,  gold:250, w:12, h:12, base:'grass' },
+        { n:11, name:'문무왕 해중릉',     desc:'바다 용이 된 왕의 시련',       boss:0, mc:5, lmin:13, lmax:15, exp:350,  gold:165, w:12, h:10, base:'stone' },
+        { n:12, name:'삼국통일 대전',     desc:'천년 전쟁의 종결',             boss:1, mc:6, lmin:13, lmax:15, exp:500,  gold:250, w:12, h:12, base:'grass' },
       ],
       'balhae': [
         { n:1,  name:'동모산',           desc:'발해 건국의 성지',              boss:0, mc:3, lmin:11, lmax:13, exp:240,  gold:120, w:9,  h:9,  base:'stone' },
@@ -1933,7 +2551,7 @@ async function initialize() {
         { n:7,  name:'거란 접경',         desc:'북방 유목민과의 충돌',         boss:0, mc:4, lmin:13, lmax:16, exp:330,  gold:160, w:10, h:10, base:'grass' },
         { n:8,  name:'선왕의 전성기',     desc:'해동성국의 전성기 전투',       boss:0, mc:5, lmin:14, lmax:16, exp:350,  gold:170, w:10, h:10, base:'stone' },
         { n:9,  name:'발해 말기 전투',    desc:'멸망 직전의 사투',             boss:0, mc:5, lmin:14, lmax:17, exp:370,  gold:180, w:12, h:10, base:'stone' },
-        { n:10, name:'해동성국 최후',     desc:'발해 멸망의 마지막 전쟁',      boss:1, mc:6, lmin:15, lmax:18, exp:550,  gold:275, w:12, h:12, base:'stone' },
+        { n:10, name:'해동성국 최후',     desc:'발해 멸망의 마지막 전쟁',      boss:1, mc:6, lmin:15, lmax:17, exp:550,  gold:275, w:12, h:12, base:'stone' },
       ],
       'goryeo': [
         { n:1,  name:'송악산',           desc:'왕건이 꿈꾼 통일의 산',         boss:0, mc:3, lmin:13, lmax:15, exp:280,  gold:140, w:9,  h:9,  base:'grass' },
@@ -1946,9 +2564,9 @@ async function initialize() {
         { n:8,  name:'강화도 항전',       desc:'39년 항전의 요새',             boss:0, mc:5, lmin:16, lmax:18, exp:400,  gold:195, w:10, h:10, base:'stone' },
         { n:9,  name:'쌍성총관부 탈환',    desc:'빼앗긴 영토를 되찾는 전투',   boss:0, mc:5, lmin:16, lmax:19, exp:420,  gold:205, w:12, h:10, base:'grass' },
         { n:10, name:'위화도 회군',       desc:'이성계의 운명적 결단',         boss:0, mc:5, lmin:16, lmax:19, exp:440,  gold:210, w:12, h:10, base:'grass' },
-        { n:11, name:'만월대 공방',       desc:'고려 궁궐의 최후 방어',        boss:0, mc:5, lmin:17, lmax:20, exp:460,  gold:220, w:12, h:10, base:'stone' },
-        { n:12, name:'고려 최후의 전투',   desc:'왕조의 종말',                  boss:0, mc:5, lmin:17, lmax:20, exp:480,  gold:230, w:12, h:10, base:'stone' },
-        { n:13, name:'강감찬 대원수 결전', desc:'귀주의 영웅과의 최종 결전',    boss:1, mc:6, lmin:18, lmax:21, exp:650,  gold:325, w:14, h:12, base:'grass' },
+        { n:11, name:'만월대 공방',       desc:'고려 궁궐의 최후 방어',        boss:0, mc:5, lmin:17, lmax:19, exp:460,  gold:220, w:12, h:10, base:'stone' },
+        { n:12, name:'고려 최후의 전투',   desc:'왕조의 종말',                  boss:0, mc:5, lmin:17, lmax:19, exp:480,  gold:230, w:12, h:10, base:'stone' },
+        { n:13, name:'강감찬 대원수 결전', desc:'귀주의 영웅과의 최종 결전',    boss:1, mc:6, lmin:18, lmax:19, exp:650,  gold:325, w:14, h:12, base:'grass' },
       ],
       'joseon': [
         { n:1,  name:'한양 도성',         desc:'새 왕조의 수도',               boss:0, mc:3, lmin:16, lmax:18, exp:350,  gold:175, w:10, h:10, base:'stone' },
@@ -1961,10 +2579,10 @@ async function initialize() {
         { n:8,  name:'종묘 제례',         desc:'왕실 제사의 성스러운 전장',    boss:0, mc:5, lmin:19, lmax:21, exp:470,  gold:230, w:10, h:10, base:'dark' },
         { n:9,  name:'창덕궁 후원',       desc:'비밀 정원의 전투',             boss:0, mc:5, lmin:19, lmax:22, exp:490,  gold:240, w:12, h:10, base:'grass' },
         { n:10, name:'수원 화성',         desc:'정조의 꿈이 서린 성곽',        boss:0, mc:5, lmin:19, lmax:22, exp:510,  gold:250, w:12, h:10, base:'stone' },
-        { n:11, name:'실학자의 서재',     desc:'실학의 정신이 깃든 전장',      boss:0, mc:5, lmin:20, lmax:23, exp:530,  gold:260, w:12, h:10, base:'stone' },
-        { n:12, name:'동학농민 전장',     desc:'민중 봉기의 전쟁터',           boss:0, mc:5, lmin:20, lmax:23, exp:550,  gold:270, w:12, h:10, base:'grass' },
-        { n:13, name:'경회루 결전',       desc:'연못 위의 누각에서의 결전',    boss:0, mc:5, lmin:20, lmax:23, exp:570,  gold:280, w:12, h:10, base:'stone' },
-        { n:14, name:'세종대왕의 시련',   desc:'성군이 남긴 최후의 시험',      boss:1, mc:6, lmin:21, lmax:25, exp:750,  gold:375, w:14, h:12, base:'stone' },
+        { n:11, name:'실학자의 서재',     desc:'실학의 정신이 깃든 전장',      boss:0, mc:5, lmin:20, lmax:22, exp:530,  gold:260, w:12, h:10, base:'stone' },
+        { n:12, name:'동학농민 전장',     desc:'민중 봉기의 전쟁터',           boss:0, mc:5, lmin:20, lmax:22, exp:550,  gold:270, w:12, h:10, base:'grass' },
+        { n:13, name:'경회루 결전',       desc:'연못 위의 누각에서의 결전',    boss:0, mc:5, lmin:20, lmax:22, exp:570,  gold:280, w:12, h:10, base:'stone' },
+        { n:14, name:'세종대왕의 시련',   desc:'성군이 남긴 최후의 시험',      boss:1, mc:6, lmin:21, lmax:22, exp:900,  gold:450, w:14, h:12, base:'stone' },
       ],
       'imjin': [
         { n:1,  name:'부산진 상륙',       desc:'왜군의 첫 상륙지',             boss:0, mc:3, lmin:19, lmax:21, exp:420,  gold:210, w:10, h:10, base:'stone' },
@@ -1977,11 +2595,11 @@ async function initialize() {
         { n:8,  name:'의병 봉기',         desc:'곽재우 의병장의 전장',         boss:0, mc:5, lmin:22, lmax:24, exp:560,  gold:275, w:10, h:10, base:'grass' },
         { n:9,  name:'직산 전투',         desc:'조명연합군의 반격',            boss:0, mc:5, lmin:22, lmax:25, exp:580,  gold:285, w:12, h:10, base:'grass' },
         { n:10, name:'울산성 전투',       desc:'혹한 속의 사투',               boss:0, mc:5, lmin:22, lmax:25, exp:600,  gold:295, w:12, h:10, base:'stone' },
-        { n:11, name:'사천해전',          desc:'거북선의 포화',               boss:0, mc:5, lmin:23, lmax:26, exp:620,  gold:305, w:12, h:10, base:'stone' },
-        { n:12, name:'명량해협',          desc:'13척의 기적',                 boss:0, mc:5, lmin:23, lmax:26, exp:650,  gold:320, w:12, h:10, base:'stone' },
-        { n:13, name:'노량해전 전야',     desc:'마지막 해전 직전의 전투',      boss:0, mc:5, lmin:24, lmax:27, exp:680,  gold:335, w:12, h:10, base:'stone' },
-        { n:14, name:'노량 최후의 전투',   desc:'이순신 장군 전사의 해전',      boss:0, mc:6, lmin:24, lmax:27, exp:710,  gold:350, w:12, h:12, base:'stone' },
-        { n:15, name:'이순신 장군 결전',   desc:'불멸의 영웅과의 최종 결전',    boss:1, mc:7, lmin:25, lmax:28, exp:900,  gold:450, w:14, h:14, base:'stone' },
+        { n:11, name:'사천해전',          desc:'거북선의 포화',               boss:0, mc:5, lmin:23, lmax:25, exp:620,  gold:305, w:12, h:10, base:'stone' },
+        { n:12, name:'명량해협',          desc:'13척의 기적',                 boss:0, mc:5, lmin:23, lmax:25, exp:650,  gold:320, w:12, h:10, base:'stone' },
+        { n:13, name:'노량해전 전야',     desc:'마지막 해전 직전의 전투',      boss:0, mc:5, lmin:24, lmax:25, exp:680,  gold:335, w:12, h:10, base:'stone' },
+        { n:14, name:'노량 최후의 전투',   desc:'이순신 장군 전사의 해전',      boss:0, mc:6, lmin:24, lmax:25, exp:710,  gold:350, w:12, h:12, base:'stone' },
+        { n:15, name:'이순신 장군 결전',   desc:'불멸의 영웅과의 최종 결전',    boss:1, mc:6, lmin:25, lmax:25, exp:1100, gold:550, w:14, h:14, base:'stone' },
       ],
       'modern': [
         { n:1,  name:'강화도 포대',       desc:'서양 열강과의 첫 충돌',        boss:0, mc:3, lmin:22, lmax:24, exp:500,  gold:250, w:10, h:10, base:'stone' },
@@ -1994,75 +2612,684 @@ async function initialize() {
         { n:8,  name:'봉오동 전투',       desc:'독립군의 첫 대승',            boss:0, mc:5, lmin:25, lmax:27, exp:660,  gold:330, w:10, h:10, base:'grass' },
         { n:9,  name:'청산리 전투',       desc:'김좌진의 위대한 승리',         boss:0, mc:5, lmin:25, lmax:28, exp:685,  gold:340, w:12, h:10, base:'grass' },
         { n:10, name:'상해 임시정부',     desc:'독립의 불꽃을 지키는 전투',    boss:0, mc:5, lmin:25, lmax:28, exp:710,  gold:355, w:12, h:10, base:'stone' },
-        { n:11, name:'윤봉길 의거',       desc:'도시락 폭탄의 전장',          boss:0, mc:5, lmin:26, lmax:29, exp:740,  gold:370, w:12, h:10, base:'stone' },
-        { n:12, name:'광복군 전선',       desc:'마지막 독립전쟁',             boss:0, mc:5, lmin:26, lmax:29, exp:770,  gold:385, w:12, h:10, base:'grass' },
-        { n:13, name:'해방 전야',         desc:'광복 직전의 최후 전투',        boss:0, mc:6, lmin:27, lmax:30, exp:800,  gold:400, w:12, h:12, base:'dark' },
-        { n:14, name:'안중근의 결의',     desc:'동양 평화를 위한 영웅의 전투', boss:0, mc:6, lmin:27, lmax:30, exp:840,  gold:420, w:12, h:12, base:'stone' },
-        { n:15, name:'독립의 새벽 결전',   desc:'모든 역사의 힘이 모인 최종전', boss:1, mc:7, lmin:28, lmax:32, exp:1200, gold:600, w:14, h:14, base:'dark' },
+        { n:11, name:'윤봉길 의거',       desc:'도시락 폭탄의 전장',          boss:0, mc:5, lmin:26, lmax:28, exp:740,  gold:370, w:12, h:10, base:'stone' },
+        { n:12, name:'광복군 전선',       desc:'마지막 독립전쟁',             boss:0, mc:5, lmin:26, lmax:28, exp:770,  gold:385, w:12, h:10, base:'grass' },
+        { n:13, name:'해방 전야',         desc:'광복 직전의 최후 전투',        boss:0, mc:6, lmin:27, lmax:28, exp:800,  gold:400, w:12, h:12, base:'dark' },
+        { n:14, name:'안중근의 결의',     desc:'동양 평화를 위한 영웅의 전투', boss:0, mc:6, lmin:27, lmax:28, exp:840,  gold:420, w:12, h:12, base:'stone' },
+        { n:15, name:'독립의 새벽 결전',   desc:'모든 역사의 힘이 모인 최종전', boss:1, mc:6, lmin:28, lmax:28, exp:1800, gold:900, w:14, h:14, base:'dark' },
       ],
     };
-
-    // 맵 타일 오버라이드 자동 생성
-    function generateMapOverrides(w, h, base, stageNum, isBoss) {
-      const overrides = [];
-      const rng = (seed) => {
-        let s = seed;
-        return () => { s = (s * 16807 + 11) % 2147483647; return s / 2147483647; };
-      };
-      const rand = rng(stageNum * 137 + w * 31 + h * 17);
-
-      const types = ['grass','stone','dirt','water','dark'];
-      const obstacleCount = Math.floor(3 + rand() * (isBoss ? 6 : 4));
-
-      for (let i = 0; i < obstacleCount; i++) {
-        const cx = Math.floor(rand() * (w - 2)) + 1;
-        const cz = Math.floor(rand() * (h - 2)) + 1;
-        const size = Math.floor(rand() * 3) + 1;
-        const height = Math.floor(rand() * 3) + 1;
-        const type = types[Math.floor(rand() * types.length)];
-        const coords = [];
-        for (let dx = 0; dx < size && cx + dx < w; dx++) {
-          for (let dz = 0; dz < size && cz + dz < h; dz++) {
-            coords.push([cx + dx, cz + dz]);
-          }
-        }
-        if (coords.length > 0) {
-          overrides.push({ coords, height, type });
-        }
-      }
-
-      // 보스맵 중앙 고지대
-      if (isBoss) {
-        const cx = Math.floor(w / 2);
-        const cz = Math.floor(h / 2);
-        overrides.push({
-          coords: [[cx, cz], [cx-1, cz], [cx, cz-1], [cx-1, cz-1]],
-          height: 3,
-          type: 'stone'
-        });
-      }
-
-      return overrides;
-    }
-
-    function generateSpawns(w, h, side, count) {
-      const spawns = [];
-      if (side === 'player') {
-        for (let i = 0; i < count; i++) {
-          spawns.push({ x: i % 2, z: Math.floor(i / 2) });
-        }
-      } else {
-        for (let i = 0; i < count; i++) {
-          spawns.push({ x: w - 1 - (i % 2), z: h - 1 - Math.floor(i / 2) });
-        }
-      }
-      return spawns;
-    }
 
     for (const [groupKey, stages] of Object.entries(stageData)) {
       const groupId = gMap[groupKey];
       if (!groupId) continue;
       const dungeonKey = groupDungeonMap[groupKey] || 'forest';
+
+      for (const s of stages) {
+        const tileOverrides = generateMapOverrides(s.w, s.h, s.base, s.n, !!s.boss);
+        const pSpawns = generateSpawns(s.w, s.h, 'player', Math.min(4, s.mc));
+        const mSpawns = generateSpawns(s.w, s.h, 'monster', s.mc);
+
+        await pool.query(
+          `INSERT IGNORE INTO stage_levels
+           (group_id, stage_number, name, description, is_boss, monster_count,
+            monster_level_min, monster_level_max, reward_exp, reward_gold,
+            dungeon_key, map_width, map_height, base_tile_type,
+            tile_overrides, player_spawns, monster_spawns)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [groupId, s.n, s.name, s.desc, s.boss, s.mc, s.lmin, s.lmax, s.exp, s.gold,
+           dungeonKey, s.w, s.h, s.base,
+           JSON.stringify(tileOverrides), JSON.stringify(pSpawns), JSON.stringify(mSpawns)]
+        );
+      }
+    }
+  }
+
+  // 일본/중국 스테이지 시드
+  const [newGRows] = await pool.query("SELECT id, key_name FROM stage_groups WHERE country IN ('japan','china') ORDER BY display_order");
+  const newGMap = {};
+  for (const g of newGRows) newGMap[g.key_name] = g.id;
+
+  const newGroupDungeonMap = {
+    'jomon':'forest','yayoi':'slime_cave','yamato':'cave','nara':'temple','heian':'spirit_forest',
+    'kamakura':'mountain','muromachi':'swamp','sengoku':'demon','edo':'goblin','meiji':'dragon',
+    'xia_shang':'forest','zhou':'cave','qin':'mountain','han':'slime_cave','three_kingdoms':'swamp',
+    'tang':'temple','song':'spirit_forest','yuan':'demon','ming':'goblin','qing':'dragon',
+  };
+
+  const [existJpCn] = await pool.query("SELECT COUNT(*) as cnt FROM stage_levels sl JOIN stage_groups sg ON sl.group_id = sg.id WHERE sg.country IN ('japan','china')");
+  if (existJpCn[0].cnt === 0) {
+    const jpCnStageData = {
+      // ========== 일본 스테이지 ==========
+      'jomon': [
+        { n:1,  name:'토기의 마을',       desc:'조몬 토기가 탄생한 원시 마을',     boss:0, mc:2, lmin:1,  lmax:2,  exp:80,   gold:40,  w:8,  h:8,  base:'grass' },
+        { n:2,  name:'패총 유적',         desc:'조개더미 아래의 고대 유적',         boss:0, mc:2, lmin:1,  lmax:2,  exp:90,   gold:45,  w:8,  h:8,  base:'grass' },
+        { n:3,  name:'수렵의 숲',         desc:'사슴과 멧돼지를 쫓던 숲',          boss:0, mc:3, lmin:1,  lmax:3,  exp:100,  gold:50,  w:9,  h:9,  base:'grass' },
+        { n:4,  name:'환상 열도(列島)',    desc:'화산섬의 원시 전장',               boss:0, mc:3, lmin:2,  lmax:3,  exp:110,  gold:55,  w:9,  h:8,  base:'stone' },
+        { n:5,  name:'흑요석 광산',       desc:'석기 재료를 캐는 광산',             boss:0, mc:3, lmin:2,  lmax:4,  exp:120,  gold:60,  w:10, h:8,  base:'stone' },
+        { n:6,  name:'해안 동굴',         desc:'바다 옆 동굴의 비밀',              boss:0, mc:3, lmin:2,  lmax:4,  exp:130,  gold:65,  w:10, h:9,  base:'stone' },
+        { n:7,  name:'산나이마루야마',     desc:'거대 취락 유적의 전장',            boss:0, mc:4, lmin:3,  lmax:5,  exp:140,  gold:70,  w:10, h:10, base:'grass' },
+        { n:8,  name:'석인상의 언덕',     desc:'돌 조각상이 지키는 언덕',          boss:0, mc:4, lmin:3,  lmax:5,  exp:155,  gold:75,  w:10, h:10, base:'stone' },
+        { n:9,  name:'화산 분화구',       desc:'지열이 솟아오르는 위험 지대',       boss:0, mc:4, lmin:3,  lmax:5,  exp:170,  gold:80,  w:10, h:10, base:'stone' },
+        { n:10, name:'토우(土偶)의 시련', desc:'조몬 수호신의 최종 시험',           boss:1, mc:5, lmin:4,  lmax:6,  exp:250,  gold:120, w:12, h:12, base:'grass' },
+      ],
+      'yayoi': [
+        { n:1,  name:'요시노가리',        desc:'환호 취락의 방어전',               boss:0, mc:2, lmin:3,  lmax:4,  exp:100,  gold:50,  w:8,  h:8,  base:'grass' },
+        { n:2,  name:'벼의 평야',         desc:'벼농사가 시작된 평야',             boss:0, mc:3, lmin:3,  lmax:5,  exp:110,  gold:55,  w:8,  h:9,  base:'grass' },
+        { n:3,  name:'동탁(銅鐸) 제단',   desc:'청동 방울이 울리는 제단',          boss:0, mc:3, lmin:4,  lmax:5,  exp:120,  gold:60,  w:9,  h:9,  base:'grass' },
+        { n:4,  name:'나국(奴國) 왕궁',   desc:'금인을 받은 소국의 왕궁',          boss:0, mc:3, lmin:4,  lmax:6,  exp:130,  gold:65,  w:10, h:9,  base:'stone' },
+        { n:5,  name:'부족 전쟁터',       desc:'왜국 대란의 전장',                boss:0, mc:3, lmin:4,  lmax:6,  exp:140,  gold:70,  w:10, h:10, base:'grass' },
+        { n:6,  name:'철기 대장간',       desc:'대륙에서 전해진 철기 기술',         boss:0, mc:4, lmin:5,  lmax:7,  exp:155,  gold:75,  w:10, h:10, base:'stone' },
+        { n:7,  name:'마쓰리 의식장',     desc:'풍년을 비는 의식 중 전투',          boss:0, mc:4, lmin:5,  lmax:7,  exp:170,  gold:80,  w:10, h:10, base:'grass' },
+        { n:8,  name:'이토국 성벽',       desc:'소국 연합의 방어선',               boss:0, mc:4, lmin:5,  lmax:8,  exp:185,  gold:90,  w:10, h:10, base:'stone' },
+        { n:9,  name:'야마타이국 입구',    desc:'히미코 여왕의 도성',               boss:0, mc:4, lmin:6,  lmax:8,  exp:200,  gold:95,  w:10, h:10, base:'stone' },
+        { n:10, name:'히미코의 결전',     desc:'야마타이국 여왕의 시련',            boss:1, mc:5, lmin:6,  lmax:9,  exp:300,  gold:150, w:12, h:12, base:'grass' },
+      ],
+      'yamato': [
+        { n:1,  name:'이즈모 신전',       desc:'출운 대사의 신전 전투',            boss:0, mc:3, lmin:5,  lmax:7,  exp:140,  gold:70,  w:9,  h:9,  base:'stone' },
+        { n:2,  name:'미와산 기슭',       desc:'야마토 건국의 성산',               boss:0, mc:3, lmin:5,  lmax:7,  exp:150,  gold:75,  w:9,  h:9,  base:'grass' },
+        { n:3,  name:'전방후원분',        desc:'거대 고분의 수호자',               boss:0, mc:3, lmin:6,  lmax:8,  exp:165,  gold:80,  w:10, h:10, base:'grass' },
+        { n:4,  name:'하니와 벌판',       desc:'토기 인형이 지키는 벌판',          boss:0, mc:3, lmin:6,  lmax:8,  exp:175,  gold:85,  w:10, h:10, base:'grass' },
+        { n:5,  name:'아스카 궁전',       desc:'아스카 시대의 왕궁 전투',          boss:0, mc:4, lmin:7,  lmax:9,  exp:190,  gold:90,  w:10, h:10, base:'stone' },
+        { n:6,  name:'소가 저택',         desc:'호족 소가씨의 거대 저택',          boss:0, mc:4, lmin:7,  lmax:9,  exp:205,  gold:95,  w:10, h:10, base:'stone' },
+        { n:7,  name:'하쿠손코 전투',     desc:'백촌강 전투의 일본 측',            boss:0, mc:4, lmin:7,  lmax:10, exp:220,  gold:100, w:10, h:10, base:'grass' },
+        { n:8,  name:'다이카 개신',       desc:'중앙집권화의 혼란',               boss:0, mc:4, lmin:8,  lmax:10, exp:235,  gold:110, w:10, h:10, base:'stone' },
+        { n:9,  name:'진신의 난',         desc:'황위 계승 전쟁',                  boss:0, mc:4, lmin:8,  lmax:11, exp:250,  gold:115, w:10, h:10, base:'grass' },
+        { n:10, name:'야마토타케루 결전', desc:'일본 무신의 전설적 전투',           boss:0, mc:5, lmin:8,  lmax:11, exp:280,  gold:125, w:12, h:10, base:'grass' },
+        { n:11, name:'쇼토쿠 태자 시련', desc:'불교 수호자의 시험',               boss:0, mc:5, lmin:9,  lmax:11, exp:310,  gold:135, w:12, h:10, base:'stone' },
+        { n:12, name:'천손강림 결전',     desc:'신화 시대의 최종 전투',            boss:1, mc:6, lmin:9,  lmax:11, exp:400,  gold:200, w:12, h:12, base:'stone' },
+      ],
+      'nara': [
+        { n:1,  name:'헤이조궁',          desc:'나라 수도의 궁전 전투',            boss:0, mc:3, lmin:7,  lmax:9,  exp:170,  gold:85,  w:9,  h:9,  base:'stone' },
+        { n:2,  name:'도다이지',          desc:'대불이 있는 거대 사원',            boss:0, mc:3, lmin:7,  lmax:9,  exp:180,  gold:90,  w:9,  h:9,  base:'stone' },
+        { n:3,  name:'쇼소인 보물고',     desc:'실크로드 보물이 잠든 창고',         boss:0, mc:3, lmin:8,  lmax:10, exp:195,  gold:95,  w:10, h:10, base:'stone' },
+        { n:4,  name:'가스가 신사',       desc:'사슴이 지키는 신사',               boss:0, mc:3, lmin:8,  lmax:10, exp:205,  gold:100, w:10, h:10, base:'grass' },
+        { n:5,  name:'고키시치도',        desc:'칠도의 관도를 순찰',               boss:0, mc:4, lmin:8,  lmax:11, exp:220,  gold:105, w:10, h:10, base:'grass' },
+        { n:6,  name:'만요슈 정원',       desc:'시가 흐르는 정원의 전투',           boss:0, mc:4, lmin:9,  lmax:11, exp:235,  gold:110, w:10, h:10, base:'grass' },
+        { n:7,  name:'감진의 도래',       desc:'중국 고승의 시련',                boss:0, mc:4, lmin:9,  lmax:12, exp:250,  gold:120, w:10, h:10, base:'stone' },
+        { n:8,  name:'후지와라 저택',     desc:'세도가 후지와라의 본거지',          boss:0, mc:4, lmin:9,  lmax:12, exp:265,  gold:125, w:10, h:10, base:'stone' },
+        { n:9,  name:'다카마가하라',       desc:'신들의 고원 전투',                boss:0, mc:5, lmin:10, lmax:13, exp:280,  gold:135, w:12, h:10, base:'grass' },
+        { n:10, name:'나라 대불 결전',    desc:'대불의 수호신 최종 전투',           boss:1, mc:5, lmin:10, lmax:13, exp:420,  gold:210, w:12, h:12, base:'stone' },
+      ],
+      'heian': [
+        { n:1,  name:'헤이안쿄 거리',     desc:'귀족 도시의 야간 전투',            boss:0, mc:3, lmin:9,  lmax:11, exp:200,  gold:100, w:9,  h:9,  base:'stone' },
+        { n:2,  name:'겐지 저택',         desc:'빛의 공자 겐지의 저택',            boss:0, mc:3, lmin:9,  lmax:11, exp:210,  gold:105, w:9,  h:9,  base:'stone' },
+        { n:3,  name:'기요미즈데라',       desc:'청수사의 무대 위 전투',            boss:0, mc:3, lmin:10, lmax:12, exp:225,  gold:110, w:10, h:10, base:'stone' },
+        { n:4,  name:'후시미이나리',       desc:'천 개의 도리이 사이 전투',          boss:0, mc:3, lmin:10, lmax:12, exp:235,  gold:115, w:10, h:10, base:'stone' },
+        { n:5,  name:'오닌의 숲',         desc:'요괴가 출몰하는 밤의 숲',           boss:0, mc:4, lmin:10, lmax:13, exp:250,  gold:120, w:10, h:10, base:'dark' },
+        { n:6,  name:'슈겐도 수행장',     desc:'산악 수행자의 전장',               boss:0, mc:4, lmin:11, lmax:13, exp:265,  gold:130, w:10, h:10, base:'stone' },
+        { n:7,  name:'미나모토 진영',     desc:'무사의 시대를 연 겐지 진영',        boss:0, mc:4, lmin:11, lmax:14, exp:280,  gold:135, w:10, h:10, base:'grass' },
+        { n:8,  name:'다이라 해안',       desc:'헤이케의 해안 방어선',             boss:0, mc:4, lmin:11, lmax:14, exp:295,  gold:140, w:10, h:10, base:'stone' },
+        { n:9,  name:'단노우라 전야',     desc:'겐페이 전쟁 최후의 해전',          boss:0, mc:5, lmin:12, lmax:15, exp:310,  gold:150, w:12, h:10, base:'stone' },
+        { n:10, name:'아베노 세이메이',   desc:'음양사 세이메이의 시련',            boss:0, mc:5, lmin:12, lmax:15, exp:330,  gold:155, w:12, h:10, base:'dark' },
+        { n:11, name:'슈텐도지 토벌',     desc:'대요괴 슈텐도지 전투',             boss:0, mc:5, lmin:13, lmax:15, exp:350,  gold:165, w:12, h:10, base:'dark' },
+        { n:12, name:'헤이안 최종 결전',  desc:'귀족 시대 종말의 전투',             boss:1, mc:6, lmin:13, lmax:15, exp:500,  gold:250, w:12, h:12, base:'dark' },
+      ],
+      'kamakura': [
+        { n:1,  name:'가마쿠라 거리',     desc:'막부의 수도 카마쿠라',             boss:0, mc:3, lmin:11, lmax:13, exp:240,  gold:120, w:9,  h:9,  base:'stone' },
+        { n:2,  name:'쓰루가오카',        desc:'학강 팔번궁의 전투',               boss:0, mc:3, lmin:11, lmax:13, exp:255,  gold:125, w:10, h:10, base:'stone' },
+        { n:3,  name:'대불 앞',           desc:'가마쿠라 대불의 수호',             boss:0, mc:3, lmin:12, lmax:14, exp:270,  gold:130, w:10, h:10, base:'stone' },
+        { n:4,  name:'기리시마 산성',     desc:'산악 요새의 방어전',               boss:0, mc:4, lmin:12, lmax:14, exp:285,  gold:140, w:10, h:10, base:'stone' },
+        { n:5,  name:'겐코의 난',         desc:'고다이고 천황의 반격',             boss:0, mc:4, lmin:12, lmax:15, exp:300,  gold:145, w:10, h:10, base:'grass' },
+        { n:6,  name:'몽골 습래(1차)',    desc:'원나라 함대에 맞선 방어',           boss:0, mc:4, lmin:13, lmax:15, exp:315,  gold:155, w:10, h:10, base:'stone' },
+        { n:7,  name:'하카타만 방루',     desc:'방루를 사이에 둔 전투',             boss:0, mc:4, lmin:13, lmax:16, exp:330,  gold:160, w:10, h:10, base:'stone' },
+        { n:8,  name:'몽골 습래(2차)',    desc:'신풍(카미카제)의 전장',             boss:0, mc:5, lmin:14, lmax:16, exp:350,  gold:170, w:10, h:10, base:'stone' },
+        { n:9,  name:'나가사키 항',       desc:'해상 결전의 전장',                 boss:0, mc:5, lmin:14, lmax:17, exp:370,  gold:180, w:12, h:10, base:'stone' },
+        { n:10, name:'호조 집권 결전',    desc:'집권의 최후와 막부 붕괴',           boss:1, mc:6, lmin:15, lmax:17, exp:550,  gold:275, w:12, h:12, base:'stone' },
+      ],
+      'muromachi': [
+        { n:1,  name:'금각사',            desc:'킨카쿠지의 황금 전장',             boss:0, mc:3, lmin:13, lmax:15, exp:280,  gold:140, w:9,  h:9,  base:'stone' },
+        { n:2,  name:'은각사',            desc:'긴카쿠지의 은빛 전장',             boss:0, mc:3, lmin:13, lmax:15, exp:295,  gold:145, w:10, h:10, base:'stone' },
+        { n:3,  name:'남조 산성',         desc:'남북조 분열의 전장',               boss:0, mc:3, lmin:14, lmax:16, exp:310,  gold:155, w:10, h:10, base:'stone' },
+        { n:4,  name:'노 무대',           desc:'노가쿠 무대 위의 전투',            boss:0, mc:4, lmin:14, lmax:16, exp:330,  gold:160, w:10, h:10, base:'stone' },
+        { n:5,  name:'정원사의 전투',     desc:'가레산스이 정원의 수호',            boss:0, mc:4, lmin:14, lmax:17, exp:345,  gold:170, w:10, h:10, base:'stone' },
+        { n:6,  name:'이코 잇키',         desc:'잇코종 봉기의 전장',               boss:0, mc:4, lmin:15, lmax:17, exp:360,  gold:175, w:10, h:10, base:'grass' },
+        { n:7,  name:'왜구 소탕',         desc:'해적 왜구의 근거지',               boss:0, mc:4, lmin:15, lmax:18, exp:380,  gold:185, w:10, h:10, base:'stone' },
+        { n:8,  name:'오닌의 난',         desc:'교토를 태운 대란',                boss:0, mc:5, lmin:16, lmax:18, exp:400,  gold:195, w:10, h:10, base:'dark' },
+        { n:9,  name:'사카이 항구',       desc:'자치 도시의 방어전',               boss:0, mc:5, lmin:16, lmax:19, exp:420,  gold:205, w:12, h:10, base:'stone' },
+        { n:10, name:'쿠스노키 결전',     desc:'충신 쿠스노키의 최후',             boss:0, mc:5, lmin:16, lmax:19, exp:440,  gold:210, w:12, h:10, base:'grass' },
+        { n:11, name:'아시카가 결전',     desc:'무로마치 막부 최후',               boss:1, mc:6, lmin:17, lmax:19, exp:600,  gold:300, w:12, h:12, base:'stone' },
+      ],
+      'sengoku': [
+        { n:1,  name:'오와리 평야',       desc:'오다 노부나가의 출발점',            boss:0, mc:3, lmin:16, lmax:18, exp:350,  gold:175, w:10, h:10, base:'grass' },
+        { n:2,  name:'오케하자마',        desc:'기습으로 대군을 격파한 전투',        boss:0, mc:3, lmin:16, lmax:18, exp:365,  gold:180, w:10, h:10, base:'grass' },
+        { n:3,  name:'나가시노 전투',     desc:'철포대의 3단 사격전',              boss:0, mc:4, lmin:17, lmax:19, exp:380,  gold:190, w:10, h:10, base:'grass' },
+        { n:4,  name:'아즈치성',          desc:'노부나가의 거대 천수각',            boss:0, mc:4, lmin:17, lmax:19, exp:400,  gold:195, w:10, h:10, base:'stone' },
+        { n:5,  name:'혼노지의 변',       desc:'배신의 불꽃이 타오른 사원',         boss:0, mc:4, lmin:17, lmax:20, exp:415,  gold:205, w:10, h:10, base:'dark' },
+        { n:6,  name:'시즈가타케',        desc:'히데요시의 통일 전쟁',             boss:0, mc:4, lmin:18, lmax:20, exp:430,  gold:210, w:10, h:10, base:'grass' },
+        { n:7,  name:'오다와라 공성',     desc:'호조씨 최후의 거성',               boss:0, mc:4, lmin:18, lmax:21, exp:450,  gold:220, w:10, h:10, base:'stone' },
+        { n:8,  name:'조선 침략 진영',    desc:'히데요시의 대륙 침공 거점',         boss:0, mc:5, lmin:19, lmax:21, exp:470,  gold:230, w:10, h:10, base:'stone' },
+        { n:9,  name:'후시미성',          desc:'히데요시 최후의 성',               boss:0, mc:5, lmin:19, lmax:22, exp:490,  gold:240, w:12, h:10, base:'stone' },
+        { n:10, name:'세키가하라 전야',   desc:'천하 분수령의 전야',               boss:0, mc:5, lmin:19, lmax:22, exp:510,  gold:250, w:12, h:10, base:'grass' },
+        { n:11, name:'세키가하라 결전',   desc:'동군 vs 서군 천하 결전',           boss:0, mc:5, lmin:20, lmax:22, exp:530,  gold:260, w:12, h:10, base:'grass' },
+        { n:12, name:'오사카 여름 진',    desc:'도요토미 가문 최후의 전투',         boss:0, mc:5, lmin:20, lmax:22, exp:550,  gold:270, w:12, h:10, base:'stone' },
+        { n:13, name:'오다 노부나가 결전',desc:'제6천마왕의 최종 시련',             boss:1, mc:6, lmin:21, lmax:22, exp:900,  gold:450, w:14, h:12, base:'dark' },
+      ],
+      'edo': [
+        { n:1,  name:'에도성 입구',       desc:'도쿠가와의 거대 성곽',             boss:0, mc:3, lmin:19, lmax:21, exp:420,  gold:210, w:10, h:10, base:'stone' },
+        { n:2,  name:'닛코 도쇼궁',       desc:'이에야스의 영묘',                  boss:0, mc:3, lmin:19, lmax:21, exp:440,  gold:215, w:10, h:10, base:'stone' },
+        { n:3,  name:'요시와라 거리',     desc:'환락가의 야간 전투',               boss:0, mc:4, lmin:20, lmax:22, exp:460,  gold:225, w:10, h:10, base:'stone' },
+        { n:4,  name:'충신장 저택',       desc:'47인의 낭인 습격',                boss:0, mc:4, lmin:20, lmax:22, exp:480,  gold:235, w:10, h:10, base:'stone' },
+        { n:5,  name:'시마바라 전투',     desc:'기독교도 봉기의 전장',             boss:0, mc:4, lmin:20, lmax:23, exp:500,  gold:245, w:10, h:10, base:'stone' },
+        { n:6,  name:'데지마 무역관',     desc:'네덜란드 무역의 거점',             boss:0, mc:4, lmin:21, lmax:23, exp:520,  gold:255, w:10, h:10, base:'stone' },
+        { n:7,  name:'오쿠노호소미치',    desc:'바쇼의 여행길 전투',               boss:0, mc:4, lmin:21, lmax:24, exp:540,  gold:265, w:10, h:10, base:'grass' },
+        { n:8,  name:'페리 내항',         desc:'흑선 쇼크의 전장',                boss:0, mc:5, lmin:22, lmax:24, exp:560,  gold:275, w:10, h:10, base:'stone' },
+        { n:9,  name:'사쿠라다 문외',     desc:'대로 이이 암살 현장',              boss:0, mc:5, lmin:22, lmax:25, exp:580,  gold:285, w:12, h:10, base:'stone' },
+        { n:10, name:'이케다야 사건',     desc:'신선조 습격 사건',                boss:0, mc:5, lmin:22, lmax:25, exp:600,  gold:295, w:12, h:10, base:'stone' },
+        { n:11, name:'도바 후시미',       desc:'보신전쟁의 서막',                 boss:0, mc:5, lmin:23, lmax:25, exp:620,  gold:305, w:12, h:10, base:'grass' },
+        { n:12, name:'하코다테 전투',     desc:'막부군 최후의 항전',               boss:0, mc:5, lmin:23, lmax:25, exp:650,  gold:320, w:12, h:10, base:'stone' },
+        { n:13, name:'에도 무혈개성',     desc:'막부 종말의 전장',                boss:0, mc:5, lmin:24, lmax:25, exp:680,  gold:335, w:12, h:10, base:'stone' },
+        { n:14, name:'미야모토 무사시',   desc:'최강 검객의 최종 결전',            boss:1, mc:6, lmin:25, lmax:25, exp:1100, gold:550, w:14, h:14, base:'stone' },
+      ],
+      'meiji': [
+        { n:1,  name:'메이지 궁',         desc:'근대화의 상징',                   boss:0, mc:3, lmin:22, lmax:24, exp:500,  gold:250, w:10, h:10, base:'stone' },
+        { n:2,  name:'사이고의 거병',     desc:'세이난 전쟁의 시작',               boss:0, mc:3, lmin:22, lmax:24, exp:520,  gold:260, w:10, h:10, base:'grass' },
+        { n:3,  name:'시로야마 전투',     desc:'사이고 다카모리 최후',             boss:0, mc:4, lmin:23, lmax:25, exp:545,  gold:270, w:10, h:10, base:'stone' },
+        { n:4,  name:'동경 거리',         desc:'서구화 물결의 도시',               boss:0, mc:4, lmin:23, lmax:25, exp:565,  gold:280, w:10, h:10, base:'stone' },
+        { n:5,  name:'청일전쟁 진지',     desc:'대륙 진출의 전장',                boss:0, mc:4, lmin:24, lmax:26, exp:590,  gold:295, w:10, h:10, base:'grass' },
+        { n:6,  name:'뤼순 요새',         desc:'러일전쟁의 격전지',               boss:0, mc:4, lmin:24, lmax:26, exp:610,  gold:305, w:10, h:10, base:'stone' },
+        { n:7,  name:'쓰시마 해전',       desc:'연합함대의 해전',                 boss:0, mc:5, lmin:24, lmax:27, exp:635,  gold:315, w:10, h:10, base:'stone' },
+        { n:8,  name:'다이쇼 데모크라시', desc:'대정 민주주의의 전장',             boss:0, mc:5, lmin:25, lmax:27, exp:660,  gold:330, w:10, h:10, base:'stone' },
+        { n:9,  name:'관동대지진',        desc:'재난 속의 혼란',                  boss:0, mc:5, lmin:25, lmax:28, exp:685,  gold:340, w:12, h:10, base:'dark' },
+        { n:10, name:'2·26 사건',         desc:'청년 장교의 반란',                boss:0, mc:5, lmin:25, lmax:28, exp:710,  gold:355, w:12, h:10, base:'stone' },
+        { n:11, name:'대본영',           desc:'군국주의의 심장부',                boss:0, mc:5, lmin:26, lmax:28, exp:740,  gold:370, w:12, h:10, base:'stone' },
+        { n:12, name:'히로시마 전야',     desc:'종전 직전의 전투',                boss:0, mc:5, lmin:26, lmax:28, exp:770,  gold:385, w:12, h:10, base:'dark' },
+        { n:13, name:'옥음방송',          desc:'항복 직전의 최후 전투',            boss:0, mc:6, lmin:27, lmax:28, exp:800,  gold:400, w:12, h:12, base:'stone' },
+        { n:14, name:'사이고 다카모리',   desc:'마지막 사무라이의 결전',            boss:0, mc:6, lmin:27, lmax:28, exp:840,  gold:420, w:12, h:12, base:'stone' },
+        { n:15, name:'일본 역사 최종전',  desc:'일본 역사의 모든 힘이 모인 결전',   boss:1, mc:6, lmin:28, lmax:28, exp:1800, gold:900, w:14, h:14, base:'dark' },
+      ],
+      // ========== 중국 스테이지 ==========
+      'xia_shang': [
+        { n:1,  name:'하왕조 도읍',       desc:'대우가 세운 최초의 왕조',          boss:0, mc:2, lmin:1,  lmax:2,  exp:80,   gold:40,  w:8,  h:8,  base:'grass' },
+        { n:2,  name:'은허 유적',         desc:'갑골문자가 발견된 상나라 수도',     boss:0, mc:2, lmin:1,  lmax:2,  exp:90,   gold:45,  w:8,  h:8,  base:'stone' },
+        { n:3,  name:'청동기 제단',       desc:'제사에 쓰인 청동 예기의 전장',     boss:0, mc:3, lmin:1,  lmax:3,  exp:100,  gold:50,  w:9,  h:9,  base:'stone' },
+        { n:4,  name:'무정의 원정',       desc:'상나라 무정 왕의 전쟁',            boss:0, mc:3, lmin:2,  lmax:3,  exp:110,  gold:55,  w:9,  h:8,  base:'grass' },
+        { n:5,  name:'사모무 대정',       desc:'거대 청동 솥의 수호',              boss:0, mc:3, lmin:2,  lmax:4,  exp:120,  gold:60,  w:10, h:8,  base:'stone' },
+        { n:6,  name:'달기의 궁전',       desc:'요녀 달기의 마법 궁전',            boss:0, mc:3, lmin:2,  lmax:4,  exp:130,  gold:65,  w:10, h:9,  base:'dark' },
+        { n:7,  name:'조가성',            desc:'상나라 수도의 방어',               boss:0, mc:4, lmin:3,  lmax:5,  exp:140,  gold:70,  w:10, h:10, base:'stone' },
+        { n:8,  name:'목야 전야',         desc:'주 무왕의 출전 전야',              boss:0, mc:4, lmin:3,  lmax:5,  exp:155,  gold:75,  w:10, h:10, base:'grass' },
+        { n:9,  name:'봉신대',            desc:'신들을 봉인하는 전장',             boss:0, mc:4, lmin:3,  lmax:5,  exp:170,  gold:80,  w:10, h:10, base:'dark' },
+        { n:10, name:'주왕의 최후',       desc:'상나라 멸망의 결전',               boss:1, mc:5, lmin:4,  lmax:6,  exp:250,  gold:120, w:12, h:12, base:'dark' },
+      ],
+      'zhou': [
+        { n:1,  name:'호경 도읍',         desc:'서주의 수도',                     boss:0, mc:2, lmin:3,  lmax:4,  exp:100,  gold:50,  w:8,  h:8,  base:'stone' },
+        { n:2,  name:'봉화대',            desc:'봉화를 올린 포사의 전장',          boss:0, mc:3, lmin:3,  lmax:5,  exp:110,  gold:55,  w:8,  h:9,  base:'stone' },
+        { n:3,  name:'낙읍 천도',         desc:'동주로의 천도',                   boss:0, mc:3, lmin:4,  lmax:5,  exp:120,  gold:60,  w:9,  h:9,  base:'stone' },
+        { n:4,  name:'제환공의 회맹',     desc:'첫 번째 패자의 전장',              boss:0, mc:3, lmin:4,  lmax:6,  exp:130,  gold:65,  w:10, h:9,  base:'grass' },
+        { n:5,  name:'진문공의 전장',     desc:'19년 유랑 끝의 복귀',              boss:0, mc:3, lmin:4,  lmax:6,  exp:140,  gold:70,  w:10, h:10, base:'grass' },
+        { n:6,  name:'오월동주',          desc:'오나라와 월나라의 쟁패',            boss:0, mc:4, lmin:5,  lmax:7,  exp:155,  gold:75,  w:10, h:10, base:'grass' },
+        { n:7,  name:'손자병법 연무장',   desc:'손자가 훈련한 전장',               boss:0, mc:4, lmin:5,  lmax:7,  exp:170,  gold:80,  w:10, h:10, base:'grass' },
+        { n:8,  name:'장평 전야',         desc:'장평대전 직전의 전투',              boss:0, mc:4, lmin:5,  lmax:8,  exp:185,  gold:90,  w:10, h:10, base:'stone' },
+        { n:9,  name:'합종연횡',          desc:'종횡가들의 책략 전장',              boss:0, mc:4, lmin:6,  lmax:8,  exp:200,  gold:95,  w:10, h:10, base:'grass' },
+        { n:10, name:'제자백가 결전',     desc:'사상가들의 힘이 모인 결전',         boss:1, mc:5, lmin:6,  lmax:9,  exp:300,  gold:150, w:12, h:12, base:'grass' },
+      ],
+      'qin': [
+        { n:1,  name:'함양 궁전',         desc:'진나라 수도의 궁전',               boss:0, mc:3, lmin:5,  lmax:7,  exp:140,  gold:70,  w:9,  h:9,  base:'stone' },
+        { n:2,  name:'만리장성 공사장',   desc:'장성 건설 현장의 전투',             boss:0, mc:3, lmin:5,  lmax:7,  exp:150,  gold:75,  w:9,  h:9,  base:'stone' },
+        { n:3,  name:'분서갱유',          desc:'사상 탄압의 현장',                boss:0, mc:3, lmin:6,  lmax:8,  exp:165,  gold:80,  w:10, h:10, base:'dark' },
+        { n:4,  name:'아방궁',            desc:'거대한 궁전의 전투',               boss:0, mc:3, lmin:6,  lmax:8,  exp:175,  gold:85,  w:10, h:10, base:'stone' },
+        { n:5,  name:'형가의 암살',       desc:'자객 형가의 전장',                boss:0, mc:4, lmin:7,  lmax:9,  exp:190,  gold:90,  w:10, h:10, base:'stone' },
+        { n:6,  name:'영정 통일전',       desc:'6국을 멸한 통일 전쟁',             boss:0, mc:4, lmin:7,  lmax:9,  exp:205,  gold:95,  w:10, h:10, base:'grass' },
+        { n:7,  name:'직도 행군',         desc:'시황제의 군사 도로',               boss:0, mc:4, lmin:7,  lmax:10, exp:220,  gold:100, w:10, h:10, base:'grass' },
+        { n:8,  name:'진시황릉',          desc:'시황제의 지하 궁전',               boss:0, mc:4, lmin:8,  lmax:10, exp:235,  gold:110, w:10, h:10, base:'dark' },
+        { n:9,  name:'대택향 봉기',       desc:'진승오광의 반란',                  boss:0, mc:4, lmin:8,  lmax:11, exp:250,  gold:115, w:10, h:10, base:'grass' },
+        { n:10, name:'초한쟁패 전야',     desc:'유방과 항우의 결전 전야',           boss:0, mc:5, lmin:8,  lmax:11, exp:280,  gold:125, w:12, h:10, base:'grass' },
+        { n:11, name:'홍문의 연회',       desc:'위기일발의 연회장',                boss:0, mc:5, lmin:9,  lmax:11, exp:310,  gold:135, w:12, h:10, base:'stone' },
+        { n:12, name:'병마용 결전',       desc:'8천 병마용의 최종 시련',            boss:1, mc:6, lmin:9,  lmax:11, exp:400,  gold:200, w:12, h:12, base:'stone' },
+      ],
+      'han': [
+        { n:1,  name:'장안 도읍',         desc:'한 고조 유방의 수도',              boss:0, mc:3, lmin:7,  lmax:9,  exp:170,  gold:85,  w:9,  h:9,  base:'stone' },
+        { n:2,  name:'초한 전장',         desc:'해하 전투의 재현',                boss:0, mc:3, lmin:7,  lmax:9,  exp:180,  gold:90,  w:9,  h:9,  base:'grass' },
+        { n:3,  name:'흉노 접경',         desc:'북방 유목민과의 전투',             boss:0, mc:3, lmin:8,  lmax:10, exp:195,  gold:95,  w:10, h:10, base:'grass' },
+        { n:4,  name:'장건의 서역',       desc:'실크로드 개척의 전장',             boss:0, mc:3, lmin:8,  lmax:10, exp:205,  gold:100, w:10, h:10, base:'dirt' },
+        { n:5,  name:'무제의 원정',       desc:'한 무제의 흉노 원정',              boss:0, mc:4, lmin:8,  lmax:11, exp:220,  gold:105, w:10, h:10, base:'grass' },
+        { n:6,  name:'왕망의 신',         desc:'신나라의 혼란',                   boss:0, mc:4, lmin:9,  lmax:11, exp:235,  gold:110, w:10, h:10, base:'stone' },
+        { n:7,  name:'적미군 봉기',       desc:'농민 반란의 전장',                boss:0, mc:4, lmin:9,  lmax:12, exp:250,  gold:120, w:10, h:10, base:'grass' },
+        { n:8,  name:'낙양 궁전',         desc:'후한의 수도 방어',                boss:0, mc:4, lmin:9,  lmax:12, exp:265,  gold:125, w:10, h:10, base:'stone' },
+        { n:9,  name:'황건의 난',         desc:'태평도 봉기의 전장',               boss:0, mc:5, lmin:10, lmax:13, exp:280,  gold:135, w:12, h:10, base:'grass' },
+        { n:10, name:'한신의 결전',       desc:'국사무쌍 한신의 시련',              boss:1, mc:5, lmin:10, lmax:13, exp:420,  gold:210, w:12, h:12, base:'grass' },
+      ],
+      'three_kingdoms': [
+        { n:1,  name:'도원결의',          desc:'유비·관우·장비의 맹세',             boss:0, mc:3, lmin:9,  lmax:11, exp:200,  gold:100, w:9,  h:9,  base:'grass' },
+        { n:2,  name:'호로관 전투',       desc:'여포의 돌진',                     boss:0, mc:3, lmin:9,  lmax:11, exp:210,  gold:105, w:9,  h:9,  base:'stone' },
+        { n:3,  name:'관도대전',          desc:'조조 vs 원소의 결전',              boss:0, mc:3, lmin:10, lmax:12, exp:225,  gold:110, w:10, h:10, base:'grass' },
+        { n:4,  name:'삼고초려',          desc:'제갈량을 찾아가는 전장',            boss:0, mc:3, lmin:10, lmax:12, exp:235,  gold:115, w:10, h:10, base:'grass' },
+        { n:5,  name:'적벽대전',          desc:'화공으로 조조 대군을 격파',         boss:0, mc:4, lmin:10, lmax:13, exp:250,  gold:120, w:10, h:10, base:'stone' },
+        { n:6,  name:'형주 쟁탈',         desc:'삼국이 뒤엉킨 요충지',             boss:0, mc:4, lmin:11, lmax:13, exp:265,  gold:130, w:10, h:10, base:'grass' },
+        { n:7,  name:'한중 공방',         desc:'유비의 한중왕 등극전',             boss:0, mc:4, lmin:11, lmax:14, exp:280,  gold:135, w:10, h:10, base:'stone' },
+        { n:8,  name:'이릉 전투',         desc:'유비의 복수전',                   boss:0, mc:4, lmin:11, lmax:14, exp:295,  gold:140, w:10, h:10, base:'grass' },
+        { n:9,  name:'출사표',            desc:'제갈량의 북벌 전장',               boss:0, mc:5, lmin:12, lmax:15, exp:310,  gold:150, w:12, h:10, base:'grass' },
+        { n:10, name:'오장원',            desc:'제갈량 최후의 전장',               boss:0, mc:5, lmin:12, lmax:15, exp:330,  gold:155, w:12, h:10, base:'grass' },
+        { n:11, name:'사마의의 대두',     desc:'삼국 통일의 서막',                 boss:0, mc:5, lmin:13, lmax:15, exp:350,  gold:165, w:12, h:10, base:'stone' },
+        { n:12, name:'여포 결전',         desc:'삼국 최강 무장의 시련',             boss:1, mc:6, lmin:13, lmax:15, exp:500,  gold:250, w:12, h:12, base:'grass' },
+      ],
+      'tang': [
+        { n:1,  name:'장안 성문',         desc:'세계 최대 도시의 입구',             boss:0, mc:3, lmin:11, lmax:13, exp:240,  gold:120, w:9,  h:9,  base:'stone' },
+        { n:2,  name:'현무문의 변',       desc:'태종의 쿠데타 현장',               boss:0, mc:3, lmin:11, lmax:13, exp:255,  gold:125, w:10, h:10, base:'stone' },
+        { n:3,  name:'정관의 치',         desc:'태평성대의 시련',                  boss:0, mc:3, lmin:12, lmax:14, exp:270,  gold:130, w:10, h:10, base:'stone' },
+        { n:4,  name:'서역 원정',         desc:'서돌궐 정벌의 전장',               boss:0, mc:4, lmin:12, lmax:14, exp:285,  gold:140, w:10, h:10, base:'dirt' },
+        { n:5,  name:'측천무후 궁전',     desc:'여황제의 궁전 전투',               boss:0, mc:4, lmin:12, lmax:15, exp:300,  gold:145, w:10, h:10, base:'stone' },
+        { n:6,  name:'현종의 화청궁',     desc:'양귀비와 현종의 전장',              boss:0, mc:4, lmin:13, lmax:15, exp:315,  gold:155, w:10, h:10, base:'stone' },
+        { n:7,  name:'안사의 난',         desc:'안록산의 대반란',                  boss:0, mc:4, lmin:13, lmax:16, exp:330,  gold:160, w:10, h:10, base:'grass' },
+        { n:8,  name:'마외역의 비극',     desc:'양귀비의 비극이 서린 역참',         boss:0, mc:5, lmin:14, lmax:16, exp:350,  gold:170, w:10, h:10, base:'stone' },
+        { n:9,  name:'황소의 난',         desc:'농민 반란의 불길',                 boss:0, mc:5, lmin:14, lmax:17, exp:370,  gold:180, w:12, h:10, base:'grass' },
+        { n:10, name:'당 최후의 전투',    desc:'대제국의 멸망',                    boss:1, mc:6, lmin:15, lmax:17, exp:550,  gold:275, w:12, h:12, base:'stone' },
+      ],
+      'song': [
+        { n:1,  name:'개봉 도성',         desc:'북송의 번화한 수도',               boss:0, mc:3, lmin:13, lmax:15, exp:280,  gold:140, w:9,  h:9,  base:'stone' },
+        { n:2,  name:'양가장 전투',       desc:'양가장 무인의 전장',               boss:0, mc:3, lmin:13, lmax:15, exp:295,  gold:145, w:10, h:10, base:'grass' },
+        { n:3,  name:'왕안석 변법',       desc:'개혁의 전장',                     boss:0, mc:3, lmin:14, lmax:16, exp:310,  gold:155, w:10, h:10, base:'stone' },
+        { n:4,  name:'청명상하도',        desc:'그림 속 도시의 전투',               boss:0, mc:4, lmin:14, lmax:16, exp:330,  gold:160, w:10, h:10, base:'stone' },
+        { n:5,  name:'악비의 북벌',       desc:'정충보국의 전장',                  boss:0, mc:4, lmin:14, lmax:17, exp:345,  gold:170, w:10, h:10, base:'grass' },
+        { n:6,  name:'정강의 변',         desc:'금나라 침공의 전장',               boss:0, mc:4, lmin:15, lmax:17, exp:360,  gold:175, w:10, h:10, base:'stone' },
+        { n:7,  name:'임안 행재소',       desc:'남송의 임시 수도',                boss:0, mc:4, lmin:15, lmax:18, exp:380,  gold:185, w:10, h:10, base:'stone' },
+        { n:8,  name:'양양 공방',         desc:'6년간의 대공성전',                boss:0, mc:5, lmin:16, lmax:18, exp:400,  gold:195, w:10, h:10, base:'stone' },
+        { n:9,  name:'교지 원정',         desc:'남방 원정의 전장',                boss:0, mc:5, lmin:16, lmax:19, exp:420,  gold:205, w:12, h:10, base:'grass' },
+        { n:10, name:'애산 해전',         desc:'남송 최후의 해전',                boss:0, mc:5, lmin:16, lmax:19, exp:440,  gold:210, w:12, h:10, base:'stone' },
+        { n:11, name:'문천상의 결의',     desc:'충신의 마지막 저항',               boss:0, mc:5, lmin:17, lmax:19, exp:460,  gold:220, w:12, h:10, base:'stone' },
+        { n:12, name:'악비 결전',         desc:'민족 영웅 악비의 최종 시련',        boss:1, mc:6, lmin:18, lmax:19, exp:650,  gold:325, w:14, h:12, base:'grass' },
+      ],
+      'yuan': [
+        { n:1,  name:'대도(베이징)',      desc:'쿠빌라이의 수도',                 boss:0, mc:3, lmin:16, lmax:18, exp:350,  gold:175, w:10, h:10, base:'stone' },
+        { n:2,  name:'초원의 진격',       desc:'몽골 기마대의 돌진',               boss:0, mc:3, lmin:16, lmax:18, exp:365,  gold:180, w:10, h:10, base:'grass' },
+        { n:3,  name:'서하 정벌',         desc:'서하 멸망의 전장',                boss:0, mc:4, lmin:17, lmax:19, exp:380,  gold:190, w:10, h:10, base:'grass' },
+        { n:4,  name:'금 멸망전',         desc:'여진 금나라 최후',                boss:0, mc:4, lmin:17, lmax:19, exp:400,  gold:195, w:10, h:10, base:'stone' },
+        { n:5,  name:'바그다드 공성',     desc:'아바스 왕조 멸망의 전장',           boss:0, mc:4, lmin:17, lmax:20, exp:415,  gold:205, w:10, h:10, base:'stone' },
+        { n:6,  name:'카미카제(신풍)',    desc:'일본 침공의 전장',                boss:0, mc:4, lmin:18, lmax:20, exp:430,  gold:210, w:10, h:10, base:'stone' },
+        { n:7,  name:'대운하',            desc:'대운하 위의 해상 전투',            boss:0, mc:4, lmin:18, lmax:21, exp:450,  gold:220, w:10, h:10, base:'water' },
+        { n:8,  name:'마르코 폴로의 길',  desc:'동서 교역로의 전장',               boss:0, mc:5, lmin:19, lmax:21, exp:470,  gold:230, w:10, h:10, base:'stone' },
+        { n:9,  name:'홍건적의 난',       desc:'원나라 말기 농민 반란',             boss:0, mc:5, lmin:19, lmax:22, exp:490,  gold:240, w:12, h:10, base:'grass' },
+        { n:10, name:'칭기즈칸 결전',     desc:'대정복자의 최종 시련',              boss:1, mc:6, lmin:20, lmax:22, exp:900,  gold:450, w:14, h:12, base:'grass' },
+      ],
+      'ming': [
+        { n:1,  name:'응천부(난징)',      desc:'주원장의 수도',                   boss:0, mc:3, lmin:19, lmax:21, exp:420,  gold:210, w:10, h:10, base:'stone' },
+        { n:2,  name:'북경 천도',         desc:'영락제의 새 수도',                boss:0, mc:3, lmin:19, lmax:21, exp:440,  gold:215, w:10, h:10, base:'stone' },
+        { n:3,  name:'자금성',            desc:'황제의 궁전 전투',                boss:0, mc:4, lmin:20, lmax:22, exp:460,  gold:225, w:10, h:10, base:'stone' },
+        { n:4,  name:'정화의 항해',       desc:'대항해 원정의 전장',               boss:0, mc:4, lmin:20, lmax:22, exp:480,  gold:235, w:10, h:10, base:'stone' },
+        { n:5,  name:'토목의 변',         desc:'오이라트에 황제가 포로',            boss:0, mc:4, lmin:20, lmax:23, exp:500,  gold:245, w:10, h:10, base:'grass' },
+        { n:6,  name:'만리장성 방어',     desc:'북방 유목민 침입 방어',             boss:0, mc:4, lmin:21, lmax:23, exp:520,  gold:255, w:10, h:10, base:'stone' },
+        { n:7,  name:'왜구 소탕',         desc:'척계광의 왜구 토벌',               boss:0, mc:4, lmin:21, lmax:24, exp:540,  gold:265, w:10, h:10, base:'stone' },
+        { n:8,  name:'임진왜란 참전',     desc:'조선 구원의 원정',                boss:0, mc:5, lmin:22, lmax:24, exp:560,  gold:275, w:10, h:10, base:'grass' },
+        { n:9,  name:'이자성 봉기',       desc:'농민 반란의 불꽃',                boss:0, mc:5, lmin:22, lmax:25, exp:580,  gold:285, w:12, h:10, base:'grass' },
+        { n:10, name:'산해관 전투',       desc:'오삼계의 결단',                   boss:0, mc:5, lmin:22, lmax:25, exp:600,  gold:295, w:12, h:10, base:'stone' },
+        { n:11, name:'정성공 해전',       desc:'대만 탈환의 해전',                boss:0, mc:5, lmin:23, lmax:25, exp:620,  gold:305, w:12, h:10, base:'stone' },
+        { n:12, name:'자금성 함락',       desc:'명 왕조 최후의 날',               boss:0, mc:5, lmin:23, lmax:25, exp:650,  gold:320, w:12, h:10, base:'stone' },
+        { n:13, name:'영락제의 북벌',     desc:'영락대제의 몽골 원정',             boss:0, mc:5, lmin:24, lmax:25, exp:680,  gold:335, w:12, h:10, base:'grass' },
+        { n:14, name:'주원장 결전',       desc:'걸인에서 황제까지, 창업자의 시련',   boss:1, mc:6, lmin:25, lmax:25, exp:1100, gold:550, w:14, h:14, base:'stone' },
+      ],
+      'qing': [
+        { n:1,  name:'심양 궁전',         desc:'후금의 수도',                     boss:0, mc:3, lmin:22, lmax:24, exp:500,  gold:250, w:10, h:10, base:'stone' },
+        { n:2,  name:'산해관 통과',       desc:'만주족의 중원 진출',               boss:0, mc:3, lmin:22, lmax:24, exp:520,  gold:260, w:10, h:10, base:'stone' },
+        { n:3,  name:'강희제 친정',       desc:'삼번의 난 진압',                  boss:0, mc:4, lmin:23, lmax:25, exp:545,  gold:270, w:10, h:10, base:'grass' },
+        { n:4,  name:'건륭제 남순',       desc:'전성기의 순행 전장',               boss:0, mc:4, lmin:23, lmax:25, exp:565,  gold:280, w:10, h:10, base:'stone' },
+        { n:5,  name:'아편전쟁',          desc:'영국과의 충돌',                   boss:0, mc:4, lmin:24, lmax:26, exp:590,  gold:295, w:10, h:10, base:'stone' },
+        { n:6,  name:'태평천국',          desc:'홍수전의 난',                     boss:0, mc:4, lmin:24, lmax:26, exp:610,  gold:305, w:10, h:10, base:'grass' },
+        { n:7,  name:'양무운동',          desc:'근대화 시도의 전장',               boss:0, mc:5, lmin:24, lmax:27, exp:635,  gold:315, w:10, h:10, base:'stone' },
+        { n:8,  name:'무술변법',          desc:'100일 개혁의 전장',                boss:0, mc:5, lmin:25, lmax:27, exp:660,  gold:330, w:10, h:10, base:'stone' },
+        { n:9,  name:'의화단 사건',       desc:'반외세 봉기의 전장',               boss:0, mc:5, lmin:25, lmax:28, exp:685,  gold:340, w:12, h:10, base:'stone' },
+        { n:10, name:'신해혁명 전야',     desc:'왕조 붕괴의 전장',                boss:0, mc:5, lmin:25, lmax:28, exp:710,  gold:355, w:12, h:10, base:'stone' },
+        { n:11, name:'무창 봉기',         desc:'혁명의 첫 총성',                  boss:0, mc:5, lmin:26, lmax:28, exp:740,  gold:370, w:12, h:10, base:'stone' },
+        { n:12, name:'자금성 퇴위',       desc:'마지막 황제의 퇴위',               boss:0, mc:5, lmin:26, lmax:28, exp:770,  gold:385, w:12, h:10, base:'stone' },
+        { n:13, name:'손문의 결의',       desc:'공화국 건국의 전투',               boss:0, mc:6, lmin:27, lmax:28, exp:800,  gold:400, w:12, h:12, base:'stone' },
+        { n:14, name:'누르하치의 굴기',   desc:'만주족 창업자의 전투',              boss:0, mc:6, lmin:27, lmax:28, exp:840,  gold:420, w:12, h:12, base:'stone' },
+        { n:15, name:'중국 역사 최종전',  desc:'중국 역사의 모든 힘이 모인 결전',   boss:1, mc:6, lmin:28, lmax:28, exp:1800, gold:900, w:14, h:14, base:'dark' },
+      ],
+    };
+
+    for (const [groupKey, stages] of Object.entries(jpCnStageData)) {
+      const groupId = newGMap[groupKey];
+      if (!groupId) continue;
+      const dungeonKey = newGroupDungeonMap[groupKey] || 'forest';
+
+      for (const s of stages) {
+        const tileOverrides = generateMapOverrides(s.w, s.h, s.base, s.n, !!s.boss);
+        const pSpawns = generateSpawns(s.w, s.h, 'player', Math.min(4, s.mc));
+        const mSpawns = generateSpawns(s.w, s.h, 'monster', s.mc);
+
+        await pool.query(
+          `INSERT IGNORE INTO stage_levels
+           (group_id, stage_number, name, description, is_boss, monster_count,
+            monster_level_min, monster_level_max, reward_exp, reward_gold,
+            dungeon_key, map_width, map_height, base_tile_type,
+            tile_overrides, player_spawns, monster_spawns)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [groupId, s.n, s.name, s.desc, s.boss, s.mc,
+           s.lmin, s.lmax, s.exp, s.gold,
+           dungeonKey, s.w, s.h, s.base,
+           JSON.stringify(tileOverrides), JSON.stringify(pSpawns), JSON.stringify(mSpawns)]
+        );
+      }
+    }
+  }
+
+  // 일본/중국 스테이지 그룹 마이그레이션 (기존 한국만 있는 DB에 추가)
+  const [jpCheck] = await pool.query("SELECT COUNT(*) as cnt FROM stage_groups WHERE country = 'japan'");
+  if (jpCheck[0].cnt === 0) {
+    // 기존 한국 그룹에 country 업데이트
+    await pool.query("UPDATE stage_groups SET country = 'korea' WHERE country IS NULL OR country = ''").catch(() => {});
+
+    const newGroups = [
+      ['jomon',      '조몬',       '토기 문화의 여명, 고대 일본의 시작',              '🏺', '조몬시대 (BC 14000)', 1,  11, '#1a1e2e', 'japan'],
+      ['yayoi',      '야요이',     '벼농사와 철기가 전래된 새 시대',                  '🌾', '야요이시대',         3,  12, '#1e2e1a', 'japan'],
+      ['yamato',     '야마토',     '일본 통일 왕조의 탄생',                          '⛩️', '야마토시대',         5,  13, '#2e1e1a', 'japan'],
+      ['nara',       '나라',       '불교와 율령 국가의 전성기',                      '🏛️', '나라시대',           7,  14, '#2e1a1e', 'japan'],
+      ['heian',      '헤이안',     '귀족 문화가 꽃핀 우아한 시대',                   '🌸', '헤이안시대',         9,  15, '#1e1a2e', 'japan'],
+      ['kamakura',   '가마쿠라',   '무사 정권의 시작, 사무라이의 시대',               '⚔️', '가마쿠라시대',       11, 16, '#2e0e0e', 'japan'],
+      ['muromachi',  '무로마치',   '남북조의 혼란과 무사 문화',                      '🏯', '무로마치시대',       13, 17, '#0e2e1e', 'japan'],
+      ['sengoku',    '전국시대',   '천하통일을 향한 영웅들의 전쟁',                   '🔥', '전국시대',           16, 18, '#2e0e1a', 'japan'],
+      ['edo',        '에도',       '도쿠가와 막부의 태평성대',                       '🎎', '에도시대',           19, 19, '#1e1a0e', 'japan'],
+      ['meiji',      '메이지',     '개혁과 근대화의 격변기',                         '⚡', '메이지시대',         22, 20, '#0e1a2e', 'japan'],
+      ['xia_shang',  '하·상',      '중화 문명의 여명, 청동기의 시대',                '🐉', '하·상 (BC 2070)',    1,  21, '#2e1e0e', 'china'],
+      ['zhou',       '주',         '봉건제와 제자백가의 시대',                       '📜', '주나라',             3,  22, '#0e1e2e', 'china'],
+      ['qin',        '진',         '시황제의 천하통일 제국',                         '🏰', '진나라',             5,  23, '#2e0e0e', 'china'],
+      ['han',        '한',         '유방의 대한제국 400년',                          '🐎', '한나라',             7,  24, '#2e1a0e', 'china'],
+      ['three_kingdoms','삼국',    '위·촉·오 영웅들의 시대',                         '⚔️', '삼국시대',           9,  25, '#1e2e0e', 'china'],
+      ['tang',       '당',         '세계 최대 제국, 찬란한 문화',                    '👑', '당나라',             11, 26, '#2e1e1e', 'china'],
+      ['song',       '송',         '문치주의와 과학 기술의 황금기',                   '🧭', '송나라',             13, 27, '#0e2e2e', 'china'],
+      ['yuan',       '원',         '몽골 대제국의 중원 정복',                        '🏹', '원나라',             16, 28, '#1a0e2e', 'china'],
+      ['ming',       '명',         '한족의 부흥, 정화의 대항해',                     '⛵', '명나라',             19, 29, '#2e0e1e', 'china'],
+      ['qing',       '청',         '만주족의 마지막 왕조',                           '🐲', '청나라',             22, 30, '#1e0e2e', 'china'],
+    ];
+
+    for (const [key, name, desc, icon, era, lvl, order, bg, country] of newGroups) {
+      await pool.query(
+        'INSERT IGNORE INTO stage_groups (key_name, name, description, icon, era, required_level, display_order, bg_color, country) VALUES (?,?,?,?,?,?,?,?,?)',
+        [key, name, desc, icon, era, lvl, order, bg, country]
+      );
+    }
+
+    // 새 그룹의 스테이지 레벨 삽입 (stageData에서 일본/중국 키만)
+    const [newGRows] = await pool.query("SELECT id, key_name FROM stage_groups WHERE country IN ('japan','china') ORDER BY display_order");
+    const newGMap = {};
+    for (const g of newGRows) newGMap[g.key_name] = g.id;
+
+    const newGroupDungeonMap = {
+      'jomon':'forest','yayoi':'slime_cave','yamato':'cave','nara':'temple','heian':'spirit_forest',
+      'kamakura':'mountain','muromachi':'swamp','sengoku':'demon','edo':'goblin','meiji':'dragon',
+      'xia_shang':'forest','zhou':'cave','qin':'mountain','han':'slime_cave','three_kingdoms':'swamp',
+      'tang':'temple','song':'spirit_forest','yuan':'demon','ming':'goblin','qing':'dragon',
+    };
+
+    // stageData는 위에서 이미 정의됨 — 재정의 필요
+    const jpCnStageData = {
+      'jomon': [
+        { n:1,name:'토기의 마을',desc:'조몬 토기가 탄생한 원시 마을',boss:0,mc:2,lmin:1,lmax:2,exp:80,gold:40,w:8,h:8,base:'grass' },
+        { n:2,name:'패총 유적',desc:'조개더미 아래의 고대 유적',boss:0,mc:2,lmin:1,lmax:2,exp:90,gold:45,w:8,h:8,base:'grass' },
+        { n:3,name:'수렵의 숲',desc:'사슴과 멧돼지를 쫓던 숲',boss:0,mc:3,lmin:1,lmax:3,exp:100,gold:50,w:9,h:9,base:'grass' },
+        { n:4,name:'환상 열도',desc:'화산섬의 원시 전장',boss:0,mc:3,lmin:2,lmax:3,exp:110,gold:55,w:9,h:8,base:'stone' },
+        { n:5,name:'흑요석 광산',desc:'석기 재료를 캐는 광산',boss:0,mc:3,lmin:2,lmax:4,exp:120,gold:60,w:10,h:8,base:'stone' },
+        { n:6,name:'해안 동굴',desc:'바다 옆 동굴의 비밀',boss:0,mc:3,lmin:2,lmax:4,exp:130,gold:65,w:10,h:9,base:'stone' },
+        { n:7,name:'산나이마루야마',desc:'거대 취락 유적의 전장',boss:0,mc:4,lmin:3,lmax:5,exp:140,gold:70,w:10,h:10,base:'grass' },
+        { n:8,name:'석인상의 언덕',desc:'돌 조각상이 지키는 언덕',boss:0,mc:4,lmin:3,lmax:5,exp:155,gold:75,w:10,h:10,base:'stone' },
+        { n:9,name:'화산 분화구',desc:'지열이 솟아오르는 위험 지대',boss:0,mc:4,lmin:3,lmax:5,exp:170,gold:80,w:10,h:10,base:'stone' },
+        { n:10,name:'토우의 시련',desc:'조몬 수호신의 최종 시험',boss:1,mc:5,lmin:4,lmax:6,exp:250,gold:120,w:12,h:12,base:'grass' },
+      ],
+      'yayoi': [
+        { n:1,name:'요시노가리',desc:'환호 취락의 방어전',boss:0,mc:2,lmin:3,lmax:4,exp:100,gold:50,w:8,h:8,base:'grass' },
+        { n:2,name:'벼의 평야',desc:'벼농사가 시작된 평야',boss:0,mc:3,lmin:3,lmax:5,exp:110,gold:55,w:8,h:9,base:'grass' },
+        { n:3,name:'동탁 제단',desc:'청동 방울이 울리는 제단',boss:0,mc:3,lmin:4,lmax:5,exp:120,gold:60,w:9,h:9,base:'grass' },
+        { n:4,name:'나국 왕궁',desc:'금인을 받은 소국의 왕궁',boss:0,mc:3,lmin:4,lmax:6,exp:130,gold:65,w:10,h:9,base:'stone' },
+        { n:5,name:'부족 전쟁터',desc:'왜국 대란의 전장',boss:0,mc:3,lmin:4,lmax:6,exp:140,gold:70,w:10,h:10,base:'grass' },
+        { n:6,name:'철기 대장간',desc:'대륙에서 전해진 철기 기술',boss:0,mc:4,lmin:5,lmax:7,exp:155,gold:75,w:10,h:10,base:'stone' },
+        { n:7,name:'마쓰리 의식장',desc:'풍년을 비는 의식 중 전투',boss:0,mc:4,lmin:5,lmax:7,exp:170,gold:80,w:10,h:10,base:'grass' },
+        { n:8,name:'이토국 성벽',desc:'소국 연합의 방어선',boss:0,mc:4,lmin:5,lmax:8,exp:185,gold:90,w:10,h:10,base:'stone' },
+        { n:9,name:'야마타이국 입구',desc:'히미코 여왕의 도성',boss:0,mc:4,lmin:6,lmax:8,exp:200,gold:95,w:10,h:10,base:'stone' },
+        { n:10,name:'히미코의 결전',desc:'야마타이국 여왕의 시련',boss:1,mc:5,lmin:6,lmax:9,exp:300,gold:150,w:12,h:12,base:'grass' },
+      ],
+      'yamato': [
+        { n:1,name:'이즈모 신전',desc:'출운 대사의 신전 전투',boss:0,mc:3,lmin:5,lmax:7,exp:140,gold:70,w:9,h:9,base:'stone' },
+        { n:2,name:'미와산 기슭',desc:'야마토 건국의 성산',boss:0,mc:3,lmin:5,lmax:7,exp:150,gold:75,w:9,h:9,base:'grass' },
+        { n:3,name:'전방후원분',desc:'거대 고분의 수호자',boss:0,mc:3,lmin:6,lmax:8,exp:165,gold:80,w:10,h:10,base:'grass' },
+        { n:4,name:'하니와 벌판',desc:'토기 인형이 지키는 벌판',boss:0,mc:3,lmin:6,lmax:8,exp:175,gold:85,w:10,h:10,base:'grass' },
+        { n:5,name:'아스카 궁전',desc:'아스카 시대의 왕궁 전투',boss:0,mc:4,lmin:7,lmax:9,exp:190,gold:90,w:10,h:10,base:'stone' },
+        { n:6,name:'소가 저택',desc:'호족 소가씨의 거대 저택',boss:0,mc:4,lmin:7,lmax:9,exp:205,gold:95,w:10,h:10,base:'stone' },
+        { n:7,name:'하쿠손코 전투',desc:'백촌강 전투의 일본 측',boss:0,mc:4,lmin:7,lmax:10,exp:220,gold:100,w:10,h:10,base:'grass' },
+        { n:8,name:'다이카 개신',desc:'중앙집권화의 혼란',boss:0,mc:4,lmin:8,lmax:10,exp:235,gold:110,w:10,h:10,base:'stone' },
+        { n:9,name:'진신의 난',desc:'황위 계승 전쟁',boss:0,mc:4,lmin:8,lmax:11,exp:250,gold:115,w:10,h:10,base:'grass' },
+        { n:10,name:'야마토타케루 결전',desc:'일본 무신의 전설적 전투',boss:0,mc:5,lmin:8,lmax:11,exp:280,gold:125,w:12,h:10,base:'grass' },
+        { n:11,name:'쇼토쿠 태자 시련',desc:'불교 수호자의 시험',boss:0,mc:5,lmin:9,lmax:11,exp:310,gold:135,w:12,h:10,base:'stone' },
+        { n:12,name:'천손강림 결전',desc:'신화 시대의 최종 전투',boss:1,mc:6,lmin:9,lmax:11,exp:400,gold:200,w:12,h:12,base:'stone' },
+      ],
+      'nara': [
+        { n:1,name:'헤이조궁',desc:'나라 수도의 궁전 전투',boss:0,mc:3,lmin:7,lmax:9,exp:170,gold:85,w:9,h:9,base:'stone' },
+        { n:2,name:'도다이지',desc:'대불이 있는 거대 사원',boss:0,mc:3,lmin:7,lmax:9,exp:180,gold:90,w:9,h:9,base:'stone' },
+        { n:3,name:'쇼소인 보물고',desc:'실크로드 보물이 잠든 창고',boss:0,mc:3,lmin:8,lmax:10,exp:195,gold:95,w:10,h:10,base:'stone' },
+        { n:4,name:'가스가 신사',desc:'사슴이 지키는 신사',boss:0,mc:3,lmin:8,lmax:10,exp:205,gold:100,w:10,h:10,base:'grass' },
+        { n:5,name:'고키시치도',desc:'칠도의 관도를 순찰',boss:0,mc:4,lmin:8,lmax:11,exp:220,gold:105,w:10,h:10,base:'grass' },
+        { n:6,name:'만요슈 정원',desc:'시가 흐르는 정원의 전투',boss:0,mc:4,lmin:9,lmax:11,exp:235,gold:110,w:10,h:10,base:'grass' },
+        { n:7,name:'감진의 도래',desc:'중국 고승의 시련',boss:0,mc:4,lmin:9,lmax:12,exp:250,gold:120,w:10,h:10,base:'stone' },
+        { n:8,name:'후지와라 저택',desc:'세도가 후지와라의 본거지',boss:0,mc:4,lmin:9,lmax:12,exp:265,gold:125,w:10,h:10,base:'stone' },
+        { n:9,name:'다카마가하라',desc:'신들의 고원 전투',boss:0,mc:5,lmin:10,lmax:13,exp:280,gold:135,w:12,h:10,base:'grass' },
+        { n:10,name:'나라 대불 결전',desc:'대불의 수호신 최종 전투',boss:1,mc:5,lmin:10,lmax:13,exp:420,gold:210,w:12,h:12,base:'stone' },
+      ],
+      'heian': [
+        { n:1,name:'헤이안쿄 거리',desc:'귀족 도시의 야간 전투',boss:0,mc:3,lmin:9,lmax:11,exp:200,gold:100,w:9,h:9,base:'stone' },
+        { n:2,name:'겐지 저택',desc:'빛의 공자 겐지의 저택',boss:0,mc:3,lmin:9,lmax:11,exp:210,gold:105,w:9,h:9,base:'stone' },
+        { n:3,name:'기요미즈데라',desc:'청수사의 무대 위 전투',boss:0,mc:3,lmin:10,lmax:12,exp:225,gold:110,w:10,h:10,base:'stone' },
+        { n:4,name:'후시미이나리',desc:'천 개의 도리이 사이 전투',boss:0,mc:3,lmin:10,lmax:12,exp:235,gold:115,w:10,h:10,base:'stone' },
+        { n:5,name:'오닌의 숲',desc:'요괴가 출몰하는 밤의 숲',boss:0,mc:4,lmin:10,lmax:13,exp:250,gold:120,w:10,h:10,base:'dark' },
+        { n:6,name:'슈겐도 수행장',desc:'산악 수행자의 전장',boss:0,mc:4,lmin:11,lmax:13,exp:265,gold:130,w:10,h:10,base:'stone' },
+        { n:7,name:'미나모토 진영',desc:'무사의 시대를 연 겐지 진영',boss:0,mc:4,lmin:11,lmax:14,exp:280,gold:135,w:10,h:10,base:'grass' },
+        { n:8,name:'다이라 해안',desc:'헤이케의 해안 방어선',boss:0,mc:4,lmin:11,lmax:14,exp:295,gold:140,w:10,h:10,base:'stone' },
+        { n:9,name:'단노우라 전야',desc:'겐페이 전쟁 최후의 해전',boss:0,mc:5,lmin:12,lmax:15,exp:310,gold:150,w:12,h:10,base:'stone' },
+        { n:10,name:'아베노 세이메이',desc:'음양사 세이메이의 시련',boss:0,mc:5,lmin:12,lmax:15,exp:330,gold:155,w:12,h:10,base:'dark' },
+        { n:11,name:'슈텐도지 토벌',desc:'대요괴 슈텐도지 전투',boss:0,mc:5,lmin:13,lmax:15,exp:350,gold:165,w:12,h:10,base:'dark' },
+        { n:12,name:'헤이안 최종 결전',desc:'귀족 시대 종말의 전투',boss:1,mc:6,lmin:13,lmax:15,exp:500,gold:250,w:12,h:12,base:'dark' },
+      ],
+      'kamakura': [
+        { n:1,name:'가마쿠라 거리',desc:'막부의 수도 카마쿠라',boss:0,mc:3,lmin:11,lmax:13,exp:240,gold:120,w:9,h:9,base:'stone' },
+        { n:2,name:'쓰루가오카',desc:'학강 팔번궁의 전투',boss:0,mc:3,lmin:11,lmax:13,exp:255,gold:125,w:10,h:10,base:'stone' },
+        { n:3,name:'대불 앞',desc:'가마쿠라 대불의 수호',boss:0,mc:3,lmin:12,lmax:14,exp:270,gold:130,w:10,h:10,base:'stone' },
+        { n:4,name:'기리시마 산성',desc:'산악 요새의 방어전',boss:0,mc:4,lmin:12,lmax:14,exp:285,gold:140,w:10,h:10,base:'stone' },
+        { n:5,name:'겐코의 난',desc:'고다이고 천황의 반격',boss:0,mc:4,lmin:12,lmax:15,exp:300,gold:145,w:10,h:10,base:'grass' },
+        { n:6,name:'몽골 습래(1차)',desc:'원나라 함대에 맞선 방어',boss:0,mc:4,lmin:13,lmax:15,exp:315,gold:155,w:10,h:10,base:'stone' },
+        { n:7,name:'하카타만 방루',desc:'방루를 사이에 둔 전투',boss:0,mc:4,lmin:13,lmax:16,exp:330,gold:160,w:10,h:10,base:'stone' },
+        { n:8,name:'몽골 습래(2차)',desc:'신풍의 전장',boss:0,mc:5,lmin:14,lmax:16,exp:350,gold:170,w:10,h:10,base:'stone' },
+        { n:9,name:'나가사키 항',desc:'해상 결전의 전장',boss:0,mc:5,lmin:14,lmax:17,exp:370,gold:180,w:12,h:10,base:'stone' },
+        { n:10,name:'호조 집권 결전',desc:'집권의 최후와 막부 붕괴',boss:1,mc:6,lmin:15,lmax:17,exp:550,gold:275,w:12,h:12,base:'stone' },
+      ],
+      'muromachi': [
+        { n:1,name:'금각사',desc:'킨카쿠지의 황금 전장',boss:0,mc:3,lmin:13,lmax:15,exp:280,gold:140,w:9,h:9,base:'stone' },
+        { n:2,name:'은각사',desc:'긴카쿠지의 은빛 전장',boss:0,mc:3,lmin:13,lmax:15,exp:295,gold:145,w:10,h:10,base:'stone' },
+        { n:3,name:'남조 산성',desc:'남북조 분열의 전장',boss:0,mc:3,lmin:14,lmax:16,exp:310,gold:155,w:10,h:10,base:'stone' },
+        { n:4,name:'노 무대',desc:'노가쿠 무대 위의 전투',boss:0,mc:4,lmin:14,lmax:16,exp:330,gold:160,w:10,h:10,base:'stone' },
+        { n:5,name:'정원사의 전투',desc:'가레산스이 정원의 수호',boss:0,mc:4,lmin:14,lmax:17,exp:345,gold:170,w:10,h:10,base:'stone' },
+        { n:6,name:'이코 잇키',desc:'잇코종 봉기의 전장',boss:0,mc:4,lmin:15,lmax:17,exp:360,gold:175,w:10,h:10,base:'grass' },
+        { n:7,name:'왜구 소탕',desc:'해적 왜구의 근거지',boss:0,mc:4,lmin:15,lmax:18,exp:380,gold:185,w:10,h:10,base:'stone' },
+        { n:8,name:'오닌의 난',desc:'교토를 태운 대란',boss:0,mc:5,lmin:16,lmax:18,exp:400,gold:195,w:10,h:10,base:'dark' },
+        { n:9,name:'사카이 항구',desc:'자치 도시의 방어전',boss:0,mc:5,lmin:16,lmax:19,exp:420,gold:205,w:12,h:10,base:'stone' },
+        { n:10,name:'쿠스노키 결전',desc:'충신 쿠스노키의 최후',boss:0,mc:5,lmin:16,lmax:19,exp:440,gold:210,w:12,h:10,base:'grass' },
+        { n:11,name:'아시카가 결전',desc:'무로마치 막부 최후',boss:1,mc:6,lmin:17,lmax:19,exp:600,gold:300,w:12,h:12,base:'stone' },
+      ],
+      'sengoku': [
+        { n:1,name:'오와리 평야',desc:'오다 노부나가의 출발점',boss:0,mc:3,lmin:16,lmax:18,exp:350,gold:175,w:10,h:10,base:'grass' },
+        { n:2,name:'오케하자마',desc:'기습으로 대군을 격파한 전투',boss:0,mc:3,lmin:16,lmax:18,exp:365,gold:180,w:10,h:10,base:'grass' },
+        { n:3,name:'나가시노 전투',desc:'철포대의 3단 사격전',boss:0,mc:4,lmin:17,lmax:19,exp:380,gold:190,w:10,h:10,base:'grass' },
+        { n:4,name:'아즈치성',desc:'노부나가의 거대 천수각',boss:0,mc:4,lmin:17,lmax:19,exp:400,gold:195,w:10,h:10,base:'stone' },
+        { n:5,name:'혼노지의 변',desc:'배신의 불꽃이 타오른 사원',boss:0,mc:4,lmin:17,lmax:20,exp:415,gold:205,w:10,h:10,base:'dark' },
+        { n:6,name:'시즈가타케',desc:'히데요시의 통일 전쟁',boss:0,mc:4,lmin:18,lmax:20,exp:430,gold:210,w:10,h:10,base:'grass' },
+        { n:7,name:'오다와라 공성',desc:'호조씨 최후의 거성',boss:0,mc:4,lmin:18,lmax:21,exp:450,gold:220,w:10,h:10,base:'stone' },
+        { n:8,name:'조선 침략 진영',desc:'히데요시의 대륙 침공 거점',boss:0,mc:5,lmin:19,lmax:21,exp:470,gold:230,w:10,h:10,base:'stone' },
+        { n:9,name:'후시미성',desc:'히데요시 최후의 성',boss:0,mc:5,lmin:19,lmax:22,exp:490,gold:240,w:12,h:10,base:'stone' },
+        { n:10,name:'세키가하라 전야',desc:'천하 분수령의 전야',boss:0,mc:5,lmin:19,lmax:22,exp:510,gold:250,w:12,h:10,base:'grass' },
+        { n:11,name:'세키가하라 결전',desc:'동군 vs 서군 천하 결전',boss:0,mc:5,lmin:20,lmax:22,exp:530,gold:260,w:12,h:10,base:'grass' },
+        { n:12,name:'오사카 여름 진',desc:'도요토미 가문 최후의 전투',boss:0,mc:5,lmin:20,lmax:22,exp:550,gold:270,w:12,h:10,base:'stone' },
+        { n:13,name:'오다 노부나가 결전',desc:'제6천마왕의 최종 시련',boss:1,mc:6,lmin:21,lmax:22,exp:900,gold:450,w:14,h:12,base:'dark' },
+      ],
+      'edo': [
+        { n:1,name:'에도성 입구',desc:'도쿠가와의 거대 성곽',boss:0,mc:3,lmin:19,lmax:21,exp:420,gold:210,w:10,h:10,base:'stone' },
+        { n:2,name:'닛코 도쇼궁',desc:'이에야스의 영묘',boss:0,mc:3,lmin:19,lmax:21,exp:440,gold:215,w:10,h:10,base:'stone' },
+        { n:3,name:'요시와라 거리',desc:'환락가의 야간 전투',boss:0,mc:4,lmin:20,lmax:22,exp:460,gold:225,w:10,h:10,base:'stone' },
+        { n:4,name:'충신장 저택',desc:'47인의 낭인 습격',boss:0,mc:4,lmin:20,lmax:22,exp:480,gold:235,w:10,h:10,base:'stone' },
+        { n:5,name:'시마바라 전투',desc:'기독교도 봉기의 전장',boss:0,mc:4,lmin:20,lmax:23,exp:500,gold:245,w:10,h:10,base:'stone' },
+        { n:6,name:'데지마 무역관',desc:'네덜란드 무역의 거점',boss:0,mc:4,lmin:21,lmax:23,exp:520,gold:255,w:10,h:10,base:'stone' },
+        { n:7,name:'오쿠노호소미치',desc:'바쇼의 여행길 전투',boss:0,mc:4,lmin:21,lmax:24,exp:540,gold:265,w:10,h:10,base:'grass' },
+        { n:8,name:'페리 내항',desc:'흑선 쇼크의 전장',boss:0,mc:5,lmin:22,lmax:24,exp:560,gold:275,w:10,h:10,base:'stone' },
+        { n:9,name:'사쿠라다 문외',desc:'대로 이이 암살 현장',boss:0,mc:5,lmin:22,lmax:25,exp:580,gold:285,w:12,h:10,base:'stone' },
+        { n:10,name:'이케다야 사건',desc:'신선조 습격 사건',boss:0,mc:5,lmin:22,lmax:25,exp:600,gold:295,w:12,h:10,base:'stone' },
+        { n:11,name:'도바 후시미',desc:'보신전쟁의 서막',boss:0,mc:5,lmin:23,lmax:25,exp:620,gold:305,w:12,h:10,base:'grass' },
+        { n:12,name:'하코다테 전투',desc:'막부군 최후의 항전',boss:0,mc:5,lmin:23,lmax:25,exp:650,gold:320,w:12,h:10,base:'stone' },
+        { n:13,name:'에도 무혈개성',desc:'막부 종말의 전장',boss:0,mc:5,lmin:24,lmax:25,exp:680,gold:335,w:12,h:10,base:'stone' },
+        { n:14,name:'미야모토 무사시',desc:'최강 검객의 최종 결전',boss:1,mc:6,lmin:25,lmax:25,exp:1100,gold:550,w:14,h:14,base:'stone' },
+      ],
+      'meiji': [
+        { n:1,name:'메이지 궁',desc:'근대화의 상징',boss:0,mc:3,lmin:22,lmax:24,exp:500,gold:250,w:10,h:10,base:'stone' },
+        { n:2,name:'사이고의 거병',desc:'세이난 전쟁의 시작',boss:0,mc:3,lmin:22,lmax:24,exp:520,gold:260,w:10,h:10,base:'grass' },
+        { n:3,name:'시로야마 전투',desc:'사이고 다카모리 최후',boss:0,mc:4,lmin:23,lmax:25,exp:545,gold:270,w:10,h:10,base:'stone' },
+        { n:4,name:'동경 거리',desc:'서구화 물결의 도시',boss:0,mc:4,lmin:23,lmax:25,exp:565,gold:280,w:10,h:10,base:'stone' },
+        { n:5,name:'청일전쟁 진지',desc:'대륙 진출의 전장',boss:0,mc:4,lmin:24,lmax:26,exp:590,gold:295,w:10,h:10,base:'grass' },
+        { n:6,name:'뤼순 요새',desc:'러일전쟁의 격전지',boss:0,mc:4,lmin:24,lmax:26,exp:610,gold:305,w:10,h:10,base:'stone' },
+        { n:7,name:'쓰시마 해전',desc:'연합함대의 해전',boss:0,mc:5,lmin:24,lmax:27,exp:635,gold:315,w:10,h:10,base:'stone' },
+        { n:8,name:'다이쇼 데모크라시',desc:'대정 민주주의의 전장',boss:0,mc:5,lmin:25,lmax:27,exp:660,gold:330,w:10,h:10,base:'stone' },
+        { n:9,name:'관동대지진',desc:'재난 속의 혼란',boss:0,mc:5,lmin:25,lmax:28,exp:685,gold:340,w:12,h:10,base:'dark' },
+        { n:10,name:'2·26 사건',desc:'청년 장교의 반란',boss:0,mc:5,lmin:25,lmax:28,exp:710,gold:355,w:12,h:10,base:'stone' },
+        { n:11,name:'대본영',desc:'군국주의의 심장부',boss:0,mc:5,lmin:26,lmax:28,exp:740,gold:370,w:12,h:10,base:'stone' },
+        { n:12,name:'히로시마 전야',desc:'종전 직전의 전투',boss:0,mc:5,lmin:26,lmax:28,exp:770,gold:385,w:12,h:10,base:'dark' },
+        { n:13,name:'옥음방송',desc:'항복 직전의 최후 전투',boss:0,mc:6,lmin:27,lmax:28,exp:800,gold:400,w:12,h:12,base:'stone' },
+        { n:14,name:'사이고 다카모리',desc:'마지막 사무라이의 결전',boss:0,mc:6,lmin:27,lmax:28,exp:840,gold:420,w:12,h:12,base:'stone' },
+        { n:15,name:'일본 역사 최종전',desc:'일본 역사의 모든 힘이 모인 결전',boss:1,mc:6,lmin:28,lmax:28,exp:1800,gold:900,w:14,h:14,base:'dark' },
+      ],
+      'xia_shang': [
+        { n:1,name:'하왕조 도읍',desc:'대우가 세운 최초의 왕조',boss:0,mc:2,lmin:1,lmax:2,exp:80,gold:40,w:8,h:8,base:'grass' },
+        { n:2,name:'은허 유적',desc:'갑골문자가 발견된 상나라 수도',boss:0,mc:2,lmin:1,lmax:2,exp:90,gold:45,w:8,h:8,base:'stone' },
+        { n:3,name:'청동기 제단',desc:'제사에 쓰인 청동 예기의 전장',boss:0,mc:3,lmin:1,lmax:3,exp:100,gold:50,w:9,h:9,base:'stone' },
+        { n:4,name:'무정의 원정',desc:'상나라 무정 왕의 전쟁',boss:0,mc:3,lmin:2,lmax:3,exp:110,gold:55,w:9,h:8,base:'grass' },
+        { n:5,name:'사모무 대정',desc:'거대 청동 솥의 수호',boss:0,mc:3,lmin:2,lmax:4,exp:120,gold:60,w:10,h:8,base:'stone' },
+        { n:6,name:'달기의 궁전',desc:'요녀 달기의 마법 궁전',boss:0,mc:3,lmin:2,lmax:4,exp:130,gold:65,w:10,h:9,base:'dark' },
+        { n:7,name:'조가성',desc:'상나라 수도의 방어',boss:0,mc:4,lmin:3,lmax:5,exp:140,gold:70,w:10,h:10,base:'stone' },
+        { n:8,name:'목야 전야',desc:'주 무왕의 출전 전야',boss:0,mc:4,lmin:3,lmax:5,exp:155,gold:75,w:10,h:10,base:'grass' },
+        { n:9,name:'봉신대',desc:'신들을 봉인하는 전장',boss:0,mc:4,lmin:3,lmax:5,exp:170,gold:80,w:10,h:10,base:'dark' },
+        { n:10,name:'주왕의 최후',desc:'상나라 멸망의 결전',boss:1,mc:5,lmin:4,lmax:6,exp:250,gold:120,w:12,h:12,base:'dark' },
+      ],
+      'zhou': [
+        { n:1,name:'호경 도읍',desc:'서주의 수도',boss:0,mc:2,lmin:3,lmax:4,exp:100,gold:50,w:8,h:8,base:'stone' },
+        { n:2,name:'봉화대',desc:'봉화를 올린 포사의 전장',boss:0,mc:3,lmin:3,lmax:5,exp:110,gold:55,w:8,h:9,base:'stone' },
+        { n:3,name:'낙읍 천도',desc:'동주로의 천도',boss:0,mc:3,lmin:4,lmax:5,exp:120,gold:60,w:9,h:9,base:'stone' },
+        { n:4,name:'제환공의 회맹',desc:'첫 번째 패자의 전장',boss:0,mc:3,lmin:4,lmax:6,exp:130,gold:65,w:10,h:9,base:'grass' },
+        { n:5,name:'진문공의 전장',desc:'19년 유랑 끝의 복귀',boss:0,mc:3,lmin:4,lmax:6,exp:140,gold:70,w:10,h:10,base:'grass' },
+        { n:6,name:'오월동주',desc:'오나라와 월나라의 쟁패',boss:0,mc:4,lmin:5,lmax:7,exp:155,gold:75,w:10,h:10,base:'grass' },
+        { n:7,name:'손자병법 연무장',desc:'손자가 훈련한 전장',boss:0,mc:4,lmin:5,lmax:7,exp:170,gold:80,w:10,h:10,base:'grass' },
+        { n:8,name:'장평 전야',desc:'장평대전 직전의 전투',boss:0,mc:4,lmin:5,lmax:8,exp:185,gold:90,w:10,h:10,base:'stone' },
+        { n:9,name:'합종연횡',desc:'종횡가들의 책략 전장',boss:0,mc:4,lmin:6,lmax:8,exp:200,gold:95,w:10,h:10,base:'grass' },
+        { n:10,name:'제자백가 결전',desc:'사상가들의 힘이 모인 결전',boss:1,mc:5,lmin:6,lmax:9,exp:300,gold:150,w:12,h:12,base:'grass' },
+      ],
+      'qin': [
+        { n:1,name:'함양 궁전',desc:'진나라 수도의 궁전',boss:0,mc:3,lmin:5,lmax:7,exp:140,gold:70,w:9,h:9,base:'stone' },
+        { n:2,name:'만리장성 공사장',desc:'장성 건설 현장의 전투',boss:0,mc:3,lmin:5,lmax:7,exp:150,gold:75,w:9,h:9,base:'stone' },
+        { n:3,name:'분서갱유',desc:'사상 탄압의 현장',boss:0,mc:3,lmin:6,lmax:8,exp:165,gold:80,w:10,h:10,base:'dark' },
+        { n:4,name:'아방궁',desc:'거대한 궁전의 전투',boss:0,mc:3,lmin:6,lmax:8,exp:175,gold:85,w:10,h:10,base:'stone' },
+        { n:5,name:'형가의 암살',desc:'자객 형가의 전장',boss:0,mc:4,lmin:7,lmax:9,exp:190,gold:90,w:10,h:10,base:'stone' },
+        { n:6,name:'영정 통일전',desc:'6국을 멸한 통일 전쟁',boss:0,mc:4,lmin:7,lmax:9,exp:205,gold:95,w:10,h:10,base:'grass' },
+        { n:7,name:'직도 행군',desc:'시황제의 군사 도로',boss:0,mc:4,lmin:7,lmax:10,exp:220,gold:100,w:10,h:10,base:'grass' },
+        { n:8,name:'진시황릉',desc:'시황제의 지하 궁전',boss:0,mc:4,lmin:8,lmax:10,exp:235,gold:110,w:10,h:10,base:'dark' },
+        { n:9,name:'대택향 봉기',desc:'진승오광의 반란',boss:0,mc:4,lmin:8,lmax:11,exp:250,gold:115,w:10,h:10,base:'grass' },
+        { n:10,name:'초한쟁패 전야',desc:'유방과 항우의 결전 전야',boss:0,mc:5,lmin:8,lmax:11,exp:280,gold:125,w:12,h:10,base:'grass' },
+        { n:11,name:'홍문의 연회',desc:'위기일발의 연회장',boss:0,mc:5,lmin:9,lmax:11,exp:310,gold:135,w:12,h:10,base:'stone' },
+        { n:12,name:'병마용 결전',desc:'8천 병마용의 최종 시련',boss:1,mc:6,lmin:9,lmax:11,exp:400,gold:200,w:12,h:12,base:'stone' },
+      ],
+      'han': [
+        { n:1,name:'장안 도읍',desc:'한 고조 유방의 수도',boss:0,mc:3,lmin:7,lmax:9,exp:170,gold:85,w:9,h:9,base:'stone' },
+        { n:2,name:'초한 전장',desc:'해하 전투의 재현',boss:0,mc:3,lmin:7,lmax:9,exp:180,gold:90,w:9,h:9,base:'grass' },
+        { n:3,name:'흉노 접경',desc:'북방 유목민과의 전투',boss:0,mc:3,lmin:8,lmax:10,exp:195,gold:95,w:10,h:10,base:'grass' },
+        { n:4,name:'장건의 서역',desc:'실크로드 개척의 전장',boss:0,mc:3,lmin:8,lmax:10,exp:205,gold:100,w:10,h:10,base:'dirt' },
+        { n:5,name:'무제의 원정',desc:'한 무제의 흉노 원정',boss:0,mc:4,lmin:8,lmax:11,exp:220,gold:105,w:10,h:10,base:'grass' },
+        { n:6,name:'왕망의 신',desc:'신나라의 혼란',boss:0,mc:4,lmin:9,lmax:11,exp:235,gold:110,w:10,h:10,base:'stone' },
+        { n:7,name:'적미군 봉기',desc:'농민 반란의 전장',boss:0,mc:4,lmin:9,lmax:12,exp:250,gold:120,w:10,h:10,base:'grass' },
+        { n:8,name:'낙양 궁전',desc:'후한의 수도 방어',boss:0,mc:4,lmin:9,lmax:12,exp:265,gold:125,w:10,h:10,base:'stone' },
+        { n:9,name:'황건의 난',desc:'태평도 봉기의 전장',boss:0,mc:5,lmin:10,lmax:13,exp:280,gold:135,w:12,h:10,base:'grass' },
+        { n:10,name:'한신의 결전',desc:'국사무쌍 한신의 시련',boss:1,mc:5,lmin:10,lmax:13,exp:420,gold:210,w:12,h:12,base:'grass' },
+      ],
+      'three_kingdoms': [
+        { n:1,name:'도원결의',desc:'유비·관우·장비의 맹세',boss:0,mc:3,lmin:9,lmax:11,exp:200,gold:100,w:9,h:9,base:'grass' },
+        { n:2,name:'호로관 전투',desc:'여포의 돌진',boss:0,mc:3,lmin:9,lmax:11,exp:210,gold:105,w:9,h:9,base:'stone' },
+        { n:3,name:'관도대전',desc:'조조 vs 원소의 결전',boss:0,mc:3,lmin:10,lmax:12,exp:225,gold:110,w:10,h:10,base:'grass' },
+        { n:4,name:'삼고초려',desc:'제갈량을 찾아가는 전장',boss:0,mc:3,lmin:10,lmax:12,exp:235,gold:115,w:10,h:10,base:'grass' },
+        { n:5,name:'적벽대전',desc:'화공으로 조조 대군을 격파',boss:0,mc:4,lmin:10,lmax:13,exp:250,gold:120,w:10,h:10,base:'stone' },
+        { n:6,name:'형주 쟁탈',desc:'삼국이 뒤엉킨 요충지',boss:0,mc:4,lmin:11,lmax:13,exp:265,gold:130,w:10,h:10,base:'grass' },
+        { n:7,name:'한중 공방',desc:'유비의 한중왕 등극전',boss:0,mc:4,lmin:11,lmax:14,exp:280,gold:135,w:10,h:10,base:'stone' },
+        { n:8,name:'이릉 전투',desc:'유비의 복수전',boss:0,mc:4,lmin:11,lmax:14,exp:295,gold:140,w:10,h:10,base:'grass' },
+        { n:9,name:'출사표',desc:'제갈량의 북벌 전장',boss:0,mc:5,lmin:12,lmax:15,exp:310,gold:150,w:12,h:10,base:'grass' },
+        { n:10,name:'오장원',desc:'제갈량 최후의 전장',boss:0,mc:5,lmin:12,lmax:15,exp:330,gold:155,w:12,h:10,base:'grass' },
+        { n:11,name:'사마의의 대두',desc:'삼국 통일의 서막',boss:0,mc:5,lmin:13,lmax:15,exp:350,gold:165,w:12,h:10,base:'stone' },
+        { n:12,name:'여포 결전',desc:'삼국 최강 무장의 시련',boss:1,mc:6,lmin:13,lmax:15,exp:500,gold:250,w:12,h:12,base:'grass' },
+      ],
+      'tang': [
+        { n:1,name:'장안 성문',desc:'세계 최대 도시의 입구',boss:0,mc:3,lmin:11,lmax:13,exp:240,gold:120,w:9,h:9,base:'stone' },
+        { n:2,name:'현무문의 변',desc:'태종의 쿠데타 현장',boss:0,mc:3,lmin:11,lmax:13,exp:255,gold:125,w:10,h:10,base:'stone' },
+        { n:3,name:'정관의 치',desc:'태평성대의 시련',boss:0,mc:3,lmin:12,lmax:14,exp:270,gold:130,w:10,h:10,base:'stone' },
+        { n:4,name:'서역 원정',desc:'서돌궐 정벌의 전장',boss:0,mc:4,lmin:12,lmax:14,exp:285,gold:140,w:10,h:10,base:'dirt' },
+        { n:5,name:'측천무후 궁전',desc:'여황제의 궁전 전투',boss:0,mc:4,lmin:12,lmax:15,exp:300,gold:145,w:10,h:10,base:'stone' },
+        { n:6,name:'현종의 화청궁',desc:'양귀비와 현종의 전장',boss:0,mc:4,lmin:13,lmax:15,exp:315,gold:155,w:10,h:10,base:'stone' },
+        { n:7,name:'안사의 난',desc:'안록산의 대반란',boss:0,mc:4,lmin:13,lmax:16,exp:330,gold:160,w:10,h:10,base:'grass' },
+        { n:8,name:'마외역의 비극',desc:'양귀비의 비극이 서린 역참',boss:0,mc:5,lmin:14,lmax:16,exp:350,gold:170,w:10,h:10,base:'stone' },
+        { n:9,name:'황소의 난',desc:'농민 반란의 불길',boss:0,mc:5,lmin:14,lmax:17,exp:370,gold:180,w:12,h:10,base:'grass' },
+        { n:10,name:'당 최후의 전투',desc:'대제국의 멸망',boss:1,mc:6,lmin:15,lmax:17,exp:550,gold:275,w:12,h:12,base:'stone' },
+      ],
+      'song': [
+        { n:1,name:'개봉 도성',desc:'북송의 번화한 수도',boss:0,mc:3,lmin:13,lmax:15,exp:280,gold:140,w:9,h:9,base:'stone' },
+        { n:2,name:'양가장 전투',desc:'양가장 무인의 전장',boss:0,mc:3,lmin:13,lmax:15,exp:295,gold:145,w:10,h:10,base:'grass' },
+        { n:3,name:'왕안석 변법',desc:'개혁의 전장',boss:0,mc:3,lmin:14,lmax:16,exp:310,gold:155,w:10,h:10,base:'stone' },
+        { n:4,name:'청명상하도',desc:'그림 속 도시의 전투',boss:0,mc:4,lmin:14,lmax:16,exp:330,gold:160,w:10,h:10,base:'stone' },
+        { n:5,name:'악비의 북벌',desc:'정충보국의 전장',boss:0,mc:4,lmin:14,lmax:17,exp:345,gold:170,w:10,h:10,base:'grass' },
+        { n:6,name:'정강의 변',desc:'금나라 침공의 전장',boss:0,mc:4,lmin:15,lmax:17,exp:360,gold:175,w:10,h:10,base:'stone' },
+        { n:7,name:'임안 행재소',desc:'남송의 임시 수도',boss:0,mc:4,lmin:15,lmax:18,exp:380,gold:185,w:10,h:10,base:'stone' },
+        { n:8,name:'양양 공방',desc:'6년간의 대공성전',boss:0,mc:5,lmin:16,lmax:18,exp:400,gold:195,w:10,h:10,base:'stone' },
+        { n:9,name:'교지 원정',desc:'남방 원정의 전장',boss:0,mc:5,lmin:16,lmax:19,exp:420,gold:205,w:12,h:10,base:'grass' },
+        { n:10,name:'애산 해전',desc:'남송 최후의 해전',boss:0,mc:5,lmin:16,lmax:19,exp:440,gold:210,w:12,h:10,base:'stone' },
+        { n:11,name:'문천상의 결의',desc:'충신의 마지막 저항',boss:0,mc:5,lmin:17,lmax:19,exp:460,gold:220,w:12,h:10,base:'stone' },
+        { n:12,name:'악비 결전',desc:'민족 영웅 악비의 최종 시련',boss:1,mc:6,lmin:18,lmax:19,exp:650,gold:325,w:14,h:12,base:'grass' },
+      ],
+      'yuan': [
+        { n:1,name:'대도(베이징)',desc:'쿠빌라이의 수도',boss:0,mc:3,lmin:16,lmax:18,exp:350,gold:175,w:10,h:10,base:'stone' },
+        { n:2,name:'초원의 진격',desc:'몽골 기마대의 돌진',boss:0,mc:3,lmin:16,lmax:18,exp:365,gold:180,w:10,h:10,base:'grass' },
+        { n:3,name:'서하 정벌',desc:'서하 멸망의 전장',boss:0,mc:4,lmin:17,lmax:19,exp:380,gold:190,w:10,h:10,base:'grass' },
+        { n:4,name:'금 멸망전',desc:'여진 금나라 최후',boss:0,mc:4,lmin:17,lmax:19,exp:400,gold:195,w:10,h:10,base:'stone' },
+        { n:5,name:'바그다드 공성',desc:'아바스 왕조 멸망의 전장',boss:0,mc:4,lmin:17,lmax:20,exp:415,gold:205,w:10,h:10,base:'stone' },
+        { n:6,name:'카미카제(신풍)',desc:'일본 침공의 전장',boss:0,mc:4,lmin:18,lmax:20,exp:430,gold:210,w:10,h:10,base:'stone' },
+        { n:7,name:'대운하',desc:'대운하 위의 해상 전투',boss:0,mc:4,lmin:18,lmax:21,exp:450,gold:220,w:10,h:10,base:'water' },
+        { n:8,name:'마르코 폴로의 길',desc:'동서 교역로의 전장',boss:0,mc:5,lmin:19,lmax:21,exp:470,gold:230,w:10,h:10,base:'stone' },
+        { n:9,name:'홍건적의 난',desc:'원나라 말기 농민 반란',boss:0,mc:5,lmin:19,lmax:22,exp:490,gold:240,w:12,h:10,base:'grass' },
+        { n:10,name:'칭기즈칸 결전',desc:'대정복자의 최종 시련',boss:1,mc:6,lmin:20,lmax:22,exp:900,gold:450,w:14,h:12,base:'grass' },
+      ],
+      'ming': [
+        { n:1,name:'응천부(난징)',desc:'주원장의 수도',boss:0,mc:3,lmin:19,lmax:21,exp:420,gold:210,w:10,h:10,base:'stone' },
+        { n:2,name:'북경 천도',desc:'영락제의 새 수도',boss:0,mc:3,lmin:19,lmax:21,exp:440,gold:215,w:10,h:10,base:'stone' },
+        { n:3,name:'자금성',desc:'황제의 궁전 전투',boss:0,mc:4,lmin:20,lmax:22,exp:460,gold:225,w:10,h:10,base:'stone' },
+        { n:4,name:'정화의 항해',desc:'대항해 원정의 전장',boss:0,mc:4,lmin:20,lmax:22,exp:480,gold:235,w:10,h:10,base:'stone' },
+        { n:5,name:'토목의 변',desc:'오이라트에 황제가 포로',boss:0,mc:4,lmin:20,lmax:23,exp:500,gold:245,w:10,h:10,base:'grass' },
+        { n:6,name:'만리장성 방어',desc:'북방 유목민 침입 방어',boss:0,mc:4,lmin:21,lmax:23,exp:520,gold:255,w:10,h:10,base:'stone' },
+        { n:7,name:'왜구 소탕',desc:'척계광의 왜구 토벌',boss:0,mc:4,lmin:21,lmax:24,exp:540,gold:265,w:10,h:10,base:'stone' },
+        { n:8,name:'임진왜란 참전',desc:'조선 구원의 원정',boss:0,mc:5,lmin:22,lmax:24,exp:560,gold:275,w:10,h:10,base:'grass' },
+        { n:9,name:'이자성 봉기',desc:'농민 반란의 불꽃',boss:0,mc:5,lmin:22,lmax:25,exp:580,gold:285,w:12,h:10,base:'grass' },
+        { n:10,name:'산해관 전투',desc:'오삼계의 결단',boss:0,mc:5,lmin:22,lmax:25,exp:600,gold:295,w:12,h:10,base:'stone' },
+        { n:11,name:'정성공 해전',desc:'대만 탈환의 해전',boss:0,mc:5,lmin:23,lmax:25,exp:620,gold:305,w:12,h:10,base:'stone' },
+        { n:12,name:'자금성 함락',desc:'명 왕조 최후의 날',boss:0,mc:5,lmin:23,lmax:25,exp:650,gold:320,w:12,h:10,base:'stone' },
+        { n:13,name:'영락제의 북벌',desc:'영락대제의 몽골 원정',boss:0,mc:5,lmin:24,lmax:25,exp:680,gold:335,w:12,h:10,base:'grass' },
+        { n:14,name:'주원장 결전',desc:'걸인에서 황제까지, 창업자의 시련',boss:1,mc:6,lmin:25,lmax:25,exp:1100,gold:550,w:14,h:14,base:'stone' },
+      ],
+      'qing': [
+        { n:1,name:'심양 궁전',desc:'후금의 수도',boss:0,mc:3,lmin:22,lmax:24,exp:500,gold:250,w:10,h:10,base:'stone' },
+        { n:2,name:'산해관 통과',desc:'만주족의 중원 진출',boss:0,mc:3,lmin:22,lmax:24,exp:520,gold:260,w:10,h:10,base:'stone' },
+        { n:3,name:'강희제 친정',desc:'삼번의 난 진압',boss:0,mc:4,lmin:23,lmax:25,exp:545,gold:270,w:10,h:10,base:'grass' },
+        { n:4,name:'건륭제 남순',desc:'전성기의 순행 전장',boss:0,mc:4,lmin:23,lmax:25,exp:565,gold:280,w:10,h:10,base:'stone' },
+        { n:5,name:'아편전쟁',desc:'영국과의 충돌',boss:0,mc:4,lmin:24,lmax:26,exp:590,gold:295,w:10,h:10,base:'stone' },
+        { n:6,name:'태평천국',desc:'홍수전의 난',boss:0,mc:4,lmin:24,lmax:26,exp:610,gold:305,w:10,h:10,base:'grass' },
+        { n:7,name:'양무운동',desc:'근대화 시도의 전장',boss:0,mc:5,lmin:24,lmax:27,exp:635,gold:315,w:10,h:10,base:'stone' },
+        { n:8,name:'무술변법',desc:'100일 개혁의 전장',boss:0,mc:5,lmin:25,lmax:27,exp:660,gold:330,w:10,h:10,base:'stone' },
+        { n:9,name:'의화단 사건',desc:'반외세 봉기의 전장',boss:0,mc:5,lmin:25,lmax:28,exp:685,gold:340,w:12,h:10,base:'stone' },
+        { n:10,name:'신해혁명 전야',desc:'왕조 붕괴의 전장',boss:0,mc:5,lmin:25,lmax:28,exp:710,gold:355,w:12,h:10,base:'stone' },
+        { n:11,name:'무창 봉기',desc:'혁명의 첫 총성',boss:0,mc:5,lmin:26,lmax:28,exp:740,gold:370,w:12,h:10,base:'stone' },
+        { n:12,name:'자금성 퇴위',desc:'마지막 황제의 퇴위',boss:0,mc:5,lmin:26,lmax:28,exp:770,gold:385,w:12,h:10,base:'stone' },
+        { n:13,name:'손문의 결의',desc:'공화국 건국의 전투',boss:0,mc:6,lmin:27,lmax:28,exp:800,gold:400,w:12,h:12,base:'stone' },
+        { n:14,name:'누르하치의 굴기',desc:'만주족 창업자의 전투',boss:0,mc:6,lmin:27,lmax:28,exp:840,gold:420,w:12,h:12,base:'stone' },
+        { n:15,name:'중국 역사 최종전',desc:'중국 역사의 모든 힘이 모인 결전',boss:1,mc:6,lmin:28,lmax:28,exp:1800,gold:900,w:14,h:14,base:'dark' },
+      ],
+    };
+
+    for (const [groupKey, stages] of Object.entries(jpCnStageData)) {
+      const groupId = newGMap[groupKey];
+      if (!groupId) continue;
+      const dungeonKey = newGroupDungeonMap[groupKey] || 'forest';
 
       for (const s of stages) {
         const tileOverrides = generateMapOverrides(s.w, s.h, s.base, s.n, !!s.boss);
@@ -2403,7 +3630,197 @@ async function initialize() {
     },
   };
 
-  for (const [dungeonKey, stages] of Object.entries(dungeonStageData)) {
+  // 나라별 던전 스테이지 데이터
+  const countryDungeonStageData = {
+    // === 한국 던전 ===
+    kr_forest: {
+      1: { name: '장승 길목', desc: '이끼 낀 장승이 양쪽에 서 있는 숲 입구. 무당이 매단 오색 천이 바람에 펄럭인다.' },
+      2: { name: '도깨비 숲', desc: '고목 사이로 도깨비불이 하나둘 떠오른다. 발걸음 소리에 깔깔대는 웃음소리가 섞인다.' },
+      3: { name: '달빛 제단', desc: '보름달 아래 돌로 쌓은 제단이 은빛으로 빛난다. 산짐승의 기운이 제단 주위를 맴돈다.' },
+      4: { name: '구미호 영역', desc: '아홉 갈래 꼬리의 그림자가 나뭇잎 사이로 스친다. 매혹적인 향기가 판단력을 흐린다.' },
+      5: { name: '독안개 늪', desc: '수렁에서 피어오르는 독한 안개. 도깨비불에 이끌려 들어가면 빠져나올 수 없다.' },
+      6: { name: '신목 동굴', desc: '수백 년 은행나무 뿌리가 만든 동굴. 나무 정령의 숨결이 나뭇잎을 통해 속삭인다.' },
+      7: { name: '호랑이 고개', desc: '바위에 깊은 발톱 자국이 남아 있다. 으르렁거리는 울림이 계곡을 타고 퍼져온다.' },
+      8: { name: '무당골', desc: '깨진 부적과 놋쇠 방울이 뒹구는 버려진 굿당. 원혼의 기운이 공간을 지배한다.' },
+      9: { name: '영혼의 경계', desc: '이승과 저승의 경계가 흐려지는 지대. 정처 없이 떠도는 혼백들이 눈에 보이기 시작한다.' },
+      10: { name: '산군 호환', desc: '산을 다스리는 거대 백호가 포효하며 나타난다. 숲 전체가 진동하는 최종 보스전.' },
+    },
+    kr_mountain: {
+      1: { name: '돌계단', desc: '이끼 낀 돌계단으로 시작되는 산길. 절 가는 길에 걸린 기도 깃발이 아침 안개 속에 흔들린다.' },
+      2: { name: '바위 절벽', desc: '깎아지른 절벽을 따라 난 좁은 길. 아래는 구름바다, 독수리가 머리 위를 선회한다.' },
+      3: { name: '산사 암자', desc: '바위 틈에 지은 작은 암자. 풍경 소리와 고요한 독경이 산바람에 실려 온다.' },
+      4: { name: '용소 폭포', desc: '무지개가 걸린 폭포 아래 깊은 소. 옛날 이무기가 수행했다는 전설이 전해진다.' },
+      5: { name: '철쇄 비탈', desc: '쇠사슬에 의지해 올라야 하는 까마득한 바위 비탈. 발 아래 구름이 흘러간다.' },
+      6: { name: '마애불 동굴', desc: '절벽에 새긴 거대한 마애불 앞 동굴. 촛불에 비친 불상의 눈이 살아있는 듯하다.' },
+      7: { name: '구름다리', desc: '봉우리 사이를 잇는 흔들다리. 바람이 세차고 구름 사이로 나는 것 같은 아찔한 느낌.' },
+      8: { name: '무장 능선', desc: '돌로 깎은 사천왕상이 늘어선 능선. 침입자가 다가오면 석상의 눈에서 빛이 난다.' },
+      9: { name: '산신당', desc: '정상 부근의 산신각. 호랑이 그림과 백발 노인의 초상화가 모셔진 신성한 공간.' },
+      10: { name: '산신령 강림', desc: '백호를 타고 폭풍 속에서 나타나는 산신령. 천둥과 벼락이 산 전체를 뒤흔드는 최종전.' },
+    },
+    kr_swamp: {
+      1: { name: '버려진 논', desc: '수확을 멈춘 지 오래된 황폐한 논. 허수아비에 부적이 붙어 있고 물안개가 자욱하다.' },
+      2: { name: '수렁길', desc: '한 발 내디딜 때마다 발이 빠지는 검은 수렁. 거머리와 기이한 벌레들이 득시글한다.' },
+      3: { name: '물귀신 늪', desc: '수면 아래에서 차가운 손이 발목을 잡는다. 물귀신의 원한이 서린 저주받은 물웅덩이.' },
+      4: { name: '독버섯 군락', desc: '보랏빛 포자를 뿜는 거대 독버섯 지대. 환각을 일으키는 안개가 현실감을 앗아간다.' },
+      5: { name: '침몰 마을', desc: '홍수에 잠긴 옛 마을. 지붕만 간신히 보이고 그 아래서 원혼들의 곡소리가 들린다.' },
+      6: { name: '저주 제단', desc: '습지 한가운데 외딴 섬에 놓인 돌 제단. 금지된 굿이 행해진 저주받은 땅.' },
+      7: { name: '도깨비불 밤', desc: '사방에서 푸른 불이 떠다니는 한밤의 늪. 불을 따라가면 더 깊은 수렁으로 빠진다.' },
+      8: { name: '지네 소굴', desc: '거대한 나무 뿌리 사이에 만들어진 왕지네의 둥지. 독충과 독기가 가득하다.' },
+      9: { name: '부패의 심장', desc: '늪의 모든 저주가 뿜어져 나오는 거대한 고목. 썩은 기운의 원천이 맥동하고 있다.' },
+      10: { name: '이무기 부활', desc: '늪 깊은 곳에서 천 년을 기다린 이무기가 솟아오른다. 물기둥과 홍수의 최종 보스전.' },
+    },
+    kr_temple: {
+      1: { name: '일주문', desc: '무너져 가는 일주문. 덩굴에 감긴 기둥 사이로 한때 장엄했던 사찰의 위용이 엿보인다.' },
+      2: { name: '탑원', desc: '부서진 석등과 쓰러진 돌탑이 흩어진 마당. 승려 유령의 그림자가 어른거린다.' },
+      3: { name: '대웅전', desc: '금이 간 불상이 서 있는 본전. 꺼지지 않는 촛불과 함께 어둠의 기운이 감돈다.' },
+      4: { name: '범종루', desc: '금 간 거대 범종이 매달린 종루. 저주받은 종소리가 영혼을 불러모은다.' },
+      5: { name: '장경각', desc: '흩어진 경전과 저주받은 두루마리가 떠다니는 경판 보관소. 어둠의 지식이 속삭인다.' },
+      6: { name: '지하 부도전', desc: '사찰 아래 숨겨진 고승들의 부도. 봉인이 약해진 사리함에서 영혼이 새어 나온다.' },
+      7: { name: '석탑 묘역', desc: '각 석탑마다 봉인된 원혼이 깃들어 있다. 봉인이 풀릴 때마다 빛이 흔들린다.' },
+      8: { name: '선방', desc: '좌선 자세로 굳어진 승려 유령들이 즐비한 선방. 시간이 멈춘 듯한 소름 끼치는 고요.' },
+      9: { name: '비로전', desc: '타락이 시작된 비밀 법당. 어둠의 사리가 안치된 제단에서 사악한 에너지가 흘러나온다.' },
+      10: { name: '사천왕 각성', desc: '타락한 사천왕 석상이 깨어나 불의 심판을 내린다. 사찰이 무너지는 최종 보스전.' },
+    },
+    kr_spirit: {
+      1: { name: '황천 입구', desc: '이승과 저승의 경계에 선 안개 길. 현실이 옅어지며 주변이 점점 하얗게 변한다.' },
+      2: { name: '영혼의 다리', desc: '황천강 위 놓인 은빛 다리를 건너는 혼백들. 달빛 아래 슬픈 행렬이 이어진다.' },
+      3: { name: '첫째 전각', desc: '이승의 행적을 심판하는 첫 번째 대전. 저울 위에 놓인 영혼의 무게가 운명을 가른다.' },
+      4: { name: '전생의 숲', desc: '나무마다 다른 전생이 비치는 기이한 숲. 기억의 나뭇잎이 바람에 흩날린다.' },
+      5: { name: '망각의 강', desc: '이 물을 마시면 모든 기억을 잃는다. 강가에 주저앉아 우는 영혼들의 슬픈 풍경.' },
+      6: { name: '혼시장', desc: '귀신 상인들이 영혼의 기운을 거래하는 저승의 시장. 기묘한 물건들이 즐비하다.' },
+      7: { name: '진실의 거울', desc: '영혼의 진짜 모습을 비추는 거울들의 방. 환상이 깨지며 숨겨진 본성이 드러난다.' },
+      8: { name: '형벌의 뜰', desc: '각종 형벌이 집행되는 저승의 마당. 비명 소리가 끊이지 않는 공포의 장소.' },
+      9: { name: '윤회의 수레', desc: '카르마에 따라 다음 생을 결정하는 거대한 수레바퀴가 돌아가는 운명의 방.' },
+      10: { name: '염라대왕', desc: '저승을 다스리는 염라대왕의 심판. 사후 세계의 지배자와의 우주적 최종 결전.' },
+    },
+    // === 일본 던전 ===
+    jp_forest: {
+      1: { name: '이끼 토리이', desc: '이끼에 덮인 토리이 문이 삼나무 숲으로 안내한다. 코다마 정령의 울림이 들린다.' },
+      2: { name: '대나무 미로', desc: '바스락거리는 소리와 함께 너구리 그림자가 스친다. 신비한 등불이 길을 비춘다.' },
+      3: { name: '금줄 신목', desc: '시메나와가 감긴 거대한 고목. 성스럽지만 타락한 기운이 땅속 깊은 곳에서 올라온다.' },
+      4: { name: '여우 사당', desc: '버려진 봉납함과 깨진 여우 석상이 있는 숲속 사당. 기묘한 정적이 흐른다.' },
+      5: { name: '수해 깊은 숲', desc: '주가이가하라를 닮은 숲. 뒤틀린 나무들, 방황하는 영혼들, 나침반이 돌아간다.' },
+      6: { name: '코다마 골짜기', desc: '수백 개의 나무 정령이 빛을 내며 노래하는 아름답고 초자연적인 공간.' },
+      7: { name: '킷수네 시험', desc: '여우가 강가에서 기다린다. 환술과 속임의 시험을 통과해야 길이 열린다.' },
+      8: { name: '황혼 요괴', desc: '해질녘이 되자 요괴들이 하나둘 모습을 드러낸다. 숲이 완전히 다른 세계로 바뀐다.' },
+      9: { name: '오염된 신목', desc: '고목이 죽어가고 있다. 어둠의 요괴들이 모여들어 숲의 마지막 생명력을 빨아들인다.' },
+      10: { name: '조로구모', desc: '거미줄에 뒤덮인 숲에서 거대한 거미 마녀 조로구모가 나타난다. 요괴숲 최종 보스전.' },
+    },
+    jp_mountain: {
+      1: { name: '돌계단 참배', desc: '붉은 토리이가 이어지는 돌계단. 삼나무 사이로 아침 햇살이 비쳐든다.' },
+      2: { name: '폭포 수행', desc: '야마부시 수행자가 찬 폭포 아래서 정신을 단련하는 영적 수련의 장소.' },
+      3: { name: '텐구의 흔적', desc: '바위 길에 텐구의 깃털이 떨어져 있다. 경고의 표식들, 바람이 세차게 분다.' },
+      4: { name: '비전 동굴', desc: '텐구의 수행터였던 동굴. 고대 두루마리와 무술 비기가 바위에 새겨져 있다.' },
+      5: { name: '구름 위 다리', desc: '구름 아래로 까마귀 텐구들이 선회하는 아찔한 다리. 담력의 시험장.' },
+      6: { name: '온천 휴식처', desc: '요괴들도 평화롭게 목욕하는 산속 온천. 일시적 휴전 지대.' },
+      7: { name: '뇌격 봉', desc: '벼락에 맞은 봉우리. 뇌신의 에너지가 치직거리며 위험한 접근로를 만든다.' },
+      8: { name: '승병 사찰', desc: '무술을 익힌 승려들이 수행하는 산중 사찰. 무(武)와 선(禪)이 하나가 되는 곳.' },
+      9: { name: '정상 관문', desc: '신풍이 몰아치고 텐구 수호자들이 마지막 길을 막아서는 최후의 관문.' },
+      10: { name: '대텐구', desc: '부채 하나로 신풍을 일으키는 대텐구와의 결전. 산의 힘이 폭발하는 최종 보스전.' },
+    },
+    jp_temple: {
+      1: { name: '인왕문', desc: '금강역사상이 지키는 웅장한 사찰 정문. 돌등이 줄지어 서고 단풍잎이 흩날린다.' },
+      2: { name: '모래 정원', desc: '정성스레 정돈된 모래 무늬가 어지럽혀져 있다. 정체불명의 발자국이 남아 있다.' },
+      3: { name: '본존 법당', desc: '피눈물을 흘리는 불상과 저주받은 경전이 떠다니는 본전. 신성이 오염되어 있다.' },
+      4: { name: '오층탑', desc: '각 층마다 더 깊은 어둠에 빠진 오층 탑. 올라갈수록 요괴가 기다린다.' },
+      5: { name: '묘지', desc: '비석이 기울어지고 흙 사이로 손이 뻗어 나오는 사찰 뒤편 묘지. 언데드의 영역.' },
+      6: { name: '범종각', desc: '금 간 범종이 저주의 음파를 만든다. 소리가 방향감각을 혼란스럽게 한다.' },
+      7: { name: '비밀 지하도', desc: '벽에 오니 가면이 걸린 숨겨진 지하 통로. 함정 장치가 곳곳에 설치되어 있다.' },
+      8: { name: '보물 창고', desc: '저주받은 유물들이 활성화되어 스스로 움직이며 공격해 오는 위험한 수장고.' },
+      9: { name: '만다라 내전', desc: '거대한 만다라가 어둠의 에너지로 빛나며 차원의 균열이 벌어지는 최심부.' },
+      10: { name: '천수관음', desc: '빙의된 천수관음 거대 석상이 천 개의 팔로 공격한다. 신성과 마성의 최종 보스전.' },
+    },
+    jp_ocean: {
+      1: { name: '해식 동굴', desc: '파도가 부서지는 해안가 동굴. 반쯤 잠긴 토리이 너머로 제물 조개가 놓여 있다.' },
+      2: { name: '산호 참배', desc: '산호로 뒤덮인 수중 토리이 문. 바다거북이 안내하고 생물 발광이 길을 비춘다.' },
+      3: { name: '유령 어촌', desc: '침몰한 어촌에서 유령 어부들이 여전히 일하고 있다. 그물이 떠다니는 슬픈 풍경.' },
+      4: { name: '산호 정원', desc: '해룡의 산호 정원. 거대한 산호 조형물 사이로 해마 기사단이 순찰 중이다.' },
+      5: { name: '갓파 영역', desc: '수중 하천의 물살이 거센 갓파의 영토. 오이 제물이 떠다니고 있다.' },
+      6: { name: '닌교 만', desc: '인어의 슬픈 노랫소리가 울리는 해만. 아름답지만 깊이 빠져들면 돌아오지 못한다.' },
+      7: { name: '유령선 묘지', desc: '후나유레이의 유령선들이 잠들어 있는 해저 묘지. 등불이 어둠 속에서 흔들린다.' },
+      8: { name: '진주 궁전', desc: '거대한 진주가 빛나는 궁전. 보물과 함정이 공존하는 탐욕의 시험장.' },
+      9: { name: '심연 접근', desc: '우미보즈의 그림자가 아래서 어른거린다. 수압이 높아지고 어둠이 짙어지는 심해.' },
+      10: { name: '류진', desc: '용궁의 왕좌에서 일어선 해룡왕 류진. 쓰나미와 소용돌이의 최종 보스전.' },
+    },
+    jp_spirit: {
+      1: { name: '경계의 문', desc: '무너져가는 토리이를 지나면 영혼들이 흘러가는 황혼의 길이 펼쳐진다.' },
+      2: { name: '사자의 행렬', desc: '한 방향으로만 걸어가는 창백한 영혼들. 종이 등불이 길을 밝히는 슬픈 행렬.' },
+      3: { name: '삼도천', desc: '얕은 여울, 다리, 깊은 물살의 세 갈래 길. 생전의 업에 따라 건너는 곳이 달라진다.' },
+      4: { name: '아귀 벌판', desc: '영원한 굶주림에 시달리는 아귀(가키)들이 구걸하는 처참한 들판.' },
+      5: { name: '엔마 법정', desc: '엔마 대왕이 죄를 저울질하는 법정. 진실을 비추는 거대한 거울이 서 있다.' },
+      6: { name: '빙한 지옥', desc: '얼어붙은 죄인들이 있는 얼음 지옥. 수정 얼음 속에 갇힌 영혼들이 보인다.' },
+      7: { name: '화염 지옥', desc: '불타는 대지 위에 비명이 가득한 화염 지옥. 견딜 수 없는 열기가 몰려온다.' },
+      8: { name: '검산 지옥', desc: '영혼들이 칼날 위를 걸어야 하는 검의 산. 끝없는 고통의 형벌이 이어진다.' },
+      9: { name: '시니가미 궁', desc: '죽음의 신들이 모여 있는 사신의 궁전. 불길한 장엄함이 감도는 어둠의 전당.' },
+      10: { name: '시니가미', desc: '대낫을 든 시니가미와의 결전. 영혼을 거두는 사신의 심판, 최종 보스전.' },
+    },
+    // === 중국 던전 ===
+    cn_forest: {
+      1: { name: '석사자 입구', desc: '고대 돌사자 한 쌍이 지키는 비취색 안개의 숲 입구. 산해경의 세계가 시작된다.' },
+      2: { name: '판다 영림', desc: '영적 판다들이 서식하는 대나무 숲. 고대 무사의 유령이 수련을 계속하고 있다.' },
+      3: { name: '산해경 영역', desc: '신화의 기이한 짐승들이 나타나는 구역. 책에서만 보던 존재들이 눈앞에 있다.' },
+      4: { name: '반도 신목', desc: '불로장생의 복숭아가 열리는 거대한 나무. 금빛 과일이 유혹적으로 빛난다.' },
+      5: { name: '호리정 굴', desc: '여우 요정(호리정)의 소굴. 아름다움과 위험이 공존하는 환술의 미궁.' },
+      6: { name: '약초원', desc: '신화 속 약초가 자라는 비밀 정원. 만병통치와 치명적 독초가 나란히 자란다.' },
+      7: { name: '오동 괴목', desc: '사악한 정령이 둥지를 튼 썩어가는 오동나무. 어둠의 에너지가 숲에 퍼진다.' },
+      8: { name: '토지묘', desc: '숲을 관장하는 토지신의 작은 사당. 제물이 놓여 있지만 신은 떠난 듯하다.' },
+      9: { name: '천년 수목', desc: '천 년을 살아 정신이 깨어난 거대 나무 정령. 고대의 지혜와 대면하는 곳.' },
+      10: { name: '산해경 마수', desc: '산해경에서 빠져나온 태고의 마수와의 결전. 원시 자연의 분노가 폭발하는 최종전.' },
+    },
+    cn_mountain: {
+      1: { name: '석문 입산', desc: '도교 부적이 새겨진 돌 아치문. 순례자들이 오르는 신선의 산이 시작된다.' },
+      2: { name: '다정', desc: '현자가 신비의 차를 우려내는 구름 위의 정자. 아래로 운해가 끝없이 펼쳐진다.' },
+      3: { name: '연단 동굴', desc: '불로장생의 단약을 달이는 도교 연금술 동굴. 신비로운 재료들이 부글거린다.' },
+      4: { name: '수렴 폭포', desc: '용이 새겨진 폭포. 물줄기 뒤에 숨겨진 동굴이 있다는 전설이 전해진다.' },
+      5: { name: '운중 보도', desc: '구름 위를 밟고 걷는 길. 천상계에 가까워지며 현기증이 밀려온다.' },
+      6: { name: '무림 사찰', desc: '운무 속 무술 승려들이 수행하는 사찰. 구름 속에서 쿵후를 익히는 장관.' },
+      7: { name: '옥석 광맥', desc: '영적 옥이 빛나는 광맥. 초록빛 광물의 부가 가득하지만 수호자가 지킨다.' },
+      8: { name: '신선 바둑판', desc: '두 신선이 바둑을 두고 있다. 시간이 다르게 흐르는 기묘한 정자.' },
+      9: { name: '곤륜 도관', desc: '천상 에너지가 수렴하는 산 정상의 도교 사원. 신의 영역에 다가선다.' },
+      10: { name: '타락 신선', desc: '어둠에 물든 신선과의 결전. 타락한 곤륜의 힘이 폭발하는 최종 보스전.' },
+    },
+    cn_temple: {
+      1: { name: '산문', desc: '돌사자 한 쌍이 지키는 거대 산문. 붉은 등롱이 즐비하고 향 연기가 자욱하다.' },
+      2: { name: '향전', desc: '수천 개의 향이 타오르는 전당. 연기가 얼굴 형상을 만들어내 압도적이다.' },
+      3: { name: '천왕전', desc: '네 천왕의 거대 석상이 무기를 들고 서 있다. 그 위압감에 발걸음이 멈춘다.' },
+      4: { name: '보리수 마당', desc: '타락한 보리수에서 어둠의 뿌리가 뻗어 나간다. 승려들이 달아난 흔적이 있다.' },
+      5: { name: '지하 진신사리', desc: '사찰 창건주의 사리가 안치된 지하 묘. 토용 수호병이 경비를 서고 있다.' },
+      6: { name: '대장경각', desc: '금강경이 공중에 떠서 방어 결계를 형성하고 있다. 신성한 지식의 보고.' },
+      7: { name: '진마탑', desc: '악을 가두는 봉인탑. 봉인이 약해지며 균열 사이로 사악한 에너지가 새어 나온다.' },
+      8: { name: '오백나한전', desc: '500 나한 석상의 눈이 빛나며 경비를 선다. 침입자를 감시하는 무서운 수호자들.' },
+      9: { name: '관음전', desc: '거대한 관음 석상이 자비에서 심판으로 변한 내전. 어둠의 자비가 가득하다.' },
+      10: { name: '사천왕 분노', desc: '깨어난 사대천왕이 합체하여 분노를 폭발시킨다. 사찰이 흔들리는 최종 보스전.' },
+    },
+    cn_swamp: {
+      1: { name: '저주받은 논', desc: '허수아비에 부적 얼굴이 달린 버려진 논. 안개가 자욱하고 어딘가에서 뛰는 소리가.' },
+      2: { name: '독충 영역', desc: '기묘한 벌레와 거머리가 득시글한 독늪. 고독(蠱毒) 지역의 시작.' },
+      3: { name: '강시 마을', desc: '가라앉은 마을에서 강시들이 미동 없이 서 있다. 해가 지면 뛰기 시작한다.' },
+      4: { name: '독련 연못', desc: '아름답지만 치명적인 연꽃이 핀 연못. 두꺼비 요괴의 소리가 울려 퍼진다.' },
+      5: { name: '무녀 오두막', desc: '묘족 무녀의 버려진 집. 고독 항아리와 벌레 사육 통이 즐비한 사술의 장소.' },
+      6: { name: '지전 묘지', desc: '지전(紙錢)이 썩어가는 늪지 묘지. 배고픈 귀신들이 모여드는 음침한 곳.' },
+      7: { name: '귀곡 논', desc: '유령 농부들이 끝없는 추수를 반복하는 저주받은 논. 죽음의 수확이 이어진다.' },
+      8: { name: '거미정 영역', desc: '비단 덫이 사방에 깔린 거미정(蜘蛛精)의 영역. 실크 함정이 가득하다.' },
+      9: { name: '저주의 우물', desc: '어둠이 부글거리며 솟아오르는 우물. 늪의 모든 저주가 이곳에서 시작되었다.' },
+      10: { name: '강시왕', desc: '청나라 관복의 강시왕이 군대를 이끌고 일어난다. 부적 대결의 최종 보스전.' },
+    },
+    cn_spirit: {
+      1: { name: '귀문관', desc: '거대한 철문에 귀신 병사가 경비를 서는 지부(地府)의 관문. 중국 저승의 시작.' },
+      2: { name: '나하교', desc: '망각의 강 위 세 갈래 다리. 생전의 업에 따라 건너는 길이 달라지는 운명의 다리.' },
+      3: { name: '진광 법정', desc: '첫 번째 명왕 진광왕이 생전의 행적을 심판한다. 전생을 비추는 거울이 서 있다.' },
+      4: { name: '업경대', desc: '모든 죄를 낱낱이 보여주는 거울. 숨길 곳이 없는 냉혹한 진실의 장소.' },
+      5: { name: '도산', desc: '칼날 위를 걸어야 하는 영혼들의 산. 비명 소리 가득한 형벌의 공포.' },
+      6: { name: '유정', desc: '끓는 기름에 빠진 죄인들이 벌 받는 유정. 치솟는 열기와 고통의 형벌.' },
+      7: { name: '윤회 전각', desc: '육도(六道)의 수레바퀴가 도는 전각. 카르마가 다음 생을 결정하는 운명의 방.' },
+      8: { name: '맹파정', desc: '할머니 맹파가 망각의 차를 끓이는 정자. 영혼들이 줄지어 마시며 기억을 잊는다.' },
+      9: { name: '우두마면 초소', desc: '소 머리와 말 얼굴의 저승 문지기가 순찰하는 초소. 마지막 관문이 다가온다.' },
+      10: { name: '염라왕', desc: '지부를 다스리는 염라왕의 심판대. 우주적 정의를 건 최종 보스전.' },
+    },
+  };
+
+  // 기존 + 나라별 던전 스테이지 데이터 모두 업데이트
+  const allDungeonStageData = { ...dungeonStageData, ...countryDungeonStageData };
+
+  for (const [dungeonKey, stages] of Object.entries(allDungeonStageData)) {
     const [dRows] = await pool.query('SELECT id FROM dungeons WHERE key_name = ?', [dungeonKey]);
     if (dRows.length === 0) continue;
     const dungeonId = dRows[0].id;
@@ -2411,6 +3828,87 @@ async function initialize() {
       await pool.query(
         'UPDATE dungeon_stages SET name = ?, description = ? WHERE dungeon_id = ? AND stage_number = ?',
         [data.name, data.desc, dungeonId, parseInt(stageNum)]
+      ).catch(() => {});
+    }
+  }
+
+  // 나라별 던전 display_order 및 상세 설명 업데이트
+  const countryDungeonUpdates = [
+    ['kr_forest',   12, '한국의 신비로운 숲. 장승과 도깨비, 구미호가 서식하는 수묵화 같은 어둠의 원시림.'],
+    ['kr_mountain', 13, '산신령이 다스리는 한국의 영산. 사천왕과 석인, 폭풍의 산신이 수행자를 시험한다.'],
+    ['kr_swamp',    14, '물귀신과 독충이 도사리는 저주받은 습지. 이무기가 천 년의 잠에서 깨어나려 한다.'],
+    ['kr_temple',   15, '타락한 사천왕이 지키는 폐사찰. 깨진 범종 소리가 원혼을 불러모으는 금지의 성역.'],
+    ['kr_spirit',   16, '이승과 저승의 경계. 염라대왕의 심판을 받으러 가는 영혼의 길, 황천으로의 여정.'],
+    ['jp_forest',   17, '요괴가 서식하는 일본의 어둠의 숲. 코다마와 킷수네, 조로구모가 기다리는 마의 원림.'],
+    ['jp_mountain', 18, '텐구가 지배하는 일본의 영산. 야마부시의 수행과 뇌신의 힘이 깃든 구름 위의 수련장.'],
+    ['jp_temple',   19, '오니 가면의 저주가 서린 일본 사찰. 천수관음 석상이 빙의되어 깨어나는 공포의 법당.'],
+    ['jp_ocean',    20, '류진의 용궁으로 가는 깊은 바다. 갓파와 닌교, 후나유레이가 출몰하는 해저 세계.'],
+    ['jp_spirit',   21, '시니가미가 지배하는 일본의 저승. 삼도천을 건너 엔마 대왕의 심판을 받는 명부의 길.'],
+    ['cn_forest',   22, '산해경의 마수가 서식하는 중국 신화의 숲. 호리정과 토지신, 태고의 괴물이 숨 쉬는 곳.'],
+    ['cn_mountain', 23, '곤륜산을 닮은 신선의 산. 도교 연단술과 무림 사찰, 하늘에 닿는 수행의 길.'],
+    ['cn_temple',   24, '사대천왕이 분노하는 중국 대사찰. 오백나한의 눈이 빛나고 진마탑이 흔들리는 성역.'],
+    ['cn_swamp',    25, '강시와 고독(蠱毒)이 도사리는 저주의 늪. 부적과 주술이 난무하는 중국 공포의 습지.'],
+    ['cn_spirit',   26, '염라왕이 다스리는 중국의 지부(地府). 열 명의 명왕이 심판하는 사후 세계의 여정.'],
+  ];
+
+  for (const [key, order, desc] of countryDungeonUpdates) {
+    await pool.query(
+      'UPDATE dungeons SET display_order = ?, description = ? WHERE key_name = ?',
+      [order, desc, key]
+    ).catch(() => {});
+  }
+
+  // 나라별 던전 스테이지 생성 (없는 경우만)
+  const countryDungeonKeys = [
+    'kr_forest','kr_mountain','kr_swamp','kr_temple','kr_spirit',
+    'jp_forest','jp_mountain','jp_temple','jp_ocean','jp_spirit',
+    'cn_forest','cn_mountain','cn_temple','cn_swamp','cn_spirit',
+  ];
+  // 타일 타입 매핑
+  const countryDungeonTiles = {
+    kr_forest:'grass', kr_mountain:'stone', kr_swamp:'swamp', kr_temple:'stone', kr_spirit:'grass',
+    jp_forest:'grass', jp_mountain:'stone', jp_temple:'stone', jp_ocean:'water', jp_spirit:'stone',
+    cn_forest:'grass', cn_mountain:'stone', cn_temple:'stone', cn_swamp:'swamp', cn_spirit:'stone',
+  };
+  for (const cdk of countryDungeonKeys) {
+    const [dRow] = await pool.query('SELECT id FROM dungeons WHERE key_name = ?', [cdk]);
+    if (dRow.length === 0) continue;
+    const did = dRow[0].id;
+    const [sCheck] = await pool.query('SELECT COUNT(*) as cnt FROM dungeon_stages WHERE dungeon_id = ?', [did]);
+    if (sCheck[0].cnt > 0) continue; // 이미 있으면 스킵
+    const baseTile = countryDungeonTiles[cdk] || 'grass';
+    for (let s = 1; s <= 10; s++) {
+      const isBoss = s === 10 ? 1 : 0;
+      const monsterCount = isBoss ? 4 : Math.min(1 + Math.floor(s / 3), 3);
+      const monsterLvBonus = Math.floor(s / 2);
+      const expBonus = s * 5 + (isBoss ? 50 : 0);
+      const goldBonus = s * 3 + (isBoss ? 30 : 0);
+      const w = isBoss ? 12 : 10;
+      const h = isBoss ? 12 : 10;
+      const name = isBoss ? `${s} (보스)` : `${s}`;
+      // 기본 맵 데이터 (간단 플랫폼)
+      const pSpawns = JSON.stringify([{x:1,z:1},{x:2,z:1},{x:1,z:2}]);
+      const mSpawns = JSON.stringify(
+        isBoss ? [{x:w-2,z:h-2},{x:w-3,z:h-2},{x:w-2,z:h-3},{x:w-3,z:h-3}]
+               : [{x:w-2,z:h-2},{x:w-3,z:h-2},{x:w-2,z:h-3}]
+      );
+      await pool.query(
+        `INSERT IGNORE INTO dungeon_stages (dungeon_id, stage_number, name, is_boss, monster_count, monster_level_bonus, reward_exp_bonus, reward_gold_bonus, map_width, map_height, base_tile_type, player_spawns, monster_spawns) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [did, s, name, isBoss, monsterCount, monsterLvBonus, expBonus, goldBonus, w, h, baseTile, pSpawns, mSpawns]
+      ).catch(() => {});
+    }
+    console.log(`  ${cdk}: 10 stages created`);
+  }
+
+  // 나라별 던전 스테이지 이름/설명 업데이트
+  for (const [dungeonKey, stages] of Object.entries(countryDungeonStageData)) {
+    const [dRows2] = await pool.query('SELECT id FROM dungeons WHERE key_name = ?', [dungeonKey]);
+    if (dRows2.length === 0) continue;
+    const dungeonId2 = dRows2[0].id;
+    for (const [stageNum, data] of Object.entries(stages)) {
+      await pool.query(
+        'UPDATE dungeon_stages SET name = ?, description = ? WHERE dungeon_id = ? AND stage_number = ?',
+        [data.name, data.desc, dungeonId2, parseInt(stageNum)]
       ).catch(() => {});
     }
   }
@@ -2425,6 +3923,8 @@ async function initialize() {
 
   // inventory 테이블에 강화 레벨 추가
   await pool.query("ALTER TABLE inventory ADD COLUMN enhance_level INT DEFAULT 0").catch(() => {});
+  // UNIQUE KEY 제거 (장비 중복 보유 허용)
+  await pool.query("ALTER TABLE inventory DROP INDEX unique_char_item").catch(() => {});
 
   // 기존 장비에 등급 설정 (required_level 기반)
   await pool.query("UPDATE items SET grade='일반', max_enhance=5 WHERE type != 'potion' AND required_level <= 1 AND grade='일반' AND max_enhance=0").catch(() => {});
@@ -2515,26 +4015,26 @@ async function initialize() {
   const [existingEnhance] = await pool.query('SELECT COUNT(*) as cnt FROM enhance_rates');
   if (existingEnhance[0].cnt === 0) {
     await pool.query(`INSERT INTO enhance_rates (enhance_level, success_rate, gold_cost, material_count, stat_bonus_percent) VALUES
-      (1,  1.00,   100, 1, 0.05),
-      (2,  0.95,   200, 1, 0.05),
-      (3,  0.90,   400, 2, 0.05),
-      (4,  0.85,   600, 2, 0.06),
-      (5,  0.75,   1000, 3, 0.06),
-      (6,  0.65,   1500, 3, 0.07),
-      (7,  0.55,   2000, 4, 0.07),
-      (8,  0.45,   3000, 5, 0.08),
-      (9,  0.35,   4000, 6, 0.08),
-      (10, 0.25,   5000, 7, 0.09),
-      (11, 0.18,   7000, 8, 0.09),
-      (12, 0.12,   9000, 10, 0.10),
-      (13, 0.08,  12000, 12, 0.10),
-      (14, 0.05,  15000, 15, 0.11),
-      (15, 0.03,  20000, 20, 0.12),
-      (16, 0.025, 30000, 25, 0.13),
-      (17, 0.02,  40000, 30, 0.13),
-      (18, 0.015, 55000, 35, 0.14),
-      (19, 0.01,  75000, 40, 0.14),
-      (20, 0.005, 100000, 50, 0.15)
+      (1,  1.00,    80, 1, 0.05),
+      (2,  0.97,   160, 1, 0.05),
+      (3,  0.93,   320, 2, 0.05),
+      (4,  0.88,   480, 2, 0.06),
+      (5,  0.82,   800, 3, 0.06),
+      (6,  0.72,  1200, 3, 0.07),
+      (7,  0.60,  1600, 4, 0.07),
+      (8,  0.50,  2400, 5, 0.08),
+      (9,  0.40,  3200, 6, 0.08),
+      (10, 0.30,  4000, 7, 0.09),
+      (11, 0.23,  5600, 8, 0.09),
+      (12, 0.16,  7200, 10, 0.10),
+      (13, 0.11,  9600, 12, 0.10),
+      (14, 0.07,  12000, 15, 0.11),
+      (15, 0.05,  16000, 20, 0.12),
+      (16, 0.04,  24000, 25, 0.13),
+      (17, 0.03,  32000, 30, 0.13),
+      (18, 0.025, 44000, 35, 0.14),
+      (19, 0.015, 60000, 40, 0.14),
+      (20, 0.02,  80000, 50, 0.15)
     `);
   }
 
@@ -2586,63 +4086,76 @@ async function initialize() {
     await pool.query(`INSERT IGNORE INTO materials (name, icon, grade, description, sell_price) VALUES ${v}`).catch(() => {});
   }
 
-  // 몬스터 드랍 설정 (카테고리 기반)
-  const [existingDrops] = await pool.query('SELECT COUNT(*) as cnt FROM monster_drops');
-  if (existingDrops[0].cnt === 0) {
+  // 몬스터 드랍 설정 (카테고리 기반) - 드랍이 없는 몬스터가 있으면 추가
+  {
     const [matRows] = await pool.query('SELECT id, name FROM materials');
     const mMat = {};
     for (const m of matRows) mMat[m.name] = m.id;
 
-    const [monsterRows] = await pool.query('SELECT m.id, m.name, m.category_id, m.tier, mc.name as cat_name FROM monsters m LEFT JOIN monster_categories mc ON m.category_id = mc.id');
+    // 드랍이 없는 몬스터만 가져오기
+    const [monsterRows] = await pool.query(`
+      SELECT m.id, m.name, m.category_id, m.tier, mc.name as cat_name
+      FROM monsters m LEFT JOIN monster_categories mc ON m.category_id = mc.id
+      WHERE m.id NOT IN (SELECT DISTINCT monster_id FROM monster_drops)
+    `);
 
-    const dropInserts = [];
-    for (const mon of monsterRows) {
-      const cat = mon.cat_name || '';
-      const tier = mon.tier || 1;
+    if (monsterRows.length > 0) {
+      const dropInserts = [];
+      for (const mon of monsterRows) {
+        const cat = mon.cat_name || '';
+        const tier = mon.tier || 1;
 
-      // 공통: 모든 몬스터는 철 조각/뼈 파편 드랍 가능
-      if (mMat['철 조각']) dropInserts.push(`(${mon.id}, ${mMat['철 조각']}, ${tier >= 3 ? 0.15 : 0.25}, 1, ${tier >= 3 ? 2 : 1})`);
-      if (mMat['뼈 파편']) dropInserts.push(`(${mon.id}, ${mMat['뼈 파편']}, 0.20, 1, 1)`);
+        // 공통: 모든 몬스터는 철 조각/뼈 파편 드랍 가능
+        if (mMat['철 조각']) dropInserts.push(`(${mon.id}, ${mMat['철 조각']}, ${tier >= 3 ? 0.15 : 0.25}, 1, ${tier >= 3 ? 2 : 1})`);
+        if (mMat['뼈 파편']) dropInserts.push(`(${mon.id}, ${mMat['뼈 파편']}, 0.20, 1, 1)`);
 
-      // 강화석 드랍 (레벨/티어 기반)
-      if (tier <= 2 && mMat['강화석']) dropInserts.push(`(${mon.id}, ${mMat['강화석']}, 0.15, 1, 1)`);
-      if (tier >= 3 && tier <= 4 && mMat['고급 강화석']) dropInserts.push(`(${mon.id}, ${mMat['고급 강화석']}, 0.12, 1, 1)`);
-      if (tier >= 5 && mMat['희귀 강화석']) dropInserts.push(`(${mon.id}, ${mMat['희귀 강화석']}, 0.10, 1, 1)`);
-      if (tier >= 6 && mMat['영웅 강화석']) dropInserts.push(`(${mon.id}, ${mMat['영웅 강화석']}, 0.06, 1, 1)`);
+        // 강화석 드랍 (레벨/티어 기반)
+        if (tier <= 2 && mMat['강화석']) dropInserts.push(`(${mon.id}, ${mMat['강화석']}, 0.15, 1, 1)`);
+        if (tier >= 3 && tier <= 4 && mMat['고급 강화석']) dropInserts.push(`(${mon.id}, ${mMat['고급 강화석']}, 0.12, 1, 1)`);
+        if (tier >= 5 && mMat['희귀 강화석']) dropInserts.push(`(${mon.id}, ${mMat['희귀 강화석']}, 0.10, 1, 1)`);
+        if (tier >= 6 && mMat['영웅 강화석']) dropInserts.push(`(${mon.id}, ${mMat['영웅 강화석']}, 0.06, 1, 1)`);
 
-      // 카테고리별 특수 드랍
-      if (cat === '야수' && mMat['가죽 조각']) dropInserts.push(`(${mon.id}, ${mMat['가죽 조각']}, 0.35, 1, 2)`);
-      if (cat === '곤충/벌레' && mMat['독 주머니']) dropInserts.push(`(${mon.id}, ${mMat['독 주머니']}, 0.30, 1, 1)`);
-      if (cat === '귀신/원혼' && mMat['귀혼석']) dropInserts.push(`(${mon.id}, ${mMat['귀혼석']}, 0.25, 1, 1)`);
-      if (cat === '정령' && mMat['정령석']) dropInserts.push(`(${mon.id}, ${mMat['정령석']}, 0.30, 1, 1)`);
-      if (cat === '정령' && mMat['마력 결정']) dropInserts.push(`(${mon.id}, ${mMat['마력 결정']}, 0.20, 1, 1)`);
-      if (cat === '악마/마족' && mMat['악마의 핵']) dropInserts.push(`(${mon.id}, ${mMat['악마의 핵']}, 0.15, 1, 1)`);
-      if (cat === '용족' && mMat['용의 비늘']) dropInserts.push(`(${mon.id}, ${mMat['용의 비늘']}, 0.20, 1, 1)`);
-      if (cat === '용족' && tier >= 6 && mMat['용의 심장']) dropInserts.push(`(${mon.id}, ${mMat['용의 심장']}, 0.05, 1, 1)`);
-      if (cat === '마법생물' && mMat['마력 결정']) dropInserts.push(`(${mon.id}, ${mMat['마력 결정']}, 0.25, 1, 1)`);
-      if (cat === '도깨비' && mMat['도깨비 방망이 조각']) dropInserts.push(`(${mon.id}, ${mMat['도깨비 방망이 조각']}, 0.25, 1, 1)`);
-      if (cat === '슬라임/연체' && mMat['슬라임 젤리']) dropInserts.push(`(${mon.id}, ${mMat['슬라임 젤리']}, 0.40, 1, 2)`);
-      if (cat === '수생/해양' && mMat['해양 진주']) dropInserts.push(`(${mon.id}, ${mMat['해양 진주']}, 0.20, 1, 1)`);
-      if (cat === '식물/균류' && mMat['식물 섬유']) dropInserts.push(`(${mon.id}, ${mMat['식물 섬유']}, 0.35, 1, 2)`);
-      if (cat === '인간형' && mMat['마력 결정']) dropInserts.push(`(${mon.id}, ${mMat['마력 결정']}, 0.15, 1, 1)`);
+        // 카테고리별 특수 드랍
+        if (cat === '야수' && mMat['가죽 조각']) dropInserts.push(`(${mon.id}, ${mMat['가죽 조각']}, 0.35, 1, 2)`);
+        if (cat === '곤충/벌레' && mMat['독 주머니']) dropInserts.push(`(${mon.id}, ${mMat['독 주머니']}, 0.30, 1, 1)`);
+        if (cat === '귀신/원혼' && mMat['귀혼석']) dropInserts.push(`(${mon.id}, ${mMat['귀혼석']}, 0.25, 1, 1)`);
+        if (cat === '정령' && mMat['정령석']) dropInserts.push(`(${mon.id}, ${mMat['정령석']}, 0.30, 1, 1)`);
+        if (cat === '정령' && mMat['마력 결정']) dropInserts.push(`(${mon.id}, ${mMat['마력 결정']}, 0.20, 1, 1)`);
+        if (cat === '악마/마족' && mMat['악마의 핵']) dropInserts.push(`(${mon.id}, ${mMat['악마의 핵']}, 0.15, 1, 1)`);
+        if (cat === '용족' && mMat['용의 비늘']) dropInserts.push(`(${mon.id}, ${mMat['용의 비늘']}, 0.20, 1, 1)`);
+        if (cat === '용족' && tier >= 6 && mMat['용의 심장']) dropInserts.push(`(${mon.id}, ${mMat['용의 심장']}, 0.05, 1, 1)`);
+        if (cat === '마법생물' && mMat['마력 결정']) dropInserts.push(`(${mon.id}, ${mMat['마력 결정']}, 0.25, 1, 1)`);
+        if (cat === '도깨비' && mMat['도깨비 방망이 조각']) dropInserts.push(`(${mon.id}, ${mMat['도깨비 방망이 조각']}, 0.25, 1, 1)`);
+        if (cat === '슬라임/연체' && mMat['슬라임 젤리']) dropInserts.push(`(${mon.id}, ${mMat['슬라임 젤리']}, 0.40, 1, 2)`);
+        if (cat === '수생/해양' && mMat['해양 진주']) dropInserts.push(`(${mon.id}, ${mMat['해양 진주']}, 0.20, 1, 1)`);
+        if (cat === '식물/균류' && mMat['식물 섬유']) dropInserts.push(`(${mon.id}, ${mMat['식물 섬유']}, 0.35, 1, 2)`);
+        if (cat === '인간형' && mMat['마력 결정']) dropInserts.push(`(${mon.id}, ${mMat['마력 결정']}, 0.15, 1, 1)`);
+        if (cat === '요괴/변이' && mMat['마력 결정']) dropInserts.push(`(${mon.id}, ${mMat['마력 결정']}, 0.20, 1, 1)`);
 
-      // 불/얼음 정수 (정령 특화)
-      if (mon.name.includes('불') && mMat['불꽃 정수']) dropInserts.push(`(${mon.id}, ${mMat['불꽃 정수']}, 0.20, 1, 1)`);
-      if (mon.name.includes('얼음') && mMat['얼음 정수']) dropInserts.push(`(${mon.id}, ${mMat['얼음 정수']}, 0.20, 1, 1)`);
+        // 불/얼음 정수 (이름 기반)
+        if (mon.name.includes('불') && mMat['불꽃 정수']) dropInserts.push(`(${mon.id}, ${mMat['불꽃 정수']}, 0.20, 1, 1)`);
+        if ((mon.name.includes('얼음') || mon.name.includes('빙') || mon.name.includes('유키')) && mMat['얼음 정수']) dropInserts.push(`(${mon.id}, ${mMat['얼음 정수']}, 0.20, 1, 1)`);
 
-      // 고티어 암흑 정수
-      if (tier >= 5 && (cat === '악마/마족' || cat === '언데드') && mMat['암흑의 정수']) {
-        dropInserts.push(`(${mon.id}, ${mMat['암흑의 정수']}, 0.08, 1, 1)`);
+        // 고티어 암흑 정수
+        if (tier >= 5 && (cat === '악마/마족' || cat === '언데드') && mMat['암흑의 정수']) {
+          dropInserts.push(`(${mon.id}, ${mMat['암흑의 정수']}, 0.08, 1, 1)`);
+        }
+
+        // 고티어 보스 전설/신화 드랍
+        if (tier >= 5 && mMat['불사조의 깃털']) dropInserts.push(`(${mon.id}, ${mMat['불사조의 깃털']}, 0.03, 1, 1)`);
+        if (tier >= 5 && mMat['별의 파편']) dropInserts.push(`(${mon.id}, ${mMat['별의 파편']}, 0.04, 1, 1)`);
+        if (tier >= 5 && mMat['전설 강화석']) dropInserts.push(`(${mon.id}, ${mMat['전설 강화석']}, 0.03, 1, 1)`);
       }
-    }
 
-    // batch insert
-    if (dropInserts.length > 0) {
-      const batchSize = 100;
-      for (let i = 0; i < dropInserts.length; i += batchSize) {
-        const batch = dropInserts.slice(i, i + batchSize);
-        await pool.query(`INSERT IGNORE INTO monster_drops (monster_id, material_id, drop_rate, min_quantity, max_quantity) VALUES ${batch.join(',')}`);
+      // batch insert
+      if (dropInserts.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < dropInserts.length; i += batchSize) {
+          const batch = dropInserts.slice(i, i + batchSize);
+          await pool.query(`INSERT IGNORE INTO monster_drops (monster_id, material_id, drop_rate, min_quantity, max_quantity) VALUES ${batch.join(',')}`);
+        }
       }
+      console.log(`Monster drops seeded for ${monsterRows.length} monsters`);
     }
   }
 
@@ -3001,9 +4514,9 @@ async function initialize() {
     `);
   }
 
-  // 몬스터 속성 배정 (카테고리 기반)
-  const [elMonCheck] = await pool.query("SELECT COUNT(*) as cnt FROM monsters WHERE element != 'neutral'");
-  if (elMonCheck[0].cnt === 0) {
+  // 몬스터 속성 배정 (카테고리 기반) - neutral인 몬스터가 있으면 항상 실행
+  const [elMonNeutral] = await pool.query("SELECT COUNT(*) as cnt FROM monsters WHERE element = 'neutral' AND category_id IS NOT NULL");
+  if (elMonNeutral[0].cnt > 0) {
     // 카테고리별 속성 매핑
     await pool.query("UPDATE monsters m JOIN monster_categories mc ON m.category_id = mc.id SET m.element='fire' WHERE mc.name IN ('악마/마족','용족') AND m.element='neutral'").catch(() => {});
     await pool.query("UPDATE monsters m JOIN monster_categories mc ON m.category_id = mc.id SET m.element='water' WHERE mc.name IN ('수생/해양','슬라임/연체') AND m.element='neutral'").catch(() => {});
@@ -3011,9 +4524,12 @@ async function initialize() {
     await pool.query("UPDATE monsters m JOIN monster_categories mc ON m.category_id = mc.id SET m.element='wind' WHERE mc.name IN ('정령','마법생물') AND m.element='neutral'").catch(() => {});
     await pool.query("UPDATE monsters m JOIN monster_categories mc ON m.category_id = mc.id SET m.element='neutral' WHERE mc.name IN ('귀신/원혼','언데드','인간형','도깨비') AND m.element='neutral'").catch(() => {});
     // 이름 기반 보정 (불/얼음 등)
-    await pool.query("UPDATE monsters SET element='fire' WHERE name LIKE '%불%' OR name LIKE '%화염%'").catch(() => {});
-    await pool.query("UPDATE monsters SET element='water' WHERE name LIKE '%얼음%' OR name LIKE '%빙%' OR name LIKE '%물%'").catch(() => {});
-    await pool.query("UPDATE monsters SET element='wind' WHERE name LIKE '%바람%' OR name LIKE '%뇌%' OR name LIKE '%번개%'").catch(() => {});
+    await pool.query("UPDATE monsters SET element='fire' WHERE (name LIKE '%불%' OR name LIKE '%화염%' OR name LIKE '%화룡%') AND element='neutral'").catch(() => {});
+    await pool.query("UPDATE monsters SET element='water' WHERE (name LIKE '%얼음%' OR name LIKE '%빙%' OR name LIKE '%물귀%' OR name LIKE '%물의%') AND element='neutral'").catch(() => {});
+    await pool.query("UPDATE monsters SET element='wind' WHERE (name LIKE '%바람%' OR name LIKE '%뇌%' OR name LIKE '%번개%') AND element='neutral'").catch(() => {});
+    // 요괴/변이 카테고리 - 개별 속성 지정
+    await pool.query("UPDATE monsters m JOIN monster_categories mc ON m.category_id = mc.id SET m.element='fire' WHERE mc.name = '요괴/변이' AND (m.name LIKE '%불%' OR m.name LIKE '%화%') AND m.element='neutral'").catch(() => {});
+    await pool.query("UPDATE monsters m JOIN monster_categories mc ON m.category_id = mc.id SET m.element='wind' WHERE mc.name = '요괴/변이' AND m.element='neutral'").catch(() => {});
   }
 
   // 소환수 속성 배정
@@ -3023,6 +4539,67 @@ async function initialize() {
     await pool.query("UPDATE summon_templates SET element='water' WHERE name LIKE '%물%' OR name LIKE '%해%' OR type='회복'").catch(() => {});
     await pool.query("UPDATE summon_templates SET element='earth' WHERE name LIKE '%산%' OR name LIKE '%토%' OR type='방어'").catch(() => {});
     await pool.query("UPDATE summon_templates SET element='wind' WHERE name LIKE '%바람%' OR name LIKE '%풍%' OR type='지원'").catch(() => {});
+  }
+
+  // ========== 소환수 소환 재료 비용 ==========
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS summon_material_costs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      template_id INT NOT NULL,
+      material_id INT NOT NULL,
+      quantity INT NOT NULL DEFAULT 1,
+      FOREIGN KEY (template_id) REFERENCES summon_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY (material_id) REFERENCES materials(id)
+    )
+  `);
+
+  // 소환수별 재료 비용 시드
+  {
+    const [smcCheck] = await pool.query('SELECT COUNT(*) as cnt FROM summon_material_costs');
+    if (smcCheck[0].cnt === 0) {
+      const [matRows] = await pool.query('SELECT id, name FROM materials');
+      const mm = {};
+      for (const m of matRows) mm[m.name] = m.id;
+      const [stRows] = await pool.query('SELECT id, name FROM summon_templates');
+      const sm = {};
+      for (const s of stRows) sm[s.name] = s.id;
+
+      const costs = [
+        // 하급 (Lv1): 일반 재료 소량
+        [sm['떠도는 원혼'],  [[mm['귀혼석'], 2], [mm['뼈 파편'], 3]]],
+        [sm['들쥐 소환수'],  [[mm['가죽 조각'], 3], [mm['뼈 파편'], 2]]],
+        // 중하급 (Lv2): 일반+고급 재료
+        [sm['묘지 귀신'],    [[mm['귀혼석'], 5], [mm['뼈 파편'], 5], [mm['마력 결정'], 2]]],
+        [sm['야생 늑대'],    [[mm['가죽 조각'], 8], [mm['뼈 파편'], 5], [mm['마력 결정'], 2]]],
+        [sm['해골 전사'],    [[mm['뼈 파편'], 8], [mm['귀혼석'], 3], [mm['철 조각'], 5]]],
+        // 중급 (Lv3): 고급 재료 중심
+        [sm['물의 정령'],    [[mm['정령석'], 5], [mm['마력 결정'], 5], [mm['해양 진주'], 3]]],
+        [sm['불의 정령'],    [[mm['정령석'], 5], [mm['불꽃 정수'], 3], [mm['마력 결정'], 5]]],
+        [sm['골렘 파편'],    [[mm['정령석'], 5], [mm['철 조각'], 10], [mm['마력 결정'], 5]]],
+        // 중상급 (Lv4): 고급+희귀 재료
+        [sm['구미호 영혼'],  [[mm['귀혼석'], 10], [mm['마력 결정'], 8], [mm['암흑의 정수'], 2]]],
+        [sm['독거미 여왕'],  [[mm['독 주머니'], 10], [mm['마력 결정'], 8], [mm['불꽃 정수'], 3]]],
+        [sm['바람의 정령'],  [[mm['정령석'], 10], [mm['마력 결정'], 8], [mm['별의 파편'], 2]]],
+        // 상급 (Lv6): 희귀+영웅 재료
+        [sm['리치'],         [[mm['암흑의 정수'], 5], [mm['귀혼석'], 15], [mm['마력 결정'], 10], [mm['용의 비늘'], 5]]],
+      ];
+
+      for (const [tid, mats] of costs) {
+        if (!tid) continue;
+        for (const [mid, qty] of mats) {
+          if (!mid) continue;
+          await pool.query('INSERT INTO summon_material_costs (template_id, material_id, quantity) VALUES (?, ?, ?)', [tid, mid, qty]);
+        }
+      }
+    }
+  }
+
+  // 소환수 스킬 required_level 10배 확대 (1→10, 2→20, ...) - 아직 변환 안 된 경우만
+  {
+    const [ssCheck] = await pool.query('SELECT MAX(required_level) as mx FROM summon_skills');
+    if (ssCheck[0].mx <= 5) {
+      await pool.query("UPDATE summon_skills SET required_level = required_level * 10").catch(() => {});
+    }
   }
 
   // ============ 용병 시스템 ============
@@ -3085,23 +4662,742 @@ async function initialize() {
        base_hp, base_mp, base_phys_attack, base_phys_defense, base_mag_attack, base_mag_defense,
        base_crit_rate, base_evasion, growth_hp, growth_mp, growth_phys_attack, growth_phys_defense,
        growth_mag_attack, growth_mag_defense, required_level, range_type, element, weapon_type) VALUES
-      ('검사 이준', '검사', '빠르고 정확한 검술로 적을 베는 검사.', '⚔️', 300, 150,
+      ('검사 이준', '검사', '빠르고 정확한 검술로 적을 베는 검사.', '⚔️', 3000, 150,
        90, 25, 10, 6, 2, 3, 8, 5, 14, 3, 2.5, 1.5, 0.3, 0.5, 1, 'melee', 'neutral', 'sword'),
-      ('창병 박무', '창병', '긴 창으로 적을 찌르는 전선의 수호자.', '🔱', 350, 175,
+      ('창병 박무', '창병', '긴 창으로 적을 찌르는 전선의 수호자.', '🔱', 3500, 175,
        100, 20, 9, 8, 1, 4, 5, 3, 15, 2, 2.0, 2.0, 0.2, 0.5, 1, 'melee', 'earth', 'spear'),
-      ('궁수 한소이', '궁수', '먼 거리에서 화살로 적을 관통하는 명궁.', '🏹', 400, 200,
+      ('궁수 한소이', '궁수', '먼 거리에서 화살로 적을 관통하는 명궁.', '🏹', 4000, 200,
        70, 30, 11, 3, 4, 3, 12, 8, 10, 4, 2.5, 0.8, 0.8, 0.5, 2, 'ranged', 'wind', 'bow'),
-      ('도사 최현', '도사', '부적과 주문으로 적을 공격하는 술사.', '📜', 450, 225,
+      ('도사 최현', '도사', '부적과 주문으로 적을 공격하는 술사.', '📜', 4500, 225,
        65, 60, 3, 3, 12, 6, 6, 4, 8, 8, 0.5, 0.5, 2.5, 1.5, 3, 'magic', 'fire', 'talisman'),
-      ('무사 강철', '무사', '묵직한 일격으로 적을 쓰러뜨리는 전사.', '🗡️', 500, 250,
+      ('무사 강철', '무사', '묵직한 일격으로 적을 쓰러뜨리는 전사.', '🗡️', 5000, 250,
        120, 15, 12, 10, 1, 5, 7, 2, 18, 2, 2.8, 2.5, 0.2, 0.5, 3, 'melee', 'neutral', 'sword'),
-      ('치유사 윤하나', '치유사', '동료의 상처를 치유하는 은빛 치유사.', '💚', 550, 275,
+      ('치유사 윤하나', '치유사', '동료의 상처를 치유하는 은빛 치유사.', '💚', 5500, 275,
        75, 80, 2, 4, 8, 8, 3, 5, 10, 10, 0.3, 1.0, 2.0, 2.0, 4, 'magic', 'water', 'staff'),
-      ('자객 서영', '자객', '그림자 속에서 치명적 일격을 노리는 암살자.', '🗡️', 600, 300,
+      ('자객 서영', '자객', '그림자 속에서 치명적 일격을 노리는 암살자.', '🗡️', 6000, 300,
        60, 35, 14, 2, 6, 2, 18, 15, 8, 3, 3.0, 0.5, 1.0, 0.3, 5, 'melee', 'wind', 'dagger'),
-      ('마법사 정은비', '마법사', '강력한 마법으로 광역 피해를 주는 마도사.', '🔮', 700, 350,
+      ('마법사 정은비', '마법사', '강력한 마법으로 광역 피해를 주는 마도사.', '🔮', 7000, 350,
        55, 90, 2, 2, 15, 7, 5, 3, 6, 12, 0.3, 0.3, 3.0, 1.5, 6, 'magic', 'fire', 'staff')
     `);
+  }
+
+  // 용병 피로도 컬럼 추가
+  await pool.query(`ALTER TABLE mercenary_templates ADD COLUMN max_fatigue INT DEFAULT 7`).catch(() => {});
+  await pool.query(`ALTER TABLE character_mercenaries ADD COLUMN fatigue INT DEFAULT 7`).catch(() => {});
+  await pool.query(`ALTER TABLE character_mercenaries ADD COLUMN max_fatigue INT DEFAULT 7`).catch(() => {});
+  await pool.query(`ALTER TABLE character_mercenaries ADD COLUMN last_fatigue_recovery DATETIME DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
+
+  // 용병별 최대 피로도 설정 (5~10)
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 7 WHERE id = 1 AND max_fatigue = 7`);   // 검사
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 8 WHERE id = 2`);   // 창병
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 6 WHERE id = 3`);   // 궁수
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 5 WHERE id = 4`);   // 도사
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 10 WHERE id = 5`);  // 무사
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 5 WHERE id = 6`);   // 치유사
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 6 WHERE id = 7`);   // 자객
+  await pool.query(`UPDATE mercenary_templates SET max_fatigue = 5 WHERE id = 8`);   // 마법사
+
+  // 기존 용병 피로도 초기화 (max_fatigue가 기본값인 경우)
+  await pool.query(`
+    UPDATE character_mercenaries cm
+    JOIN mercenary_templates mt ON cm.template_id = mt.id
+    SET cm.max_fatigue = mt.max_fatigue, cm.fatigue = mt.max_fatigue
+    WHERE cm.max_fatigue = 7 AND mt.max_fatigue != 7
+  `).catch(() => {});
+
+  // 용병 고용비 10배 적용 (기존 데이터 업데이트)
+  await pool.query(`UPDATE mercenary_templates SET price = 3000 WHERE id = 1 AND price < 3000`);
+  await pool.query(`UPDATE mercenary_templates SET price = 3500 WHERE id = 2 AND price < 3500`);
+  await pool.query(`UPDATE mercenary_templates SET price = 4000 WHERE id = 3 AND price < 4000`);
+  await pool.query(`UPDATE mercenary_templates SET price = 4500 WHERE id = 4 AND price < 4500`);
+  await pool.query(`UPDATE mercenary_templates SET price = 5000 WHERE id = 5 AND price < 5000`);
+  await pool.query(`UPDATE mercenary_templates SET price = 5500 WHERE id = 6 AND price < 5500`);
+  await pool.query(`UPDATE mercenary_templates SET price = 6000 WHERE id = 7 AND price < 6000`);
+  await pool.query(`UPDATE mercenary_templates SET price = 7000 WHERE id = 8 AND price < 7000`);
+
+  // ========== 용병 스킬 시스템 ==========
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mercenary_skills (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(50) NOT NULL,
+      class_type VARCHAR(20) DEFAULT NULL,
+      template_id INT DEFAULT NULL,
+      description VARCHAR(200) NOT NULL,
+      type ENUM('attack', 'heal', 'buff') NOT NULL,
+      mp_cost INT NOT NULL DEFAULT 0,
+      damage_multiplier FLOAT DEFAULT 1.0,
+      heal_amount INT DEFAULT 0,
+      buff_stat VARCHAR(20) DEFAULT NULL,
+      buff_value INT DEFAULT 0,
+      buff_duration INT DEFAULT 0,
+      required_level INT DEFAULT 1,
+      cooldown INT DEFAULT 0,
+      is_common TINYINT(1) DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mercenary_learned_skills (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      mercenary_id INT NOT NULL,
+      skill_id INT NOT NULL,
+      FOREIGN KEY (mercenary_id) REFERENCES character_mercenaries(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES mercenary_skills(id),
+      UNIQUE KEY unique_merc_skill (mercenary_id, skill_id)
+    )
+  `);
+
+  // 용병 장비 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mercenary_equipment (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      mercenary_id INT NOT NULL,
+      slot VARCHAR(20) NOT NULL,
+      item_id INT NOT NULL,
+      FOREIGN KEY (mercenary_id) REFERENCES character_mercenaries(id) ON DELETE CASCADE,
+      FOREIGN KEY (item_id) REFERENCES items(id),
+      UNIQUE KEY unique_merc_slot (mercenary_id, slot)
+    )
+  `);
+
+  const [existingMercSkills] = await pool.query('SELECT COUNT(*) as cnt FROM mercenary_skills');
+  if (existingMercSkills[0].cnt === 0) {
+    await pool.query(`INSERT INTO mercenary_skills (name, class_type, template_id, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common) VALUES
+      ('강타', NULL, NULL, '힘을 모아 강하게 내려친다.', 'attack', 5, 1.5, 0, NULL, 0, 0, 1, 0, 1),
+      ('방어 태세', NULL, NULL, '방어 태세를 취하여 방어력을 올린다.', 'buff', 8, 0, 0, 'defense', 6, 3, 1, 2, 1),
+      ('기합', NULL, NULL, '기합을 넣어 공격력을 높인다.', 'buff', 10, 0, 0, 'attack', 5, 3, 2, 2, 1),
+      ('생명력 회복', NULL, NULL, '내공으로 체력을 소량 회복한다.', 'heal', 12, 0, 25, NULL, 0, 0, 3, 2, 1),
+
+      ('검풍', '검사', NULL, '검기를 날려 적을 벤다.', 'attack', 8, 2.0, 0, NULL, 0, 0, 1, 0, 0),
+      ('쾌속 연참', '검사', NULL, '빠른 연속 베기로 적을 공격한다.', 'attack', 15, 2.8, 0, NULL, 0, 0, 3, 1, 0),
+      ('일섬', '검사', NULL, '일도양단의 일격을 날린다.', 'attack', 25, 4.0, 0, NULL, 0, 0, 5, 2, 0),
+
+      ('창격', '창병', NULL, '창으로 강하게 찔러 적을 공격한다.', 'attack', 7, 1.8, 0, NULL, 0, 0, 1, 0, 0),
+      ('철벽 방어', '창병', NULL, '창을 세워 단단한 방벽을 만든다.', 'buff', 12, 0, 0, 'defense', 10, 3, 3, 2, 0),
+      ('관통 찌르기', '창병', NULL, '적의 방어를 무시하는 관통 일격.', 'attack', 22, 3.5, 0, NULL, 0, 0, 5, 2, 0),
+
+      ('관통 사격', '궁수', NULL, '화살로 적을 정확히 관통한다.', 'attack', 6, 1.8, 0, NULL, 0, 0, 1, 0, 0),
+      ('속사', '궁수', NULL, '빠르게 여러 발의 화살을 쏜다.', 'attack', 14, 2.5, 0, NULL, 0, 0, 3, 1, 0),
+      ('집중 조준', '궁수', NULL, '급소를 노리는 치명적 사격.', 'attack', 20, 3.8, 0, NULL, 0, 0, 5, 2, 0),
+
+      ('부적 공격', '도사', NULL, '부적에 담긴 기운으로 적을 공격한다.', 'attack', 8, 2.0, 0, NULL, 0, 0, 1, 0, 0),
+      ('결계', '도사', NULL, '보호 결계를 펼쳐 방어력을 높인다.', 'buff', 15, 0, 0, 'defense', 8, 4, 3, 2, 0),
+      ('뇌전부', '도사', NULL, '번개를 부르는 강력한 부적 술법.', 'attack', 25, 3.8, 0, NULL, 0, 0, 5, 2, 0),
+
+      ('분쇄격', '무사', NULL, '묵직한 일격으로 적을 내려친다.', 'attack', 8, 2.2, 0, NULL, 0, 0, 1, 0, 0),
+      ('전투 함성', '무사', NULL, '함성을 질러 공격력을 크게 높인다.', 'buff', 15, 0, 0, 'attack', 10, 3, 3, 2, 0),
+      ('파쇄격', '무사', NULL, '전력을 다한 파괴적 일격.', 'attack', 28, 4.2, 0, NULL, 0, 0, 5, 2, 0),
+
+      ('치유의 손길', '치유사', NULL, '따뜻한 빛으로 상처를 치유한다.', 'heal', 10, 0, 40, NULL, 0, 0, 1, 1, 0),
+      ('축복', '치유사', NULL, '동료에게 축복을 내려 방어력을 높인다.', 'buff', 15, 0, 0, 'defense', 8, 4, 3, 2, 0),
+      ('대치유', '치유사', NULL, '강력한 치유 마법으로 대량의 체력을 회복한다.', 'heal', 30, 0, 80, NULL, 0, 0, 5, 3, 0),
+
+      ('급소 찌르기', '자객', NULL, '적의 급소를 노려 빠르게 찌른다.', 'attack', 6, 2.0, 0, NULL, 0, 0, 1, 0, 0),
+      ('그림자 습격', '자객', NULL, '그림자 속에서 기습하여 큰 피해를 입힌다.', 'attack', 16, 3.0, 0, NULL, 0, 0, 3, 1, 0),
+      ('암살', '자객', NULL, '치명적인 암살 공격을 가한다.', 'attack', 28, 4.5, 0, NULL, 0, 0, 5, 2, 0),
+
+      ('화염구', '마법사', NULL, '화염 구체를 발사하여 적을 불태운다.', 'attack', 10, 2.2, 0, NULL, 0, 0, 1, 0, 0),
+      ('마력 집중', '마법사', NULL, '마력을 집중하여 마법 공격력을 높인다.', 'buff', 15, 0, 0, 'attack', 8, 3, 3, 2, 0),
+      ('화염 폭풍', '마법사', NULL, '거대한 화염 폭풍을 일으킨다.', 'attack', 30, 4.5, 0, NULL, 0, 0, 5, 2, 0)
+    `);
+  }
+
+  // 용병 스킬 required_level 10배 확대 (1→10, 2→20, ...) - 아직 변환 안 된 경우만
+  {
+    const [msCheck] = await pool.query('SELECT MAX(required_level) as mx FROM mercenary_skills');
+    if (msCheck[0].mx <= 5) {
+      await pool.query("UPDATE mercenary_skills SET required_level = required_level * 10").catch(() => {});
+    }
+  }
+
+  // 기존 용병들에게 레벨에 맞는 스킬 자동 부여 (마이그레이션)
+  const [existingMercs] = await pool.query(
+    `SELECT cm.id, cm.level, mt.class_type FROM character_mercenaries cm
+     JOIN mercenary_templates mt ON cm.template_id = mt.id`
+  );
+  for (const em of existingMercs) {
+    const [learnableSkills] = await pool.query(
+      `SELECT id FROM mercenary_skills
+       WHERE required_level <= ? AND (is_common = 1 OR class_type = ?)
+       AND id NOT IN (SELECT skill_id FROM mercenary_learned_skills WHERE mercenary_id = ?)`,
+      [em.level, em.class_type, em.id]
+    );
+    for (const sk of learnableSkills) {
+      await pool.query('INSERT IGNORE INTO mercenary_learned_skills (mercenary_id, skill_id) VALUES (?, ?)', [em.id, sk.id]).catch(() => {});
+    }
+  }
+
+  // ========== 스킬 트리 시스템 ==========
+  // characters에 skill_points, total_skill_points 컬럼 추가
+  await addCol('skill_points', 'INT DEFAULT 0');
+  await addCol('total_skill_points', 'INT DEFAULT 0');
+
+  // 기존 캐릭터에 레벨 기반 스킬 포인트 지급
+  await pool.query('UPDATE characters SET skill_points = level, total_skill_points = level WHERE total_skill_points = 0 AND level > 0').catch(() => {});
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS skill_tree_nodes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      class_type VARCHAR(20) NOT NULL,
+      branch VARCHAR(30) NOT NULL,
+      branch_name VARCHAR(30) NOT NULL,
+      tier INT NOT NULL DEFAULT 1,
+      node_key VARCHAR(50) NOT NULL UNIQUE,
+      name VARCHAR(50) NOT NULL,
+      description VARCHAR(300) NOT NULL,
+      icon VARCHAR(10) DEFAULT '✦',
+      node_type ENUM('active','passive') NOT NULL DEFAULT 'active',
+      skill_type ENUM('attack','heal','buff','debuff','aoe') DEFAULT NULL,
+      mp_cost INT DEFAULT 0,
+      damage_multiplier FLOAT DEFAULT 1.0,
+      damage_type ENUM('physical','magical') DEFAULT 'magical',
+      heal_amount INT DEFAULT 0,
+      buff_stat VARCHAR(20) DEFAULT NULL,
+      buff_value INT DEFAULT 0,
+      buff_duration INT DEFAULT 0,
+      cooldown INT DEFAULT 0,
+      skill_range INT DEFAULT 1,
+      passive_stat VARCHAR(20) DEFAULT NULL,
+      passive_value FLOAT DEFAULT 0,
+      passive_is_percent TINYINT(1) DEFAULT 0,
+      pos_x FLOAT DEFAULT 0,
+      pos_y FLOAT DEFAULT 0,
+      point_cost INT DEFAULT 1,
+      required_level INT DEFAULT 1
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS skill_tree_edges (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      parent_node_id INT NOT NULL,
+      child_node_id INT NOT NULL,
+      FOREIGN KEY (parent_node_id) REFERENCES skill_tree_nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (child_node_id) REFERENCES skill_tree_nodes(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_edge (parent_node_id, child_node_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS character_skill_nodes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      node_id INT NOT NULL,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      FOREIGN KEY (node_id) REFERENCES skill_tree_nodes(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_char_node (character_id, node_id)
+    )
+  `);
+
+  // 스킬 트리 노드 시드 (81개: 클래스당 27개 = 3브랜치 x 9노드)
+  const [existingTreeNodes] = await pool.query('SELECT COUNT(*) as cnt FROM skill_tree_nodes');
+  if (existingTreeNodes[0].cnt === 0) {
+    // ===== 풍수사 =====
+    await pool.query(`INSERT INTO skill_tree_nodes (class_type, branch, branch_name, tier, node_key, name, description, icon, node_type, skill_type, mp_cost, damage_multiplier, damage_type, heal_amount, buff_stat, buff_value, buff_duration, cooldown, skill_range, passive_stat, passive_value, passive_is_percent, pos_x, pos_y, point_cost, required_level) VALUES
+      ('풍수사','fire','화염술',1,'ps_fire_1','화염탄','불의 기운을 모아 적에게 화염탄을 날린다.','🔥','active','attack',10,2.0,'magical',0,NULL,0,0,0,2,NULL,0,0, 1,1, 1,1),
+      ('풍수사','fire','화염술',2,'ps_fire_2a','업화','맹렬한 업화로 적을 불태운다.','🔥','active','attack',18,3.0,'magical',0,NULL,0,0,1,2,NULL,0,0, 0,2, 1,3),
+      ('풍수사','fire','화염술',2,'ps_fire_2b','화염폭발','폭발하는 화염으로 범위 피해를 준다.','💥','active','aoe',22,2.5,'magical',0,NULL,0,0,2,2,NULL,0,0, 2,2, 1,3),
+      ('풍수사','fire','화염술',3,'ps_fire_3a','불꽃결계','불꽃 결계를 펼쳐 마공을 높인다.','🛡️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_attack',5,0, 0,3, 1,5),
+      ('풍수사','fire','화염술',3,'ps_fire_3b','연소','화염 공격 시 추가 피해를 입힌다.','♨️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_attack',8,1, 1,3, 1,5),
+      ('풍수사','fire','화염술',3,'ps_fire_3c','화산탄','용암을 발사하여 강력한 일격을 가한다.','🌋','active','attack',30,4.0,'magical',0,NULL,0,0,2,3,NULL,0,0, 2,3, 1,5),
+      ('풍수사','fire','화염술',4,'ps_fire_4','삼매진화','삼매의 진화로 모든 것을 태운다. 궁극 화염술.','☀️','active','aoe',50,6.0,'magical',0,NULL,0,0,4,3,NULL,0,0, 1,4, 2,8),
+
+      ('풍수사','geomancy','풍수지리',1,'ps_geo_1','풍수결계','풍수 결계를 펼쳐 방어력을 높인다.','🌀','active','buff',12,0,'magical',0,'defense',8,3,2,0,NULL,0,0, 1,1, 1,1),
+      ('풍수사','geomancy','풍수지리',2,'ps_geo_2a','대지의 축복','대지의 기운으로 HP를 회복한다.','🌿','active','heal',15,0,'magical',40,NULL,0,0,1,0,NULL,0,0, 0,2, 1,3),
+      ('풍수사','geomancy','풍수지리',2,'ps_geo_2b','수맥감응','수맥의 기운을 감지하여 MP를 회복한다.','💧','active','heal',0,0,'magical',0,'mp',15,1,2,0,NULL,0,0, 1,2, 1,3),
+      ('풍수사','geomancy','풍수지리',2,'ps_geo_2c','바람길','바람의 길을 열어 회피율을 높인다.','💨','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'evasion',3,0, 2,2, 1,3),
+      ('풍수사','geomancy','풍수지리',3,'ps_geo_3a','산맥호위','산맥의 기운으로 물방을 강화한다.','⛰️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'phys_defense',5,0, 0,3, 1,5),
+      ('풍수사','geomancy','풍수지리',3,'ps_geo_3b','기운회복','자연의 기운을 흡수하여 체력을 회복한다.','💚','active','heal',25,0,'magical',60,NULL,0,0,2,0,NULL,0,0, 2,3, 1,5),
+      ('풍수사','geomancy','풍수지리',4,'ps_geo_4','천지개벽','천지를 뒤흔드는 궁극 풍수술.','🌏','active','aoe',55,5.5,'magical',0,'defense',10,3,4,4,NULL,0,0, 1,4, 2,8),
+
+      ('풍수사','dragon','용맥술',1,'ps_dragon_1','수맥파','대지의 수맥을 터뜨려 강력한 일격을 가한다.','🐉','active','attack',15,2.5,'magical',0,NULL,0,0,1,2,NULL,0,0, 1,1, 1,1),
+      ('풍수사','dragon','용맥술',2,'ps_dragon_2a','용맥감지','용맥을 감지하여 치명률을 높인다.','👁️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'crit_rate',3,0, 0,2, 1,3),
+      ('풍수사','dragon','용맥술',2,'ps_dragon_2b','기맥순환','기맥을 순환시켜 MP를 절약한다.','🔄','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mp',10,0, 2,2, 1,3),
+      ('풍수사','dragon','용맥술',3,'ps_dragon_3a','용맥강타','용맥의 힘으로 강력한 일격을 가한다.','⚡','active','attack',25,3.5,'magical',0,NULL,0,0,2,3,NULL,0,0, 0,3, 1,5),
+      ('풍수사','dragon','용맥술',3,'ps_dragon_3b','용의 가호','용의 기운으로 마방을 강화한다.','🛡️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_defense',5,0, 1,3, 1,5),
+      ('풍수사','dragon','용맥술',3,'ps_dragon_3c','지맥폭발','지맥을 폭발시켜 범위 피해를 준다.','💥','active','aoe',28,3.0,'magical',0,NULL,0,0,2,2,NULL,0,0, 2,3, 1,5),
+      ('풍수사','dragon','용맥술',4,'ps_dragon_4','용맥폭발','용맥의 모든 힘을 해방하는 궁극기.','🐲','active','attack',55,7.0,'magical',0,NULL,0,0,4,3,NULL,0,0, 1,4, 2,8),
+
+      -- ===== 무당 =====
+      ('무당','spirit','강신술',1,'md_spirit_1','부적소환','저주의 부적을 소환하여 적을 공격한다.','📜','active','attack',8,1.8,'magical',0,NULL,0,0,0,2,NULL,0,0, 1,1, 1,1),
+      ('무당','spirit','강신술',2,'md_spirit_2a','영혼공명','영혼과 공명하여 마공을 높인다.','👻','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_attack',4,0, 0,2, 1,3),
+      ('무당','spirit','강신술',2,'md_spirit_2b','영혼흡수','적의 생명력을 흡수한다.','💜','active','attack',18,2.2,'magical',30,NULL,0,0,1,2,NULL,0,0, 2,2, 1,3),
+      ('무당','spirit','강신술',3,'md_spirit_3a','신내림','신의 힘을 빌려 공격력을 크게 높인다.','⬆️','active','buff',15,0,'magical',0,'attack',10,3,2,0,NULL,0,0, 0,3, 1,5),
+      ('무당','spirit','강신술',3,'md_spirit_3b','혼백분리','혼백을 분리하여 치명 피해를 높인다.','💀','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'crit_rate',4,0, 1,3, 1,5),
+      ('무당','spirit','강신술',3,'md_spirit_3c','영력증폭','영력을 증폭하여 마공을 강화한다.','✨','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_attack',6,0, 2,3, 1,5),
+      ('무당','spirit','강신술',4,'md_spirit_4','강신합체','강력한 영혼과 합체하는 궁극 강신술.','👹','active','attack',45,6.5,'magical',0,'attack',12,3,4,3,NULL,0,0, 1,4, 2,8),
+
+      ('무당','healing','치유술',1,'md_heal_1','치유의식','치유의 의식을 행하여 체력을 회복한다.','💚','active','heal',12,0,'magical',35,NULL,0,0,1,2,NULL,0,0, 1,1, 1,1),
+      ('무당','healing','치유술',2,'md_heal_2a','정화의 기운','정화의 기운으로 HP를 강화한다.','🌿','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'hp',15,0, 0,2, 1,3),
+      ('무당','healing','치유술',2,'md_heal_2b','보호결계','보호 결계로 마방을 높인다.','🛡️','active','buff',14,0,'magical',0,'mag_defense',8,3,2,0,NULL,0,0, 2,2, 1,3),
+      ('무당','healing','치유술',3,'md_heal_3a','대치유','강력한 치유 의식으로 대량 HP를 회복한다.','💖','active','heal',30,0,'magical',80,NULL,0,0,2,3,NULL,0,0, 0,3, 1,5),
+      ('무당','healing','치유술',3,'md_heal_3b','생명의 축복','생명력을 강화하는 축복을 내린다.','🌸','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'hp',25,0, 1,3, 1,5),
+      ('무당','healing','치유술',3,'md_heal_3c','해독의식','해독 의식으로 물방을 강화한다.','🍃','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'phys_defense',4,0, 2,3, 1,5),
+      ('무당','healing','치유술',4,'md_heal_4','부활의 의식','죽은 자를 되살리는 궁극 치유술.','🌅','active','heal',60,0,'magical',150,NULL,0,0,4,4,NULL,0,0, 1,4, 2,8),
+
+      ('무당','curse','저주술',1,'md_curse_1','약화저주','적의 방어력을 약화시키는 저주.','🔮','active','debuff',10,1.5,'magical',0,'defense',-5,3,0,3,NULL,0,0, 1,1, 1,1),
+      ('무당','curse','저주술',2,'md_curse_2a','독기방출','독기를 방출하여 지속 피해를 준다.','☠️','active','attack',16,2.5,'magical',0,NULL,0,0,1,2,NULL,0,0, 0,2, 1,3),
+      ('무당','curse','저주술',2,'md_curse_2b','저주확산','저주가 확산되어 범위 피해를 준다.','🌑','active','aoe',20,2.0,'magical',0,NULL,0,0,2,2,NULL,0,0, 2,2, 1,3),
+      ('무당','curse','저주술',3,'md_curse_3a','혼란의 주문','적을 혼란에 빠뜨리는 주문.','🌀','active','debuff',22,2.8,'magical',0,'attack',-8,3,2,3,NULL,0,0, 0,3, 1,5),
+      ('무당','curse','저주술',3,'md_curse_3b','원한응축','원한을 응축하여 마공을 높인다.','💢','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_attack',7,0, 1,3, 1,5),
+      ('무당','curse','저주술',3,'md_curse_3c','사령소환','사령을 소환하여 적을 공격한다.','👻','active','attack',26,3.5,'magical',0,NULL,0,0,2,3,NULL,0,0, 2,3, 1,5),
+      ('무당','curse','저주술',4,'md_curse_4','망자의 저주','망자의 원한을 해방하는 궁극 저주술.','💀','active','aoe',55,6.0,'magical',0,'defense',-10,3,4,4,NULL,0,0, 1,4, 2,8),
+
+      -- ===== 승려 =====
+      ('승려','diamond','금강술',1,'mk_diamond_1','철벽수호','몸을 강철처럼 단단하게 만든다.','🛡️','active','buff',10,0,'physical',0,'defense',10,3,2,0,NULL,0,0, 1,1, 1,1),
+      ('승려','diamond','금강술',2,'mk_diamond_2a','강철피부','피부를 강철처럼 단련하여 물방을 높인다.','⬛','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_defense',5,0, 0,2, 1,3),
+      ('승려','diamond','금강술',2,'mk_diamond_2b','기공방어','기공으로 마방을 높인다.','🔵','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'mag_defense',4,0, 2,2, 1,3),
+      ('승려','diamond','금강술',3,'mk_diamond_3a','불괴금강','부서지지 않는 금강의 몸을 얻는다.','💎','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'hp',30,0, 0,3, 1,5),
+      ('승려','diamond','금강술',3,'mk_diamond_3b','반격자세','반격 자세로 물공을 높인다.','⚔️','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_attack',5,0, 1,3, 1,5),
+      ('승려','diamond','금강술',3,'mk_diamond_3c','기력회복','기력을 회복하여 HP를 되찾는다.','💚','active','heal',15,0,'physical',50,NULL,0,0,1,0,NULL,0,0, 2,3, 1,5),
+      ('승려','diamond','금강술',4,'mk_diamond_4','금강불괴체','금강불괴의 몸을 완성하는 궁극기.','🏔️','active','buff',50,0,'physical',0,'defense',20,4,4,0,NULL,0,0, 1,4, 2,8),
+
+      ('승려','arhat','나한권',1,'mk_arhat_1','금강권','금강의 힘을 담은 주먹으로 강타한다.','👊','active','attack',8,1.8,'physical',0,NULL,0,0,0,1,NULL,0,0, 1,1, 1,1),
+      ('승려','arhat','나한권',2,'mk_arhat_2a','연타수련','연타로 공격력을 높인다.','💪','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_attack',4,0, 0,2, 1,3),
+      ('승려','arhat','나한권',2,'mk_arhat_2b','파사권','사악함을 부수는 강력한 권법.','✊','active','attack',18,2.8,'physical',0,NULL,0,0,1,1,NULL,0,0, 2,2, 1,3),
+      ('승려','arhat','나한권',3,'mk_arhat_3a','백보신권','100보를 꿰뚫는 신권.','💫','active','attack',25,3.5,'physical',0,NULL,0,0,2,2,NULL,0,0, 0,3, 1,5),
+      ('승려','arhat','나한권',3,'mk_arhat_3b','급소타격','급소를 노려 치명률을 높인다.','🎯','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'crit_rate',5,0, 1,3, 1,5),
+      ('승려','arhat','나한권',3,'mk_arhat_3c','연환격','연속으로 강력한 타격을 가한다.','🔥','active','attack',22,3.0,'physical',0,NULL,0,0,1,1,NULL,0,0, 2,3, 1,5),
+      ('승려','arhat','나한권',4,'mk_arhat_4','나한신권','나한의 힘을 깨워 초월적 일격.','☯️','active','attack',50,7.0,'physical',0,NULL,0,0,4,2,NULL,0,0, 1,4, 2,8),
+
+      ('승려','zen','선법',1,'mk_zen_1','선정','깊은 선정에 들어 HP를 회복한다.','🧘','active','heal',10,0,'magical',30,NULL,0,0,1,0,NULL,0,0, 1,1, 1,1),
+      ('승려','zen','선법',2,'mk_zen_2a','내공수련','내공을 수련하여 물공을 높인다.','💪','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_attack',3,0, 0,2, 1,3),
+      ('승려','zen','선법',2,'mk_zen_2b','명상','깊은 명상으로 MP를 높인다.','🕯️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mp',15,0, 2,2, 1,3),
+      ('승려','zen','선법',3,'mk_zen_3a','기공파','기공을 모아 강력한 파동을 발사한다.','🌊','active','attack',20,3.0,'magical',0,NULL,0,0,2,3,NULL,0,0, 0,3, 1,5),
+      ('승려','zen','선법',3,'mk_zen_3b','선정의 경지','선정의 경지에 올라 회피를 높인다.','☁️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'evasion',4,0, 1,3, 1,5),
+      ('승려','zen','선법',3,'mk_zen_3c','만병통치','모든 상처를 치유하는 의술.','🌟','active','heal',28,0,'magical',70,NULL,0,0,2,0,NULL,0,0, 2,3, 1,5),
+      ('승려','zen','선법',4,'mk_zen_4','대자대비','대자대비의 경지에 오르는 궁극 선법.','☸️','active','heal',55,0,'magical',120,'attack',10,3,4,4,NULL,0,0, 1,4, 2,8)
+    `);
+
+    // 스킬 트리 엣지 (parent → child 연결)
+    const edgeDefs = [
+      // 풍수사 화염술
+      ['ps_fire_1','ps_fire_2a'], ['ps_fire_1','ps_fire_2b'],
+      ['ps_fire_2a','ps_fire_3a'], ['ps_fire_2a','ps_fire_3b'],
+      ['ps_fire_2b','ps_fire_3b'], ['ps_fire_2b','ps_fire_3c'],
+      ['ps_fire_3a','ps_fire_4'], ['ps_fire_3b','ps_fire_4'], ['ps_fire_3c','ps_fire_4'],
+      // 풍수사 풍수지리
+      ['ps_geo_1','ps_geo_2a'], ['ps_geo_1','ps_geo_2b'], ['ps_geo_1','ps_geo_2c'],
+      ['ps_geo_2a','ps_geo_3a'], ['ps_geo_2b','ps_geo_3a'], ['ps_geo_2b','ps_geo_3b'],
+      ['ps_geo_2c','ps_geo_3b'],
+      ['ps_geo_3a','ps_geo_4'], ['ps_geo_3b','ps_geo_4'],
+      // 풍수사 용맥술
+      ['ps_dragon_1','ps_dragon_2a'], ['ps_dragon_1','ps_dragon_2b'],
+      ['ps_dragon_2a','ps_dragon_3a'], ['ps_dragon_2a','ps_dragon_3b'],
+      ['ps_dragon_2b','ps_dragon_3b'], ['ps_dragon_2b','ps_dragon_3c'],
+      ['ps_dragon_3a','ps_dragon_4'], ['ps_dragon_3b','ps_dragon_4'], ['ps_dragon_3c','ps_dragon_4'],
+      // 무당 강신술
+      ['md_spirit_1','md_spirit_2a'], ['md_spirit_1','md_spirit_2b'],
+      ['md_spirit_2a','md_spirit_3a'], ['md_spirit_2a','md_spirit_3b'],
+      ['md_spirit_2b','md_spirit_3b'], ['md_spirit_2b','md_spirit_3c'],
+      ['md_spirit_3a','md_spirit_4'], ['md_spirit_3b','md_spirit_4'], ['md_spirit_3c','md_spirit_4'],
+      // 무당 치유술
+      ['md_heal_1','md_heal_2a'], ['md_heal_1','md_heal_2b'],
+      ['md_heal_2a','md_heal_3a'], ['md_heal_2a','md_heal_3b'],
+      ['md_heal_2b','md_heal_3b'], ['md_heal_2b','md_heal_3c'],
+      ['md_heal_3a','md_heal_4'], ['md_heal_3b','md_heal_4'], ['md_heal_3c','md_heal_4'],
+      // 무당 저주술
+      ['md_curse_1','md_curse_2a'], ['md_curse_1','md_curse_2b'],
+      ['md_curse_2a','md_curse_3a'], ['md_curse_2a','md_curse_3b'],
+      ['md_curse_2b','md_curse_3b'], ['md_curse_2b','md_curse_3c'],
+      ['md_curse_3a','md_curse_4'], ['md_curse_3b','md_curse_4'], ['md_curse_3c','md_curse_4'],
+      // 승려 금강술
+      ['mk_diamond_1','mk_diamond_2a'], ['mk_diamond_1','mk_diamond_2b'],
+      ['mk_diamond_2a','mk_diamond_3a'], ['mk_diamond_2a','mk_diamond_3b'],
+      ['mk_diamond_2b','mk_diamond_3b'], ['mk_diamond_2b','mk_diamond_3c'],
+      ['mk_diamond_3a','mk_diamond_4'], ['mk_diamond_3b','mk_diamond_4'], ['mk_diamond_3c','mk_diamond_4'],
+      // 승려 나한권
+      ['mk_arhat_1','mk_arhat_2a'], ['mk_arhat_1','mk_arhat_2b'],
+      ['mk_arhat_2a','mk_arhat_3a'], ['mk_arhat_2a','mk_arhat_3b'],
+      ['mk_arhat_2b','mk_arhat_3b'], ['mk_arhat_2b','mk_arhat_3c'],
+      ['mk_arhat_3a','mk_arhat_4'], ['mk_arhat_3b','mk_arhat_4'], ['mk_arhat_3c','mk_arhat_4'],
+      // 승려 선법
+      ['mk_zen_1','mk_zen_2a'], ['mk_zen_1','mk_zen_2b'],
+      ['mk_zen_2a','mk_zen_3a'], ['mk_zen_2a','mk_zen_3b'],
+      ['mk_zen_2b','mk_zen_3b'], ['mk_zen_2b','mk_zen_3c'],
+      ['mk_zen_3a','mk_zen_4'], ['mk_zen_3b','mk_zen_4'], ['mk_zen_3c','mk_zen_4'],
+    ];
+
+    // node_key → id 매핑
+    const [allNodes] = await pool.query('SELECT id, node_key FROM skill_tree_nodes');
+    const nMap = {};
+    for (const n of allNodes) nMap[n.node_key] = n.id;
+
+    for (const [pKey, cKey] of edgeDefs) {
+      if (nMap[pKey] && nMap[cKey]) {
+        await pool.query(
+          'INSERT INTO skill_tree_edges (parent_node_id, child_node_id) VALUES (?, ?)',
+          [nMap[pKey], nMap[cKey]]
+        );
+      }
+    }
+  }
+
+  // ── 운명술사 (운세/점괘/부적) 테이블 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS character_fortunes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      fortune_type ENUM('daily','divination','talisman') NOT NULL,
+      fortune_grade VARCHAR(30) DEFAULT '',
+      fortune_msg VARCHAR(200) DEFAULT '',
+      buff_type VARCHAR(20),
+      buff_value INT DEFAULT 0,
+      remaining_battles INT DEFAULT 0,
+      icon VARCHAR(10) DEFAULT '',
+      color VARCHAR(20) DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    )
+  `);
+
+  // ── 타로카드 수집 테이블 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS character_tarot_collection (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      card_index INT NOT NULL,
+      discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_char_card (character_id, card_index)
+    )
+  `);
+
+  // ── 타로 리딩 기록 테이블 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS character_tarot_readings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      spread_type VARCHAR(20) DEFAULT 'three',
+      card1_index INT NOT NULL,
+      card1_reversed TINYINT(1) DEFAULT 0,
+      card2_index INT DEFAULT 0,
+      card2_reversed TINYINT(1) DEFAULT 0,
+      card3_index INT DEFAULT 0,
+      card3_reversed TINYINT(1) DEFAULT 0,
+      buff_type VARCHAR(20),
+      buff_value INT DEFAULT 0,
+      gold_cost INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    )
+  `);
+
+  // fortune_type ENUM에 'tarot' 추가
+  await pool.query(`ALTER TABLE character_fortunes MODIFY COLUMN fortune_type ENUM('daily','divination','talisman','tarot') NOT NULL`).catch(() => {});
+
+  // spread_type 컬럼 추가 (기존 테이블 호환)
+  await pool.query(`ALTER TABLE character_tarot_readings ADD COLUMN spread_type VARCHAR(20) DEFAULT 'three' AFTER character_id`).catch(() => {});
+  await pool.query(`ALTER TABLE character_tarot_readings MODIFY COLUMN card2_index INT DEFAULT 0`).catch(() => {});
+  await pool.query(`ALTER TABLE character_tarot_readings MODIFY COLUMN card3_index INT DEFAULT 0`).catch(() => {});
+
+  // ========== 스페셜 던전 시스템 ==========
+
+  // 스페셜 던전 타입 정의
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS special_dungeon_types (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      key_name VARCHAR(30) NOT NULL UNIQUE,
+      name VARCHAR(50) NOT NULL,
+      description VARCHAR(200),
+      battle_type ENUM('srpg','card') NOT NULL DEFAULT 'srpg',
+      reset_type ENUM('weekly','daily','per_boss') NOT NULL,
+      required_level INT DEFAULT 1,
+      stamina_cost INT DEFAULT 1,
+      icon VARCHAR(10) DEFAULT '🏰',
+      accent_color VARCHAR(10) DEFAULT '#a78bfa',
+      display_order INT DEFAULT 0
+    )
+  `);
+
+  // 무한의 탑 층 데이터
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tower_floors (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      floor_num INT NOT NULL UNIQUE,
+      monster_count INT DEFAULT 3,
+      level_bonus INT DEFAULT 0,
+      hp_multiplier FLOAT DEFAULT 1.0,
+      atk_multiplier FLOAT DEFAULT 1.0,
+      is_boss TINYINT(1) DEFAULT 0,
+      exp_reward INT DEFAULT 50,
+      gold_reward INT DEFAULT 30,
+      dungeon_key VARCHAR(30) DEFAULT 'cave'
+    )
+  `);
+
+  // 정령의 시련 단계 데이터
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS elemental_trials (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      tier INT NOT NULL UNIQUE,
+      name VARCHAR(50) NOT NULL,
+      required_level INT DEFAULT 1,
+      monster_count INT DEFAULT 3,
+      hp_multiplier FLOAT DEFAULT 1.0,
+      atk_multiplier FLOAT DEFAULT 1.0,
+      exp_reward INT DEFAULT 80,
+      gold_reward INT DEFAULT 50,
+      material_grade VARCHAR(10) DEFAULT '희귀',
+      material_count INT DEFAULT 1
+    )
+  `);
+
+  // 보스 토벌전 보스 설정
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS boss_raid_configs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(50) NOT NULL,
+      description VARCHAR(200),
+      dungeon_key VARCHAR(30) NOT NULL,
+      required_level INT DEFAULT 1,
+      boss_hp_mult FLOAT DEFAULT 3.0,
+      boss_atk_mult FLOAT DEFAULT 2.0,
+      monster_count INT DEFAULT 4,
+      exp_reward INT DEFAULT 200,
+      gold_reward INT DEFAULT 150,
+      display_order INT DEFAULT 0
+    )
+  `);
+
+  // 스페셜 던전 진행 추적
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS special_dungeon_progress (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      dungeon_type VARCHAR(30) NOT NULL,
+      progress_value INT DEFAULT 0,
+      best_record INT DEFAULT 0,
+      total_clears INT DEFAULT 0,
+      reset_date DATE DEFAULT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_char_type (character_id, dungeon_type)
+    )
+  `);
+
+  // 보스 토벌전 일일 도전 기록
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS boss_raid_daily (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      boss_config_id INT NOT NULL,
+      attempt_date DATE NOT NULL,
+      cleared TINYINT(1) DEFAULT 0,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      FOREIGN KEY (boss_config_id) REFERENCES boss_raid_configs(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_char_boss_date (character_id, boss_config_id, attempt_date)
+    )
+  `);
+
+  // 스페셜 던전 타입 시드 데이터
+  const [existingSPTypes] = await pool.query('SELECT COUNT(*) as cnt FROM special_dungeon_types');
+  if (existingSPTypes[0].cnt === 0) {
+    await pool.query(`INSERT INTO special_dungeon_types (key_name, name, description, battle_type, reset_type, required_level, stamina_cost, icon, accent_color, display_order) VALUES
+      ('tower', '무한의 탑', '끝없이 이어지는 시련의 탑. 매주 월요일에 진행도가 초기화됩니다.', 'srpg', 'weekly', 1, 1, '🗼', '#a78bfa', 1),
+      ('elemental', '정령의 시련', '매일 바뀌는 속성의 정령과 싸워 정수와 결정을 획득하세요.', 'card', 'daily', 3, 1, '🌀', '#22d3ee', 2),
+      ('boss_raid', '보스 토벌전', '강력한 보스에 도전하세요. 각 보스는 하루 1회 도전 가능합니다.', 'srpg', 'per_boss', 5, 2, '💀', '#f97316', 3)
+    `);
+  }
+
+  // 무한의 탑 50층 시드 데이터
+  const [existingFloors] = await pool.query('SELECT COUNT(*) as cnt FROM tower_floors');
+  if (existingFloors[0].cnt === 0) {
+    const dungeonCycle = ['cave','goblin','mountain','ocean','temple','demon','dragon'];
+    const floorValues = [];
+    for (let n = 1; n <= 50; n++) {
+      const mc = 3 + Math.floor(n / 10);
+      const isBoss = n % 10 === 0 ? 1 : 0;
+      const bossExtra = isBoss ? 2 : 0;
+      const expR = (50 + n * 12) * (isBoss ? 2 : 1);
+      const goldR = (30 + n * 8) * (isBoss ? 2 : 1);
+      const dk = dungeonCycle[(Math.floor((n - 1) / 7)) % dungeonCycle.length];
+      floorValues.push(`(${n}, ${mc + bossExtra}, ${n}, ${(1.0 + n * 0.04).toFixed(2)}, ${(1.0 + n * 0.025).toFixed(3)}, ${isBoss}, ${expR}, ${goldR}, '${dk}')`);
+    }
+    await pool.query(`INSERT INTO tower_floors (floor_num, monster_count, level_bonus, hp_multiplier, atk_multiplier, is_boss, exp_reward, gold_reward, dungeon_key) VALUES ${floorValues.join(',')}`);
+  }
+
+  // 정령의 시련 5단계 시드 데이터
+  const [existingTrials] = await pool.query('SELECT COUNT(*) as cnt FROM elemental_trials');
+  if (existingTrials[0].cnt === 0) {
+    await pool.query(`INSERT INTO elemental_trials (tier, name, required_level, monster_count, hp_multiplier, atk_multiplier, exp_reward, gold_reward, material_grade, material_count) VALUES
+      (1, '초급 시련', 3, 3, 1.0, 1.0, 80, 50, '희귀', 1),
+      (2, '중급 시련', 5, 4, 1.3, 1.2, 150, 100, '희귀', 2),
+      (3, '상급 시련', 8, 5, 1.6, 1.4, 250, 170, '영웅', 1),
+      (4, '영웅 시련', 12, 5, 2.0, 1.7, 400, 280, '영웅', 2),
+      (5, '전설 시련', 16, 6, 2.5, 2.0, 600, 400, '영웅', 3)
+    `);
+  }
+
+  // 보스 토벌전 6보스 시드 데이터
+  const [existingBossRaid] = await pool.query('SELECT COUNT(*) as cnt FROM boss_raid_configs');
+  if (existingBossRaid[0].cnt === 0) {
+    await pool.query(`INSERT INTO boss_raid_configs (name, description, dungeon_key, required_level, boss_hp_mult, boss_atk_mult, monster_count, exp_reward, gold_reward, display_order) VALUES
+      ('킹슬라임', '슬라임 동굴의 왕. 끈적끈적한 촉수로 공격합니다.', 'slime_cave', 2, 3.0, 2.0, 4, 200, 150, 1),
+      ('골렘왕', '지하 동굴의 지배자. 단단한 몸체가 특징입니다.', 'cave', 4, 3.5, 2.2, 4, 350, 250, 2),
+      ('도깨비대장', '도깨비 무리의 우두머리. 방망이 일격에 주의하세요.', 'goblin', 6, 4.0, 2.5, 5, 500, 350, 3),
+      ('원혼군주', '산악 지대의 악령. 강력한 저주 마법을 사용합니다.', 'mountain', 8, 4.5, 2.8, 5, 700, 500, 4),
+      ('마왕', '마계의 지배자. 압도적인 힘으로 모든 것을 파괴합니다.', 'demon', 12, 5.0, 3.0, 6, 1000, 700, 5),
+      ('암흑룡', '용의 둥지의 최강자. 어둠의 브레스가 치명적입니다.', 'dragon', 16, 6.0, 3.5, 6, 1500, 1000, 6)
+    `);
+  }
+
+  // 정령 재료 8개 (불/물/땅/바람 × 정수+결정)
+  await pool.query(`INSERT IGNORE INTO materials (name, icon, grade, description, sell_price) VALUES
+    ('불의 정수', '🔥', '희귀', '정령의 시련에서 얻은 불의 정수', 50),
+    ('불의 결정', '❤️‍🔥', '영웅', '정령의 시련에서 얻은 불의 결정', 120),
+    ('물의 정수', '💧', '희귀', '정령의 시련에서 얻은 물의 정수', 50),
+    ('물의 결정', '🌊', '영웅', '정령의 시련에서 얻은 물의 결정', 120),
+    ('땅의 정수', '🪨', '희귀', '정령의 시련에서 얻은 땅의 정수', 50),
+    ('땅의 결정', '💎', '영웅', '정령의 시련에서 얻은 땅의 결정', 120),
+    ('바람의 정수', '🌀', '희귀', '정령의 시련에서 얻은 바람의 정수', 50),
+    ('바람의 결정', '🌪️', '영웅', '정령의 시련에서 얻은 바람의 결정', 120)
+  `).catch(() => {});
+
+  // ========== 던전 티켓 시스템 ==========
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS dungeon_tickets (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      dungeon_key VARCHAR(50) NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      icon VARCHAR(10) DEFAULT '🎫',
+      grade ENUM('일반','고급','희귀','영웅','전설') DEFAULT '일반',
+      description VARCHAR(200),
+      UNIQUE KEY unique_dungeon_ticket (dungeon_key)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS character_tickets (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      ticket_id INT NOT NULL,
+      quantity INT DEFAULT 0,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      FOREIGN KEY (ticket_id) REFERENCES dungeon_tickets(id),
+      UNIQUE KEY unique_char_ticket (character_id, ticket_id)
+    )
+  `);
+
+  // 던전 티켓 시드
+  const ticketSeeds = [
+    ['forest', '어둠의 숲 입장권', '🌲', '일반', '어둠의 숲에 입장할 수 있는 티켓.'],
+    ['slime_cave', '슬라임 동굴 입장권', '🟢', '일반', '슬라임 동굴에 입장할 수 있는 티켓.'],
+    ['cave', '지하 동굴 입장권', '🕳️', '고급', '지하 동굴에 입장할 수 있는 티켓.'],
+    ['swamp', '독안개 늪 입장권', '🌿', '고급', '독안개 늪에 입장할 수 있는 티켓.'],
+    ['goblin', '도깨비 마을 입장권', '👺', '고급', '도깨비 마을에 입장할 수 있는 티켓.'],
+    ['mountain', '영혼의 산 입장권', '🏔️', '희귀', '영혼의 산에 입장할 수 있는 티켓.'],
+    ['ocean', '해저 유적 입장권', '🌊', '희귀', '해저 유적에 입장할 수 있는 티켓.'],
+    ['spirit_forest', '정령의 숲 입장권', '🧚', '희귀', '정령의 숲에 입장할 수 있는 티켓.'],
+    ['temple', '폐허 사원 입장권', '🏛️', '영웅', '폐허 사원에 입장할 수 있는 티켓.'],
+    ['demon', '마계 균열 입장권', '😈', '영웅', '마계 균열에 입장할 수 있는 티켓.'],
+    ['dragon', '용의 둥지 입장권', '🐉', '전설', '용의 둥지에 입장할 수 있는 티켓.'],
+  ];
+  for (const [dKey, name, icon, grade, desc] of ticketSeeds) {
+    await pool.query(
+      `INSERT IGNORE INTO dungeon_tickets (dungeon_key, name, icon, grade, description) VALUES (?, ?, ?, ?, ?)`,
+      [dKey, name, icon, grade, desc]
+    ).catch(() => {});
+  }
+
+  // 스테이지 그룹별 티켓 드랍 설정 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stage_ticket_drops (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      group_key VARCHAR(50) NOT NULL,
+      ticket_id INT NOT NULL,
+      drop_rate FLOAT DEFAULT 0.3,
+      min_quantity INT DEFAULT 1,
+      max_quantity INT DEFAULT 1,
+      FOREIGN KEY (ticket_id) REFERENCES dungeon_tickets(id)
+    )
+  `);
+
+  // 스테이지 티켓 드랍 시드 (스테이지 그룹 → 드랍되는 던전 티켓)
+  const [ticketRows] = await pool.query('SELECT id, dungeon_key, grade FROM dungeon_tickets');
+  const ticketMap = {};
+  for (const t of ticketRows) ticketMap[t.dungeon_key] = t;
+
+  const [existingDrops] = await pool.query('SELECT COUNT(*) as cnt FROM stage_ticket_drops');
+  if (existingDrops[0].cnt === 0 && ticketRows.length > 0) {
+    // 각 스테이지 그룹에서 어떤 던전 티켓이 드랍되는지 설정
+    // 초반 스테이지 → 초반 던전 티켓, 후반 스테이지 → 후반 던전 티켓
+    const stageTicketMapping = [
+      // [stageGroupKey, dungeonTicketKey, dropRate]
+      ['gojoseon', 'forest', 0.35],
+      ['gojoseon', 'slime_cave', 0.25],
+      ['samhan', 'slime_cave', 0.35],
+      ['samhan', 'cave', 0.25],
+      ['goguryeo', 'cave', 0.35],
+      ['goguryeo', 'swamp', 0.25],
+      ['baekje', 'swamp', 0.35],
+      ['baekje', 'goblin', 0.25],
+      ['silla', 'goblin', 0.35],
+      ['silla', 'mountain', 0.20],
+      ['balhae', 'mountain', 0.35],
+      ['balhae', 'ocean', 0.20],
+      ['goryeo', 'ocean', 0.35],
+      ['goryeo', 'spirit_forest', 0.20],
+      ['joseon', 'spirit_forest', 0.30],
+      ['joseon', 'temple', 0.15],
+      ['imjin', 'temple', 0.30],
+      ['imjin', 'demon', 0.15],
+      ['modern', 'demon', 0.25],
+      ['modern', 'dragon', 0.10],
+    ];
+    for (const [gKey, dKey, rate] of stageTicketMapping) {
+      const ticket = ticketMap[dKey];
+      if (ticket) {
+        await pool.query(
+          'INSERT INTO stage_ticket_drops (group_key, ticket_id, drop_rate, min_quantity, max_quantity) VALUES (?, ?, ?, 1, 1)',
+          [gKey, ticket.id, rate]
+        ).catch(() => {});
+      }
+    }
+  }
+
+  // ========== 코스메틱 초상화 효과 시스템 ==========
+  await pool.query(`ALTER TABLE items MODIFY COLUMN type ENUM('weapon','armor','potion','helmet','chest','boots','ring','necklace','shield','cosmetic') NOT NULL`).catch(() => {});
+  await pool.query("ALTER TABLE items ADD COLUMN cosmetic_effect VARCHAR(30) DEFAULT NULL").catch(() => {});
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS equipped_cosmetics (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      entity_type ENUM('character','mercenary') NOT NULL,
+      entity_id INT NOT NULL,
+      item_id INT NOT NULL,
+      UNIQUE KEY unique_entity (character_id, entity_type, entity_id),
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      FOREIGN KEY (item_id) REFERENCES items(id)
+    )
+  `);
+
+  // 코스메틱 시드 아이템
+  const cosmeticSeeds = [
+    ['황금 기운의 초상', 'cosmetic', '금빛 맥동 효과가 초상화를 감싸는 코스메틱.', 500, 250, 'aura_gold'],
+    ['불꽃 오라의 초상', 'cosmetic', '붉은 불꽃이 타오르는 코스메틱.', 600, 300, 'flame'],
+    ['빙결 오라의 초상', 'cosmetic', '얼음 결정이 반짝이는 코스메틱.', 600, 300, 'ice'],
+    ['번개 오라의 초상', 'cosmetic', '번개가 번쩍이는 코스메틱.', 700, 350, 'lightning'],
+    ['암흑 오라의 초상', 'cosmetic', '어둠이 소용돌이치는 코스메틱.', 800, 400, 'shadow'],
+    ['신성 오라의 초상', 'cosmetic', '신성한 빛줄기가 내리쬐는 코스메틱.', 800, 400, 'holy'],
+    ['독기 오라의 초상', 'cosmetic', '녹색 독기가 피어오르는 코스메틱.', 500, 250, 'poison'],
+    ['바람 오라의 초상', 'cosmetic', '청량한 바람이 감도는 코스메틱.', 500, 250, 'wind'],
+    ['혈기 오라의 초상', 'cosmetic', '붉은 혈기가 맥동하는 코스메틱.', 700, 350, 'blood'],
+    ['영혼 오라의 초상', 'cosmetic', '영혼의 빛이 감싸는 코스메틱.', 900, 450, 'spirit'],
+    ['용의 숨결 초상', 'cosmetic', '황금빛과 붉은 불꽃이 이중으로 맥동하는 화려한 코스메틱.', 2500, 1250, 'dragon_breath'],
+    ['천상의 빛 초상', 'cosmetic', '무지개빛 프리즘이 회전하며 빛나는 코스메틱.', 3000, 1500, 'celestial'],
+    ['심연의 화염 초상', 'cosmetic', '검보라빛 심연의 불꽃이 타오르는 코스메틱.', 2500, 1250, 'abyssal_flame'],
+    ['별빛 오라 초상', 'cosmetic', '반짝이는 별 입자가 감싸는 환상적인 코스메틱.', 2000, 1000, 'starlight'],
+    ['봉황의 기운 초상', 'cosmetic', '금빛 봉황의 불꽃 날개가 감싸는 코스메틱.', 3500, 1750, 'phoenix'],
+    ['혼돈의 소용돌이 초상', 'cosmetic', '다채로운 빛이 소용돌이치는 카오스 코스메틱.', 4000, 2000, 'chaos_vortex'],
+  ];
+  for (const [name, type, desc, price, sell, effect] of cosmeticSeeds) {
+    await pool.query(
+      `INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction, cosmetic_effect)
+       VALUES (?, ?, NULL, NULL, ?, ?, ?, 0, 0, 0, 0, 1, NULL, ?)`,
+      [name, type, desc, price, sell, effect]
+    ).catch(() => {});
   }
 
   console.log('Database initialized');
@@ -3120,4 +5416,40 @@ async function getSelectedChar(req, connOrPool) {
   return chars.length > 0 ? chars[0] : null;
 }
 
-module.exports = { pool, initialize, getSelectedChar };
+// 레벨에 따른 최대 행동력 계산
+function calcMaxStamina(level) {
+  return 10 + Math.floor((level - 1) / 5);
+}
+
+// 시간 경과에 따른 행동력 회복 계산 + DB 갱신
+async function refreshStamina(char, connOrPool) {
+  const db = connOrPool || pool;
+  const now = new Date();
+  const lastTime = char.last_stamina_time ? new Date(char.last_stamina_time) : now;
+  const maxSt = calcMaxStamina(char.level);
+  let curSt = char.stamina ?? maxSt;
+
+  if (curSt < maxSt) {
+    const elapsed = Math.max(0, now - lastTime); // ms
+    const recovered = Math.floor(elapsed / (5 * 60 * 1000)); // 5분당 1
+    if (recovered > 0) {
+      curSt = Math.min(maxSt, curSt + recovered);
+      const newLastTime = new Date(lastTime.getTime() + recovered * 5 * 60 * 1000);
+      await db.query(
+        'UPDATE characters SET stamina = ?, max_stamina = ?, last_stamina_time = ? WHERE id = ?',
+        [curSt, maxSt, newLastTime, char.id]
+      );
+      char.stamina = curSt;
+      char.max_stamina = maxSt;
+      char.last_stamina_time = newLastTime;
+    }
+  }
+  // max_stamina가 레벨과 안 맞으면 갱신
+  if ((char.max_stamina || 0) !== maxSt) {
+    await db.query('UPDATE characters SET max_stamina = ? WHERE id = ?', [maxSt, char.id]);
+    char.max_stamina = maxSt;
+  }
+  return { stamina: curSt, maxStamina: maxSt };
+}
+
+module.exports = { pool, initialize, getSelectedChar, calcMaxStamina, refreshStamina };

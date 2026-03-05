@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import IsometricMap from './IsometricMap';
+import PixelMap2D from './PixelMap2D';
 import { buildMapFromDungeon } from './mapData';
+import { generateTowerMap } from './towerMapGenerator';
 import {
   createPlayerUnit, createSummonUnit, createMercenaryUnit, createMonsterUnit,
   getMovementRange, getAttackRange, getSkillRange,
   calcDamage, calcHeal, determineTurnOrder, aiDecide,
-  checkBattleEnd, generateEnemies, getWeaponInfo, getTerrainEffect,
+  checkBattleEnd, generateEnemies, getWeaponInfo, getTerrainEffect, getTileTurnEffect,
+  ELITE_TIERS,
 } from './battleEngine';
 import api from '../api';
 import './SrpgBattle.css';
@@ -21,15 +24,36 @@ const PHASE = {
   BATTLE_END: 'battle_end',
 };
 
+const CLASS_KEY = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
+
+function getUnitPortrait(unit) {
+  if (unit.id === 'player') {
+    const key = CLASS_KEY[unit.classType];
+    return key ? `/characters/${key}_icon.png` : null;
+  }
+  if (unit.id.startsWith('summon_')) {
+    const tid = unit.templateId || unit.summonId;
+    return tid ? `/summons/${tid}_icon.png` : null;
+  }
+  if (unit.id.startsWith('merc_')) {
+    const tid = unit.templateId || unit.mercId;
+    return tid ? `/mercenaries/${tid}_icon.png` : null;
+  }
+  if (unit.monsterId) return `/monsters/${unit.monsterId}_icon.png`;
+  return null;
+}
+
 export default function SrpgBattle({
   location,
   stage,
   character,
   charState,
   learnedSkills,
+  passiveBonuses,
   activeSummons,
   activeMercenaries,
   onBattleEnd,
+  use2DMap = false,
 }) {
   const [mapData, setMapData] = useState(null);
   const [units, setUnits] = useState([]);
@@ -53,7 +77,14 @@ export default function SrpgBattle({
   const [ctxMenu, setCtxMenu] = useState({ show: false, mode: 'main' });
   const [potions, setPotions] = useState([]);
   const [droppedMaterials, setDroppedMaterials] = useState([]);
+  const [droppedTickets, setDroppedTickets] = useState([]);
   const [resultData, setResultData] = useState(null);
+  const [contributions, setContributions] = useState([]);
+  const [skillCutIn, setSkillCutIn] = useState(null);
+  const [eliteAlert, setEliteAlert] = useState(null);
+  const battleSummonIdsRef = useRef([]);
+  const battleMercIdsRef = useRef([]);
+  const contributionRef = useRef({});
   const logEndRef = useRef(null);
   const autoAllRef = useRef(false);
   const autoSummonRef = useRef(false);
@@ -67,6 +98,13 @@ export default function SrpgBattle({
   unitsRef.current = units;
   phaseRef.current = phase;
   mapRef.current = mapData;
+
+  const trackContribution = (attackerId, damage, kill = false) => {
+    const c = contributionRef.current;
+    if (!c[attackerId]) c[attackerId] = { damage: 0, kills: 0 };
+    if (damage > 0) c[attackerId].damage += damage;
+    if (kill) c[attackerId].kills += 1;
+  };
 
   const addLog = (text, type = 'normal') => {
     setBattleLog(prev => [...prev.slice(-80), { text, type, time: new Date().toLocaleTimeString() }]);
@@ -84,6 +122,26 @@ export default function SrpgBattle({
     setDamagePopups(prev => [...prev.slice(-5), { x, y, z, text, type, time: Date.now() }]);
   };
 
+  // 무기 타입별 공격 이펙트 선택
+  const getAttackEffect = (unit, skill, isCrit) => {
+    if (isCrit) return { effectType: 'crit', color: '#ffdd00' };
+    if (skill) {
+      if (skill.type === 'aoe') return { effectType: 'explosion', color: '#ff6600' };
+      if (skill.damage_multiplier >= 1.5) return { effectType: 'magic', color: '#8844ff' };
+      return { effectType: 'magic', color: '#aa66ff' };
+    }
+    const wt = unit.weaponType || 'default';
+    if (['bow', 'talisman', 'staff', 'bell'].includes(wt)) {
+      return { effectType: 'ranged', color: '#44aaff' };
+    }
+    return { effectType: 'melee', color: '#ff6644' };
+  };
+
+  // 스킬 컷인 연출
+  const playSkillCutIn = (unit, skill) => {
+    setSkillCutIn({ name: unit.name, icon: unit.icon, skillName: skill.name, skillIcon: skill.icon || '✨', team: unit.team });
+    setTimeout(() => setSkillCutIn(null), 1200);
+  };
 
   // 자동 스크롤
   useEffect(() => {
@@ -99,24 +157,36 @@ export default function SrpgBattle({
         if (cancelled) return;
         const { dungeon, monsters: dbMonsters, stages } = res.data;
 
-        // 스테이지별 맵 데이터 사용
-        let mapSource = dungeon;
-        if (stage && stages) {
-          const stageData = stages.find(s => s.stageNumber === stage.stageNumber);
-          if (stageData && stageData.tileOverrides) {
-            mapSource = {
-              name: `${dungeon.name} ${stage.stageNumber}${stage.isBoss ? ' (보스)' : ''}`,
-              mapWidth: stageData.mapWidth,
-              mapHeight: stageData.mapHeight,
-              baseTileType: stageData.baseTileType,
-              tileOverrides: stageData.tileOverrides,
-              playerSpawns: stageData.playerSpawns,
-              monsterSpawns: stageData.monsterSpawns,
-            };
+        // 맵 데이터 생성: 2D모드(타워)이면 generateTowerMap, 아니면 buildMapFromDungeon
+        let map;
+        if (use2DMap) {
+          const floorNum = stage?.stageNumber || 1;
+          const isBoss = stage?.isBoss || false;
+          const mc = stage?.monsterCount || 4;
+          const towerMap = generateTowerMap(floorNum, location, isBoss, mc);
+          if (towerMap && towerMap.tiles.length > 0) {
+            map = towerMap;
+          } else {
+            map = buildMapFromDungeon(dungeon);
           }
+        } else {
+          let mapSource = dungeon;
+          if (stage && stages) {
+            const stageData = stages.find(s => s.stageNumber === stage.stageNumber);
+            if (stageData && stageData.tileOverrides) {
+              mapSource = {
+                name: `${dungeon.name} ${stage.stageNumber}${stage.isBoss ? ' 👿' : ''}`,
+                mapWidth: stageData.mapWidth,
+                mapHeight: stageData.mapHeight,
+                baseTileType: stageData.baseTileType,
+                tileOverrides: stageData.tileOverrides,
+                playerSpawns: stageData.playerSpawns,
+                monsterSpawns: stageData.monsterSpawns,
+              };
+            }
+          }
+          map = buildMapFromDungeon(mapSource);
         }
-
-        const map = buildMapFromDungeon(mapSource);
         setMapData(map);
 
         // 장착 무기 정보 로드
@@ -125,6 +195,26 @@ export default function SrpgBattle({
           const eqRes = await api.get('/equipment/info');
           if (eqRes.data.equipped?.weapon) {
             equippedWeapon = eqRes.data.equipped.weapon;
+          }
+        } catch {}
+
+        // 최신 진형/소환수/용병 데이터를 서버에서 가져오기
+        let freshSummons = activeSummons || [];
+        let freshMercenaries = activeMercenaries || [];
+        let formationGrid = null;
+        try {
+          const [summonRes, mercRes, formRes] = await Promise.all([
+            api.get('/summon/my'),
+            api.get('/mercenary/my'),
+            api.get('/formation/list'),
+          ]);
+          freshSummons = summonRes.data.summons || [];
+          freshMercenaries = mercRes.data.mercenaries || [];
+          const mainFormation = formRes.data.formations.find(f => f.slotIndex === 0);
+          if (mainFormation && mainFormation.gridData) {
+            const grid = mainFormation.gridData;
+            const hasUnits = grid.some(row => row.some(cell => cell && cell.unitId));
+            if (hasUnits) formationGrid = grid;
           }
         } catch {}
 
@@ -147,12 +237,24 @@ export default function SrpgBattle({
           evasion: charState.evasion,
           level: charState.level,
         };
-        allUnits.push(createPlayerUnit(playerData, learnedSkills, map.playerSpawns[0], equippedWeapon));
+        allUnits.push(createPlayerUnit(playerData, learnedSkills, map.playerSpawns[0], equippedWeapon, passiveBonuses));
+
+        // 진형에 배치된 유닛만 참전 (진형이 있는 경우)
+        let spawnIdx = 1;
+        const formationUnitIds = new Set();
+        if (formationGrid) {
+          formationGrid.forEach(row => row.forEach(cell => {
+            if (cell && cell.unitId) formationUnitIds.add(cell.unitId);
+          }));
+        }
 
         // 소환수
-        let spawnIdx = 1;
-        if (activeSummons && activeSummons.length > 0) {
-          activeSummons.forEach((s) => {
+        const battleSummons = formationGrid
+          ? freshSummons.filter(s => formationUnitIds.has(`summon_${s.id}`))
+          : freshSummons;
+        battleSummonIdsRef.current = battleSummons.map(s => s.id);
+        if (battleSummons.length > 0) {
+          battleSummons.forEach((s) => {
             if (spawnIdx < map.playerSpawns.length) {
               allUnits.push(createSummonUnit(s, map.playerSpawns[spawnIdx]));
               spawnIdx++;
@@ -161,8 +263,12 @@ export default function SrpgBattle({
         }
 
         // 용병
-        if (activeMercenaries && activeMercenaries.length > 0) {
-          activeMercenaries.forEach((m) => {
+        const battleMercs = formationGrid
+          ? freshMercenaries.filter(m => formationUnitIds.has(`merc_${m.id}`))
+          : freshMercenaries;
+        battleMercIdsRef.current = battleMercs.map(m => m.id);
+        if (battleMercs.length > 0) {
+          battleMercs.forEach((m) => {
             if (spawnIdx < map.playerSpawns.length) {
               allUnits.push(createMercenaryUnit(m, map.playerSpawns[spawnIdx]));
               spawnIdx++;
@@ -172,6 +278,11 @@ export default function SrpgBattle({
 
         // 적 생성 (DB 몬스터 데이터 기반 + 스테이지 보너스)
         const enemies = generateEnemies(dbMonsters, charState.level, stage);
+        // 정예 몬스터 알림
+        const eliteEnemy = enemies.find(e => e.eliteTier);
+        if (eliteEnemy) {
+          setEliteAlert({ name: eliteEnemy.name, icon: eliteEnemy.icon, monsterId: eliteEnemy.monsterId, tier: eliteEnemy.eliteTier });
+        }
         enemies.forEach((m, i) => {
           if (i < map.monsterSpawns.length) {
             allUnits.push(createMonsterUnit(m, map.monsterSpawns[i], i));
@@ -190,8 +301,8 @@ export default function SrpgBattle({
           if (firstUnit && firstUnit.team === 'enemy') {
             setPhase(PHASE.ENEMY_TURN);
           } else if (firstUnit && firstUnit.team === 'player') {
-            const isSummon = firstUnit.id.startsWith('summon_');
-            const shouldAuto = autoAllRef.current || (autoSummonRef.current && isSummon);
+            const isCompanion = firstUnit.id.startsWith('summon_') || firstUnit.id.startsWith('merc_');
+            const shouldAuto = autoAllRef.current || (autoSummonRef.current && isCompanion);
             setPhase(shouldAuto ? PHASE.ENEMY_TURN : PHASE.PLAYER_SELECT);
           } else {
             setPhase(PHASE.PLAYER_SELECT);
@@ -251,7 +362,7 @@ export default function SrpgBattle({
         newQueue = order.map(u => u.id);
         // 행동 초기화
         setUnits(prev => {
-          const reset = prev.map(u => ({ ...u, acted: false, moved: false }));
+          const reset = prev.map(u => ({ ...u, acted: false, moved: false, attackAnim: null }));
           unitsRef.current = reset;
           return reset;
         });
@@ -273,8 +384,8 @@ export default function SrpgBattle({
         setPhase(PHASE.ENEMY_TURN);
       } else if (nextUnit && nextUnit.team === 'player') {
         // 자동 모드 체크
-        const isSummon = nextUnit.id.startsWith('summon_');
-        const shouldAuto = autoAllRef.current || (autoSummonRef.current && isSummon);
+        const isCompanion = nextUnit.id.startsWith('summon_') || nextUnit.id.startsWith('merc_');
+        const shouldAuto = autoAllRef.current || (autoSummonRef.current && isCompanion);
         if (shouldAuto) {
           setPhase(PHASE.ENEMY_TURN); // AI로 처리
         } else {
@@ -288,6 +399,49 @@ export default function SrpgBattle({
     });
   };
 
+  // 턴 시작 지형 효과 (2D 맵 전용)
+  const prevActiveRef = useRef(null);
+  useEffect(() => {
+    if (!use2DMap || !activeUnitId || !mapData) return;
+    if (prevActiveRef.current === activeUnitId) return;
+    prevActiveRef.current = activeUnitId;
+
+    const unit = unitsRef.current.find(u => u.id === activeUnitId);
+    if (!unit || unit.hp <= 0) return;
+    const tile = mapData.tiles.find(t => t.x === unit.x && t.z === unit.z);
+    if (!tile) return;
+
+    const effect = getTileTurnEffect(tile.tileKey);
+    if (!effect) return;
+
+    setTimeout(() => {
+      setUnits(prev => {
+        const updated = prev.map(u => {
+          if (u.id !== unit.id || u.hp <= 0) return u;
+          const copy = { ...u };
+          if (effect.type === 'damage') {
+            const dmg = Math.max(1, Math.floor(u.maxHp * effect.percent / 100));
+            copy.hp = Math.max(1, u.hp - dmg);
+            addPopup(u.x, u.z, `-${dmg}`, 'damage');
+            addLog(`${effect.icon} ${u.name}: ${effect.label} (-${dmg} HP)`, 'damage');
+          } else if (effect.type === 'heal') {
+            const heal = Math.max(1, Math.floor(u.maxHp * effect.percent / 100));
+            copy.hp = Math.min(u.maxHp, u.hp + heal);
+            addPopup(u.x, u.z, `+${heal}`, 'heal');
+            addLog(`${effect.icon} ${u.name}: ${effect.label} (+${heal} HP)`, 'heal');
+          } else if (effect.type === 'buff') {
+            copy[effect.stat] = (u[effect.stat] || 0) + effect.value;
+            addPopup(u.x, u.z, `${effect.stat === 'magAttack' ? '마공' : '방어'}+${effect.value}`, 'element');
+            addLog(`${effect.icon} ${u.name}: ${effect.label} (+${effect.value})`, 'skill');
+          }
+          return copy;
+        });
+        unitsRef.current = updated;
+        return updated;
+      });
+    }, 200);
+  }, [activeUnitId, use2DMap, mapData]); // eslint-disable-line
+
   // phase 변경시 메뉴 닫기 (이동/공격 모드 진입 등)
   useEffect(() => {
     if (phase !== PHASE.PLAYER_SELECT) {
@@ -300,8 +454,8 @@ export default function SrpgBattle({
     if (phase !== PHASE.PLAYER_SELECT) return;
     const au = unitsRef.current.find(u => u.id === activeUnitId);
     if (!au || au.team !== 'player') return;
-    const isSummon = au.id.startsWith('summon_');
-    const shouldAuto = autoAll || (autoSummon && isSummon);
+    const isCompanion = au.id.startsWith('summon_') || au.id.startsWith('merc_');
+    const shouldAuto = autoAll || (autoSummon && isCompanion);
     if (shouldAuto) {
       setMovableRange([]);
       setAttackRange([]);
@@ -324,8 +478,8 @@ export default function SrpgBattle({
     }
     // 적이 아닌 경우, 자동 모드인지 확인
     if (currentUnit.team === 'player') {
-      const isSummon = currentUnit.id.startsWith('summon_');
-      const shouldAuto = autoAllRef.current || (autoSummonRef.current && isSummon);
+      const isCompanion = currentUnit.id.startsWith('summon_') || currentUnit.id.startsWith('merc_');
+      const shouldAuto = autoAllRef.current || (autoSummonRef.current && isCompanion);
       if (!shouldAuto) {
         // 자동 모드가 아니면 플레이어 선택으로 전환
         setPhase(PHASE.PLAYER_SELECT);
@@ -396,7 +550,7 @@ export default function SrpgBattle({
               if (u.id === movedUnit.id) {
                 const cd = { ...(u.skillCooldowns || {}) };
                 cd[decision.skill.id] = decision.skill.cooldown || 0;
-                return { ...u, mp: u.mp - (decision.skill.mp_cost || 0), acted: true, skillCooldowns: cd };
+                return { ...u, mp: u.mp - (decision.skill.mp_cost || 0), acted: true, skillCooldowns: cd, attackAnim: { tx: healTarget.x, tz: healTarget.z } };
               }
               return u;
             });
@@ -450,6 +604,7 @@ export default function SrpgBattle({
         const targetUnit = unitsRef.current.find(u => u.id === decision.target.id);
         if (movedUnit && movedUnit.hp > 0 && targetUnit && targetUnit.hp > 0) {
           const skill = decision.skill;
+          if (skill) playSkillCutIn(movedUnit, skill);
           const result = calcDamage(movedUnit, targetUnit, skill, mapRef.current);
           const dmg = result.damage;
 
@@ -481,7 +636,7 @@ export default function SrpgBattle({
                     newHp = 0;
                   }
                 }
-                return { ...u, mp: newMp, hp: newHp, acted: true, skillCooldowns: cd };
+                return { ...u, mp: newMp, hp: newHp, acted: true, skillCooldowns: cd, attackAnim: { tx: decision.target.x, tz: decision.target.z } };
               }
               return u;
             });
@@ -503,13 +658,19 @@ export default function SrpgBattle({
               addPopup(decision.target.x, decision.target.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
               if (result.elementLabel) addPopup(decision.target.x, decision.target.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
               if (result.isCrit) addLog(`치명타!`, 'damage');
+              // 기여도 기록 (아군이 적에게 데미지)
+              if (movedUnit.team === 'player' && decision.target.team === 'enemy') {
+                trackContribution(movedUnit.id, dmg);
+              }
               // 스킬 이펙트
-              const fx = skill ? (skill.type === 'aoe' ? 'explosion' : skill.damage_multiplier >= 1.5 ? 'magic' : 'slash') : 'slash';
-              const fxColor = skill ? '#8844ff' : '#ff4444';
+              const { effectType: fx, color: fxColor } = getAttackEffect(movedUnit, skill, result.isCrit);
               addEffect(decision.target.x, decision.target.z, fx, fxColor);
+              if (result.isCrit && fx !== 'crit') addEffect(decision.target.x, decision.target.z, 'crit', '#ffdd00');
             }
             if (target && target.hp <= 0) {
               addLog(`${decision.target.icon}${decision.target.name} 쓰러짐!`, 'system');
+              // 킬 기여도 기록
+              if (movedUnit.team === 'player') trackContribution(movedUnit.id, 0, true);
             }
             return updated;
           });
@@ -606,7 +767,7 @@ export default function SrpgBattle({
                 return { ...u, hp: Math.min(u.maxHp, u.hp + healAmt) };
               }
               if (u.id === activeUnit.id) {
-                return { ...u, mp: u.mp - selectedSkill.mp_cost, acted: true };
+                return { ...u, mp: u.mp - selectedSkill.mp_cost, acted: true, attackAnim: { tx: targetUnit.x, tz: targetUnit.z } };
               }
               return u;
             });
@@ -623,6 +784,7 @@ export default function SrpgBattle({
       // 공격/공격스킬
       if (targetUnit && targetUnit.team === 'enemy') {
         const skill = selectedSkill;
+        if (skill) playSkillCutIn(activeUnit, skill);
         const result = calcDamage(activeUnit, targetUnit, skill, mapRef.current);
         const dmg = result.damage;
 
@@ -645,7 +807,7 @@ export default function SrpgBattle({
                   addPopup(u.x, u.z, `+${healed}`, 'heal');
                 }
               }
-              return { ...u, mp: newMp, hp: newHp, acted: true };
+              return { ...u, mp: newMp, hp: newHp, acted: true, attackAnim: { tx: targetUnit.x, tz: targetUnit.z } };
             }
             return u;
           });
@@ -669,12 +831,15 @@ export default function SrpgBattle({
             addPopup(targetUnit.x, targetUnit.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
             if (result.elementLabel) addPopup(targetUnit.x, targetUnit.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
             if (result.isCrit) addLog(`치명타!`, 'damage');
+            // 기여도 기록
+            trackContribution(activeUnit.id, dmg);
             // 플레이어 공격 이펙트
-            const fx = skill ? (skill.type === 'aoe' ? 'explosion' : skill.damage_multiplier >= 1.5 ? 'magic' : 'slash') : 'slash';
-            const fxColor = skill ? '#8844ff' : '#ff4444';
+            const { effectType: fx, color: fxColor } = getAttackEffect(activeUnit, skill, result.isCrit);
             addEffect(targetUnit.x, targetUnit.z, fx, fxColor);
+            if (result.isCrit && fx !== 'crit') addEffect(targetUnit.x, targetUnit.z, 'crit', '#ffdd00');
             if (target && target.hp <= 0) {
               addLog(`${targetUnit.icon}${targetUnit.name} 처치!`, 'heal');
+              trackContribution(activeUnit.id, 0, true);
             }
           }
 
@@ -816,6 +981,10 @@ export default function SrpgBattle({
     const victory = battleResult === 'victory';
     const defeated = units.filter(u => u.team === 'enemy' && u.hp <= 0);
 
+    const playerUnit = units.find(u => u.id === 'player');
+    const finalHp = playerUnit ? playerUnit.hp : 0;
+    const finalMp = playerUnit ? playerUnit.mp : 0;
+
     if (victory) {
       let tExp = 0, tGold = 0;
       for (const m of defeated) {
@@ -825,18 +994,63 @@ export default function SrpgBattle({
       setTotalExpGained(tExp);
       setTotalGoldGained(tGold);
       addLog(`승리! EXP +${tExp}, Gold +${tGold}`, 'level');
+
+      // 기여도 계산 (아군만)
+      const contribData = contributionRef.current;
+      const playerTeam = units.filter(u => u.team === 'player');
+      const totalDamage = Object.values(contribData).reduce((sum, c) => sum + c.damage, 0) || 1;
+      const contribList = playerTeam.map(u => {
+        const c = contribData[u.id] || { damage: 0, kills: 0 };
+        return { id: u.id, name: u.name, icon: u.icon, damage: c.damage, kills: c.kills, rawPct: c.damage / totalDamage };
+      });
+      const participantCount = contribList.filter(c => c.damage > 0 || (units.find(u => u.id === c.id)?.hp ?? 0) > 0).length || 1;
+      const minPct = Math.min(0.05, 1 / participantCount);
+      const adjustedPcts = contribList.map(c => {
+        const participated = c.damage > 0 || (units.find(u => u.id === c.id)?.hp ?? 0) > 0;
+        return { ...c, adjPct: participated ? Math.max(minPct, c.rawPct) : 0 };
+      });
+      const totalAdjPct = adjustedPcts.reduce((s, c) => s + c.adjPct, 0) || 1;
+      const finalContrib = adjustedPcts.map(c => ({
+        ...c,
+        pct: Math.round((c.adjPct / totalAdjPct) * 100),
+        exp: Math.floor(tExp * (c.adjPct / totalAdjPct)),
+      }));
+      setContributions(finalContrib);
+
+      // 서버에 전달할 각 유닛별 경험치
+      const playerExp = finalContrib.find(c => c.id === 'player')?.exp || tExp;
+      const summonExpMap = {};
+      const mercExpMap = {};
+      for (const c of finalContrib) {
+        if (c.id.startsWith('summon_')) {
+          const smId = parseInt(c.id.replace('summon_', ''));
+          summonExpMap[smId] = c.exp;
+        } else if (c.id.startsWith('merc_')) {
+          const mId = parseInt(c.id.replace('merc_', ''));
+          mercExpMap[mId] = c.exp;
+        }
+      }
+
       api.post('/battle/srpg-result', {
         location, victory: true,
         monstersDefeated: defeated.map(m => m.name),
-        expGained: tExp, goldGained: tGold, rounds: roundCount,
-        activeSummonIds: (activeSummons || []).map(s => s.id),
-        activeMercenaryIds: (activeMercenaries || []).map(m => m.id),
+        expGained: playerExp, goldGained: tGold, rounds: roundCount,
+        activeSummonIds: battleSummonIdsRef.current,
+        activeMercenaryIds: battleMercIdsRef.current,
+        summonExpMap, mercExpMap,
+        playerHp: finalHp, playerMp: finalMp,
       }).then(res => {
         setResultData(res.data);
         if (res.data.droppedMaterials && res.data.droppedMaterials.length > 0) {
           setDroppedMaterials(res.data.droppedMaterials);
           res.data.droppedMaterials.forEach(m => {
             addLog(`  📦 ${m.icon} ${m.name} x${m.quantity} 획득!`, 'system');
+          });
+        }
+        if (res.data.droppedTickets && res.data.droppedTickets.length > 0) {
+          setDroppedTickets(res.data.droppedTickets);
+          res.data.droppedTickets.forEach(t => {
+            addLog(`  🎫 ${t.icon} ${t.name} x${t.quantity} 획득!`, 'system');
           });
         }
         if (res.data.leveledUp) {
@@ -848,7 +1062,8 @@ export default function SrpgBattle({
       api.post('/battle/srpg-result', {
         location, victory: false,
         monstersDefeated: [], expGained: 0, goldGained: 0, rounds: roundCount,
-        activeSummonIds: [],
+        activeSummonIds: [], activeMercenaryIds: [],
+        playerHp: 0, playerMp: finalMp,
       }).catch(console.error);
     }
   }, [phase, battleResult]); // eslint-disable-line
@@ -861,31 +1076,80 @@ export default function SrpgBattle({
   if (loading || !mapData) return <div className="srpg-loading">맵 로딩 중...</div>;
 
   return (
-    <div className="srpg-container">
+    <div className={`srpg-container ${use2DMap ? 'mode-2d' : ''}`}>
+      {/* 정예 몬스터 등장 알림 */}
+      {eliteAlert && (
+        <div className="elite-alert-overlay" onClick={() => setEliteAlert(null)}>
+          <div className="elite-alert-popup" style={{ '--elite-color': eliteAlert.tier.color }}>
+            <div className="elite-alert-flash" />
+            <div className="elite-alert-icon">{eliteAlert.tier.icon}</div>
+            <div className="elite-alert-img-wrap">
+              <img
+                src={`/monsters/${eliteAlert.monsterId}_full.png`}
+                alt={eliteAlert.name}
+                className="elite-alert-img"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+              <div className="elite-alert-aura" />
+            </div>
+            <div className="elite-alert-tier" style={{ color: eliteAlert.tier.color }}>
+              {eliteAlert.tier.icon} {eliteAlert.tier.label}
+            </div>
+            <div className="elite-alert-name">
+              <span style={{ color: eliteAlert.tier.color }}>{eliteAlert.tier.label}</span> {eliteAlert.name}
+            </div>
+            <div className="elite-alert-subtitle">이(가) 등장했습니다!!</div>
+            <div className="elite-alert-mult">
+              능력치 x{eliteAlert.tier.mult} / 보상 x{eliteAlert.tier.rewardMult}
+            </div>
+            <div className="elite-alert-hint">터치하여 계속</div>
+          </div>
+        </div>
+      )}
       <div className="srpg-map">
-        <IsometricMap
-          mapData={mapData}
-          units={units}
-          activeUnit={activeUnit}
-          movableRange={movableRange}
-          attackRange={attackRange}
-          selectedTile={null}
-          onTileClick={handleTileClick}
-          damagePopups={damagePopups}
-          menuState={ctxMenu}
-          onMenuAction={handleMenuAction}
-          onCanvasMiss={() => { if (ctxMenu.show) setCtxMenu({ show: false, mode: 'main' }); }}
-          skillEffects={skillEffects}
-          potions={potions}
-        />
+        {use2DMap ? (
+          <PixelMap2D
+            mapData={mapData}
+            units={units}
+            activeUnit={activeUnit}
+            movableRange={movableRange}
+            attackRange={attackRange}
+            selectedTile={null}
+            onTileClick={handleTileClick}
+            damagePopups={damagePopups}
+            menuState={ctxMenu}
+            onMenuAction={handleMenuAction}
+            onCanvasMiss={() => { if (ctxMenu.show) setCtxMenu({ show: false, mode: 'main' }); }}
+            skillEffects={skillEffects}
+            potions={potions}
+            location={location}
+          />
+        ) : (
+          <IsometricMap
+            mapData={mapData}
+            units={units}
+            activeUnit={activeUnit}
+            movableRange={movableRange}
+            attackRange={attackRange}
+            selectedTile={null}
+            onTileClick={handleTileClick}
+            damagePopups={damagePopups}
+            menuState={ctxMenu}
+            onMenuAction={handleMenuAction}
+            onCanvasMiss={() => { if (ctxMenu.show) setCtxMenu({ show: false, mode: 'main' }); }}
+            skillEffects={skillEffects}
+            potions={potions}
+          />
+        )}
       </div>
 
       <div className="srpg-hud">
         <div className="srpg-turn-info">
-          <span className="srpg-round">Round {roundCount}</span>
+          <span className="srpg-round">R{roundCount}</span>
           {activeUnit && (
             <span className={`srpg-active-unit ${activeUnit.team}`}>
-              {activeUnit.icon} {activeUnit.name}의 턴
+              {(() => { const p = getUnitPortrait(activeUnit); return p ? <img src={p} alt="" className="srpg-active-portrait" onError={e => { e.target.replaceWith(document.createTextNode(activeUnit.icon)); }} /> : activeUnit.icon; })()}
+              {activeUnit.name}
             </span>
           )}
           {phase !== PHASE.BATTLE_END && (
@@ -894,14 +1158,13 @@ export default function SrpgBattle({
                 className={`srpg-auto-btn ${autoAll ? 'active' : ''}`}
                 onClick={() => { setAutoAll(v => !v); if (!autoAll) setAutoSummon(false); }}
               >
-                모두자동 {autoAll ? 'ON' : 'OFF'}
+                {autoAll ? '⚡' : '▶'} 모두자동
               </button>
               <button
                 className={`srpg-auto-btn summon ${autoSummon ? 'active' : ''}`}
                 onClick={() => { setAutoSummon(v => !v); if (!autoSummon) setAutoAll(false); }}
-                disabled={!activeSummons || activeSummons.length === 0}
               >
-                소환수자동 {autoSummon ? 'ON' : 'OFF'}
+                {autoSummon ? '⚡' : '▶'} 동료자동
               </button>
               <button
                 className="srpg-retreat-btn"
@@ -917,11 +1180,20 @@ export default function SrpgBattle({
           {turnQueue.map(id => {
             const u = units.find(uu => uu.id === id);
             if (!u || u.hp <= 0) return null;
+            const portrait = getUnitPortrait(u);
             return (
-              <div key={u.id} className={`srpg-turn-unit ${u.team} ${activeUnit && activeUnit.id === u.id ? 'active' : ''}`}>
-                <span className="srpg-turn-icon">{u.icon}</span>
+              <div key={u.id} className={`srpg-turn-unit ${u.team} ${activeUnit && activeUnit.id === u.id ? 'active' : ''} ${u.eliteTier ? 'elite' : ''}`}
+                style={u.eliteTier ? { '--elite-color': u.eliteTier.color } : undefined}>
+                {u.eliteTier && <span className="srpg-turn-elite-icon">{u.eliteTier.icon}</span>}
+                {portrait
+                  ? <img src={portrait} alt="" className="srpg-turn-portrait" onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = ''); }} />
+                  : null}
+                <span className="srpg-turn-icon" style={portrait ? { display: 'none' } : {}}>{u.icon}</span>
                 <div className="srpg-turn-hp-bar">
                   <div className="srpg-turn-hp-fill" style={{ width: `${(u.hp / u.maxHp) * 100}%` }} />
+                </div>
+                <div className="srpg-turn-mp-bar">
+                  <div className="srpg-turn-mp-fill" style={{ width: `${(u.mp / u.maxMp) * 100}%` }} />
                 </div>
               </div>
             );
@@ -930,7 +1202,11 @@ export default function SrpgBattle({
 
         {activeUnit && (
           <div className="srpg-unit-detail">
-            <div className="srpg-unit-name">{activeUnit.icon} {activeUnit.name} Lv.{activeUnit.level}</div>
+            <div className="srpg-unit-name" style={activeUnit.eliteTier ? { color: activeUnit.eliteTier.color } : undefined}>
+              {(() => { const p = getUnitPortrait(activeUnit); return p ? <img src={p} alt="" className="srpg-detail-portrait" onError={e => { e.target.replaceWith(document.createTextNode(activeUnit.icon + ' ')); }} /> : <span>{activeUnit.icon} </span>; })()}
+              {activeUnit.eliteTier && <span className="srpg-elite-name-badge" style={{ background: activeUnit.eliteTier.color }}>{activeUnit.eliteTier.icon} {activeUnit.eliteTier.label}</span>}
+              {activeUnit.name} Lv.{activeUnit.level}
+            </div>
             <div className="srpg-unit-bars">
               <div className="srpg-bar">
                 <span className="srpg-bar-label">HP</span>
@@ -966,11 +1242,20 @@ export default function SrpgBattle({
             {(() => {
               const tile = mapData?.tiles.find(t => t.x === activeUnit.x && t.z === activeUnit.z);
               if (!tile) return null;
-              const te = getTerrainEffect(tile.type);
+              const te = getTerrainEffect(tile.tileKey || tile.type);
+              const turnEff = getTileTurnEffect(tile.tileKey);
               return (
                 <div className="srpg-terrain-info">
                   <span>지형: {te.label}</span>
                   {tile.height > 0 && <span>높이: {tile.height}</span>}
+                  {turnEff && (
+                    <span className={`srpg-terrain-effect ${turnEff.type}`}>
+                      {turnEff.icon} {turnEff.label}
+                      {turnEff.type === 'buff' && ` (+${turnEff.value})`}
+                      {turnEff.type === 'damage' && ` (-${turnEff.percent}%)`}
+                      {turnEff.type === 'heal' && ` (+${turnEff.percent}%)`}
+                    </span>
+                  )}
                 </div>
               );
             })()}
@@ -1007,18 +1292,19 @@ export default function SrpgBattle({
       </div>
 
       {showRetreatConfirm && (
-        <div className="srpg-result-overlay">
-          <div className="srpg-result-box defeat">
-            <h2>후퇴하시겠습니까?</h2>
+        <div className="srpg-retreat-overlay" onClick={() => setShowRetreatConfirm(false)}>
+          <div className="srpg-retreat-popup" onClick={e => e.stopPropagation()}>
+            <div className="srpg-retreat-icon">⚔️</div>
+            <h2 className="srpg-retreat-title">후퇴하시겠습니까?</h2>
             <p className="srpg-retreat-desc">
               전투를 포기하고 마을로 돌아갑니다.<br/>경험치와 골드를 받을 수 없습니다.
             </p>
             <div className="srpg-retreat-actions">
-              <button className="srpg-result-btn" onClick={handleRetreat}>
+              <button className="srpg-retreat-confirm-btn" onClick={handleRetreat}>
                 후퇴하기
               </button>
               <button
-                className="srpg-result-btn srpg-result-btn-cancel"
+                className="srpg-retreat-cancel-btn"
                 onClick={() => setShowRetreatConfirm(false)}
               >
                 전투 계속
@@ -1028,13 +1314,27 @@ export default function SrpgBattle({
         </div>
       )}
 
+      {/* 스킬 컷인 */}
+      {skillCutIn && (
+        <div className={`srpg-skill-cutin ${skillCutIn.team}`}>
+          <div className="srpg-cutin-line" />
+          <div className="srpg-cutin-content">
+            <span className="srpg-cutin-icon">{skillCutIn.icon}</span>
+            <span className="srpg-cutin-name">{skillCutIn.name}</span>
+            <span className="srpg-cutin-skill">{skillCutIn.skillIcon} {skillCutIn.skillName}</span>
+          </div>
+          <div className="srpg-cutin-line" />
+        </div>
+      )}
+
       {phase === PHASE.BATTLE_END && (() => {
         const isVictory = battleResult === 'victory';
         const rd = resultData;
         const charInfo = rd?.character;
         const leveled = rd?.leveledUp;
         const summons = rd?.summonResults || [];
-        const expNeeded = charInfo ? charInfo.level * 100 : 100;
+        const mercs = rd?.mercenaryResults || [];
+        const expNeeded = charInfo ? Math.floor(80 * charInfo.level + 0.5 * charInfo.level * charInfo.level) : 100;
         const expPct = charInfo ? Math.min(100, (charInfo.exp / expNeeded) * 100) : 0;
 
         return (
@@ -1048,7 +1348,6 @@ export default function SrpgBattle({
 
               {/* 상단 타이틀 */}
               <div className="srpg-result-title-area">
-                {isVictory && <img src="/ui/victory_banner.png" alt="" className="srpg-result-banner" />}
                 <h2 className={`srpg-result-title ${isVictory ? '' : 'defeat'}`}>
                   {isVictory ? 'VICTORY' : 'DEFEAT'}
                 </h2>
@@ -1092,6 +1391,24 @@ export default function SrpgBattle({
                         </div>
                       </div>
                     )}
+
+                    {droppedTickets.length > 0 && (
+                      <div className="srpg-result-drops">
+                        <div className="srpg-result-drops-label">🎫 획득 던전 입장권</div>
+                        <div className="srpg-result-drops-list">
+                          {droppedTickets.map((t, i) => {
+                            const gradeColor = { '일반': '#9ca3af', '고급': '#4ade80', '희귀': '#60a5fa', '영웅': '#c084fc', '전설': '#fbbf24' }[t.grade] || '#9ca3af';
+                            return (
+                              <div key={i} className="srpg-result-drop-chip" style={{ borderColor: gradeColor }}>
+                                <span className="srpg-result-drop-icon">{t.icon}</span>
+                                <span style={{ color: gradeColor }}>{t.name}</span>
+                                <span className="srpg-result-drop-qty">x{t.quantity}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 캐릭터 성장 */}
@@ -1114,6 +1431,31 @@ export default function SrpgBattle({
                     </div>
                   )}
 
+                  {/* 캐릭터 최종 상태 */}
+                  {charInfo && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>전투 후 상태</span>
+                      </div>
+                      <div className="srpg-result-status-bars">
+                        <div className="srpg-result-status-row">
+                          <span className="srpg-result-status-label hp">HP</span>
+                          <div className="srpg-result-status-track">
+                            <div className="srpg-result-status-fill hp" style={{ width: `${Math.min(100, ((charInfo.current_hp ?? 0) / (charInfo.hp || 1)) * 100)}%` }} />
+                          </div>
+                          <span className="srpg-result-status-text">{charInfo.current_hp ?? 0} / {charInfo.hp}</span>
+                        </div>
+                        <div className="srpg-result-status-row">
+                          <span className="srpg-result-status-label mp">MP</span>
+                          <div className="srpg-result-status-track">
+                            <div className="srpg-result-status-fill mp" style={{ width: `${Math.min(100, ((charInfo.current_mp ?? 0) / (charInfo.mp || 1)) * 100)}%` }} />
+                          </div>
+                          <span className="srpg-result-status-text">{charInfo.current_mp ?? 0} / {charInfo.mp}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 소환수 성장 */}
                   {summons.length > 0 && (
                     <div className="srpg-result-growth-panel">
@@ -1125,7 +1467,7 @@ export default function SrpgBattle({
                           const sPct = s.expNeeded > 0 ? Math.min(100, (s.exp / s.expNeeded) * 100) : 0;
                           return (
                             <div key={s.id} className="srpg-result-summon-row">
-                              <span className="srpg-result-summon-icon">{s.icon}</span>
+                              <img src={`/summons/${s.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
                               <div className="srpg-result-summon-info">
                                 <div className="srpg-result-summon-name">
                                   {s.name} <span className="srpg-result-summon-lv">Lv.{s.level}</span>
@@ -1141,14 +1483,66 @@ export default function SrpgBattle({
                       </div>
                     </div>
                   )}
+
+                  {/* 용병 성장 */}
+                  {mercs.length > 0 && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>용병 성장</span>
+                      </div>
+                      <div className="srpg-result-summon-list">
+                        {mercs.map((m) => {
+                          const mPct = m.expNeeded > 0 ? Math.min(100, (m.exp / m.expNeeded) * 100) : 0;
+                          return (
+                            <div key={m.id} className="srpg-result-summon-row">
+                              <img src={`/mercenaries/${m.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
+                              <div className="srpg-result-summon-info">
+                                <div className="srpg-result-summon-name">
+                                  {m.name} <span className="srpg-result-summon-lv">Lv.{m.level}</span>
+                                </div>
+                                <div className="srpg-result-exp-bar small">
+                                  <div className="srpg-result-exp-fill" style={{ width: `${mPct}%` }} />
+                                  <span className="srpg-result-exp-text">{m.exp}/{m.expNeeded}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 기여도 (EXP 분배) */}
+                  {contributions.length > 0 && (
+                    <div className="srpg-result-growth-panel">
+                      <div className="srpg-result-section-title">
+                        <span>기여도 (EXP 분배)</span>
+                      </div>
+                      <div className="srpg-result-summon-list">
+                        {contributions
+                          .filter(c => c.pct > 0)
+                          .sort((a, b) => b.pct - a.pct)
+                          .map(c => (
+                            <div key={c.id} className="srpg-contrib-row">
+                              <span className="srpg-contrib-name">{c.icon}{c.name}</span>
+                              <div className="srpg-contrib-bar-wrap">
+                                <div className="srpg-contrib-bar" style={{ width: `${c.pct}%` }} />
+                              </div>
+                              <span className="srpg-contrib-exp">{c.exp} EXP ({c.pct}%)</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               <button
                 className={`srpg-result-continue-btn ${isVictory ? 'victory' : 'defeat'}`}
                 onClick={() => onBattleEnd(battleResult, totalExpGained, totalGoldGained)}
+                disabled={isVictory && !rd}
               >
-                {isVictory ? '계속하기' : '마을로 돌아가기'}
+                {isVictory && !rd ? '저장 중...' : isVictory ? '계속하기' : '마을로 돌아가기'}
               </button>
             </div>
           </div>

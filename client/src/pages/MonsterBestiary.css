@@ -28,11 +28,12 @@
   position: absolute;
   bottom: 12px;
   left: 18px;
-  font-size: 22px;
-  font-weight: 800;
-  color: #fff;
-  text-shadow: 0 2px 12px rgba(0,0,0,0.8);
-  letter-spacing: 1px;
+  font-family: var(--font-title);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gold);
+  text-shadow: 0 2px 16px rgba(212, 168, 67, 0.5), 0 0 40px rgba(212, 168, 67, 0.15);
+  letter-spacing: 4px;
   z-index: 1;
 }
 
@@ -112,6 +113,10 @@
 }
 .bestiary-pill:hover { color: #bbb; border-color: rgba(255,255,255,0.15); }
 .bestiary-pill.active { background: rgba(255,255,255,0.08); color: #eee; border-color: rgba(255,255,255,0.2); }
+
+.bestiary-country-pills { gap: 6px; margin-bottom: 2px; }
+.bestiary-country-pill { font-size: 13px; padding: 6px 16px; font-weight: 600; }
+.bestiary-country-pill.active { background: rgba(212,168,67,0.15); border-color: rgba(212,168,67,0.4); color: #d4a843; }
 
 .bestiary-select {
   width: auto !important;
@@ -857,9 +862,10 @@
 }
 
 .equip-bestiary-icon {
-  width: 80%;
-  height: 80%;
-  object-fit: contain;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
   font-size: 2.5rem;
   display: flex;
   align-items: center;
@@ -909,9 +915,10 @@
 }
 
 .equip-detail-icon {
-  width: 90%;
-  height: 90%;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
   font-size: 3rem;
 }
 
@@ -988,14 +995,575 @@
 .equip-trade-value.gold { color: #ffa502; }
 .equip-trade-value.sell { color: #4ade80; }
 
+/* =============================================
+   SKILL BESTIARY TAB
+   ============================================= */
+.skill-bestiary-card { cursor: pointer; }
+
+.skill-card-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.skill-bestiary-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  font-size: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skill-card-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.skill-card-type {
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.skill-card-class {
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+/* Skill Detail Modal */
+.skill-detail-modal { max-width: 520px; }
+
+.skill-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(15,19,32,0.9), rgba(15,19,32,0.95));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.skill-detail-icon-wrap {
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--skill-color, #9ca3af);
+  background: rgba(0,0,0,0.4);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--skill-color, #9ca3af) 20%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skill-detail-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+  font-size: 3rem;
+}
+
+.skill-detail-info { flex: 1; min-width: 0; }
+
+.skill-detail-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 6px;
+}
+
+.skill-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.skill-detail-desc {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+/* =============================================
+   TAROT COLLECTION TAB - Premium Design
+   ============================================= */
+
+/* ---- Progress Bar ---- */
+.tarot-progress-bar {
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(192,132,252,0.05), rgba(124,58,237,0.03));
+  border: 1px solid rgba(192,132,252,0.1);
+  border-radius: 14px;
+  margin-bottom: 14px;
+}
+
+.tarot-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tarot-progress-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c084fc;
+  letter-spacing: 0.5px;
+}
+
+.tarot-progress-count {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f0e6ff;
+}
+
+.tarot-progress-total {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+}
+
+.tarot-progress-track {
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.tarot-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #c084fc, #e9d5ff);
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 0 8px rgba(192,132,252,0.3);
+}
+
+.tarot-progress-suits {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tarot-progress-suit {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---- Suit Filter Pills ---- */
+.tarot-suit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tarot-pill-count {
+  font-size: 10px;
+  color: #666;
+  margin-left: 2px;
+  font-weight: 600;
+}
+
+.tarot-suit-pill.active .tarot-pill-count {
+  color: inherit;
+  opacity: 0.7;
+}
+
+/* ---- Card Grid ---- */
+.tarot-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.tarot-col-card {
+  --suit-color: #c084fc;
+  background: rgba(255,255,255,0.02);
+  border: 2px solid rgba(192,132,252,0.12);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s;
+  overflow: hidden;
+  position: relative;
+}
+
+.tarot-col-card.discovered {
+  border-color: color-mix(in srgb, var(--suit-color) 30%, transparent);
+}
+
+.tarot-col-card.discovered:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--suit-color) 20%, transparent);
+  border-color: color-mix(in srgb, var(--suit-color) 50%, transparent);
+}
+
+.tarot-col-card.undiscovered {
+  border-color: rgba(255,255,255,0.05);
+}
+
+.tarot-col-card.undiscovered:hover {
+  border-color: rgba(255,255,255,0.12);
+  transform: translateY(-2px);
+}
+
+.tarot-col-img {
+  width: 100%;
+  aspect-ratio: 3/5;
+  overflow: hidden;
+  background: #0a0c14;
+  position: relative;
+}
+
+.tarot-col-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.tarot-col-card:hover .tarot-col-img img {
+  transform: scale(1.05);
+}
+
+.tarot-col-undiscovered {
+  filter: grayscale(0.6) brightness(0.4);
+}
+
+.tarot-col-suit-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  z-index: 1;
+}
+
+.tarot-col-info {
+  padding: 5px 6px 6px;
+  text-align: center;
+}
+
+.tarot-col-number {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.tarot-col-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.tarot-col-card.undiscovered .tarot-col-name {
+  color: #555;
+}
+
+/* ---- Detail Modal ---- */
+.tarot-detail-modal {
+  max-width: 540px;
+}
+
+.tarot-detail-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px 16px 0 0;
+}
+
+.tarot-detail-hero-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(15,19,32,0.95) 0%,
+    color-mix(in srgb, var(--suit-color, #c084fc) 8%, rgba(15,19,32,0.95)) 50%,
+    rgba(20,12,35,0.95) 100%
+  );
+}
+
+.tarot-detail-hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 18px;
+  padding: 24px;
+  align-items: flex-start;
+}
+
+.tarot-detail-img-wrap {
+  width: 130px;
+  min-width: 130px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid rgba(192,132,252,0.3);
+  box-shadow: 0 6px 30px rgba(0,0,0,0.4), 0 0 20px color-mix(in srgb, var(--suit-color, #c084fc) 15%, transparent);
+  flex-shrink: 0;
+}
+
+.tarot-detail-img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.tarot-detail-info {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.tarot-detail-suit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.tarot-detail-number {
+  font-size: 12px;
+  color: #888;
+  font-weight: 700;
+  margin-bottom: 2px;
+  letter-spacing: 1px;
+}
+
+.tarot-detail-name {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  margin-bottom: 2px;
+  line-height: 1.2;
+}
+
+.tarot-detail-name-en {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.tarot-detail-buff-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  background: rgba(255,165,2,0.1);
+  border: 1px solid rgba(255,165,2,0.2);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffa502;
+  margin-bottom: 6px;
+}
+
+.tarot-detail-discovered {
+  font-size: 11px;
+  color: #555;
+  margin-top: 6px;
+}
+
+/* ---- Interpretation ---- */
+.tarot-interp-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tarot-interp {
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+
+.tarot-interp:hover {
+  background: rgba(255,255,255,0.035);
+}
+
+.tarot-interp.upright {
+  border-left: 3px solid #4ade80;
+}
+
+.tarot-interp.reversed {
+  border-left: 3px solid #f87171;
+}
+
+.tarot-interp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tarot-interp-dir {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.tarot-interp.upright .tarot-interp-dir { color: #4ade80; }
+.tarot-interp.reversed .tarot-interp-dir { color: #f87171; }
+
+.tarot-interp-text {
+  font-size: 13px;
+  color: #bbb;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.tarot-interp-buff {
+  display: inline-block;
+  padding: 3px 10px;
+  background: rgba(74,222,128,0.08);
+  border: 1px solid rgba(74,222,128,0.15);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4ade80;
+}
+
+.tarot-interp-buff.dim {
+  background: rgba(248,113,113,0.08);
+  border-color: rgba(248,113,113,0.12);
+  color: #f87171;
+}
+
+/* ---- Undiscovered ---- */
+.tarot-undiscovered-msg {
+  text-align: center;
+  padding: 36px 20px;
+}
+
+.tarot-undiscovered-icon {
+  font-size: 52px;
+  display: block;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 0 12px rgba(192,132,252,0.3));
+}
+
+.tarot-undiscovered-msg p {
+  color: #999;
+  font-size: 14px;
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+
+.tarot-undiscovered-hint {
+  font-size: 12px !important;
+  color: #555 !important;
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 576px) {
   .bestiary-banner { height: 80px; }
-  .bestiary-banner-title { font-size: 18px; }
+  .bestiary-banner-title { font-size: 1.2rem; }
   .bestiary-main-tab { font-size: 12px; padding: 8px 10px; }
   .bestiary-tab-icon { width: 20px; height: 20px; }
   .equip-detail-header { flex-direction: column; align-items: center; text-align: center; }
   .equip-detail-icon-wrap { width: 80px; height: 80px; }
   .equip-detail-tags { justify-content: center; }
   .equip-detail-stats { grid-template-columns: 1fr; }
+  .skill-detail-header { flex-direction: column; align-items: center; text-align: center; }
+  .skill-detail-icon-wrap { width: 80px; height: 80px; }
+  .skill-detail-tags { justify-content: center; }
+  .tarot-collection-grid { grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 6px; }
+  .tarot-col-name { font-size: 10px; }
+  .tarot-col-suit-badge { width: 16px; height: 16px; font-size: 8px; }
+  .tarot-progress-suits { gap: 6px; }
+  .tarot-progress-suit { font-size: 10px; }
+  .tarot-detail-hero-content { flex-direction: column; align-items: center; text-align: center; padding: 20px 16px; }
+  .tarot-detail-img-wrap { width: 110px; min-width: 110px; }
+  .tarot-detail-suit-badge { margin: 0 auto 8px; }
+  .tarot-detail-name { font-size: 1.2rem; }
+  .tarot-interp-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+
+/* ========== 정예 등급 정보 (도감) ========== */
+.bd-elite-desc {
+  font-size: 0.78rem;
+  color: #888;
+  margin: 0 0 10px;
+}
+.bd-elite-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bd-elite-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 3px solid var(--elite-color, #888);
+  transition: background 0.2s;
+}
+.bd-elite-tier:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.bd-elite-tier-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bd-elite-tier-icon {
+  font-size: 1.1rem;
+}
+.bd-elite-tier-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.bd-elite-tier-chance {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: #888;
+  padding: 1px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+.bd-elite-tier-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.bd-elite-stat {
+  font-size: 0.75rem;
+  color: #ccc;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.bd-elite-tier-rewards {
+  display: flex;
+  gap: 10px;
+}
+.bd-elite-reward {
+  font-size: 0.7rem;
+  color: #fbbf24;
+  font-weight: 600;
 }

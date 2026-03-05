@@ -1,6 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../db');
+const { pool, getSelectedChar } = require('../db');
 
 const router = express.Router();
 const JWT_SECRET = 'game-secret-key-change-in-production';
@@ -19,9 +19,9 @@ function auth(req, res, next) {
 // 전체 던전 목록 + 진행도 + 순차 해금
 router.get('/list', auth, async (req, res) => {
   try {
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
-    if (chars.length === 0) return res.json({ dungeons: [] });
-    const charId = chars[0].id;
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.json({ dungeons: [] });
+    const charId = char.id;
 
     const [dungeons] = await pool.query(
       'SELECT id, key_name, name, description, icon, required_level, display_order FROM dungeons ORDER BY display_order, id'
@@ -41,6 +41,16 @@ router.get('/list', auth, async (req, res) => {
     const progressMap = {};
     for (const p of progress) progressMap[p.dungeon_id] = p.stage_number;
 
+    // 티켓 보유량 조회
+    const [ticketRows] = await pool.query(
+      `SELECT dt.dungeon_key, IFNULL(ct.quantity, 0) as quantity, dt.name as ticket_name, dt.icon as ticket_icon, dt.grade as ticket_grade
+       FROM dungeon_tickets dt
+       LEFT JOIN character_tickets ct ON ct.ticket_id = dt.id AND ct.character_id = ?`,
+      [charId]
+    );
+    const ticketMap = {};
+    for (const t of ticketRows) ticketMap[t.dungeon_key] = t;
+
     // 순차 해금: 첫 던전은 항상 열림, 이후는 이전 던전 올클리어 필요
     const result = [];
     for (let i = 0; i < dungeons.length; i++) {
@@ -58,11 +68,16 @@ router.get('/list', auth, async (req, res) => {
         unlocked = prevCleared >= prevTotal; // 이전 던전 올클리어 시 해금
       }
 
+      const ticket = ticketMap[d.key_name] || {};
       result.push({
         ...d,
         clearedStage,
         totalStages,
         unlocked,
+        ticketCount: ticket.quantity || 0,
+        ticketName: ticket.ticket_name || '',
+        ticketIcon: ticket.ticket_icon || '🎫',
+        ticketGrade: ticket.ticket_grade || '일반',
       });
     }
 
@@ -200,6 +215,59 @@ router.get('/:key', auth, async (req, res) => {
     });
   } catch (err) {
     console.error('Dungeon detail error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 내 티켓 목록
+router.get('/tickets', auth, async (req, res) => {
+  try {
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.json({ tickets: [] });
+
+    const [tickets] = await pool.query(
+      `SELECT dt.*, IFNULL(ct.quantity, 0) as quantity
+       FROM dungeon_tickets dt
+       LEFT JOIN character_tickets ct ON ct.ticket_id = dt.id AND ct.character_id = ?
+       ORDER BY dt.id`,
+      [char.id]
+    );
+    res.json({ tickets });
+  } catch (err) {
+    console.error('Ticket list error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 던전 입장 시 티켓 소모
+router.post('/use-ticket', auth, async (req, res) => {
+  try {
+    const { dungeonKey } = req.body;
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    const [tickets] = await pool.query(
+      `SELECT dt.id as ticket_id, dt.name, IFNULL(ct.quantity, 0) as quantity
+       FROM dungeon_tickets dt
+       LEFT JOIN character_tickets ct ON ct.ticket_id = dt.id AND ct.character_id = ?
+       WHERE dt.dungeon_key = ?`,
+      [char.id, dungeonKey]
+    );
+    if (tickets.length === 0) return res.status(404).json({ message: '해당 던전 티켓 정보가 없습니다.' });
+
+    const ticket = tickets[0];
+    if (ticket.quantity <= 0) {
+      return res.status(400).json({ message: `${ticket.name}이(가) 부족합니다! 스테이지에서 획득할 수 있습니다.` });
+    }
+
+    await pool.query(
+      `UPDATE character_tickets SET quantity = quantity - 1 WHERE character_id = ? AND ticket_id = ?`,
+      [char.id, ticket.ticket_id]
+    );
+
+    res.json({ success: true, remaining: ticket.quantity - 1 });
+  } catch (err) {
+    console.error('Use ticket error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });

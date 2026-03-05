@@ -18,6 +18,28 @@ function NpcImg({ src, className }) {
   return <img src={src} alt="" className={className} onError={() => setErr(true)} />;
 }
 
+function ItemStatTags({ item }) {
+  const stats = [];
+  if (item.effect_hp > 0) stats.push({ label: 'HP', val: `+${item.effect_hp}`, cls: 'hp' });
+  if (item.effect_mp > 0) stats.push({ label: 'MP', val: `+${item.effect_mp}`, cls: 'mp' });
+  if (item.effect_attack > 0) stats.push({ label: '공격', val: `+${item.effect_attack}`, cls: 'atk' });
+  if (item.effect_defense > 0) stats.push({ label: '방어', val: `+${item.effect_defense}`, cls: 'def' });
+  if (item.effect_phys_attack > 0) stats.push({ label: '물공', val: `+${item.effect_phys_attack}`, cls: 'patk' });
+  if (item.effect_phys_defense > 0) stats.push({ label: '물방', val: `+${item.effect_phys_defense}`, cls: 'pdef' });
+  if (item.effect_mag_attack > 0) stats.push({ label: '마공', val: `+${item.effect_mag_attack}`, cls: 'matk' });
+  if (item.effect_mag_defense > 0) stats.push({ label: '마방', val: `+${item.effect_mag_defense}`, cls: 'mdef' });
+  if (item.effect_crit_rate > 0) stats.push({ label: '치명', val: `+${item.effect_crit_rate}%`, cls: 'crit' });
+  if (item.effect_evasion > 0) stats.push({ label: '회피', val: `+${item.effect_evasion}%`, cls: 'eva' });
+  if (stats.length === 0) return null;
+  return (
+    <div className="bs-item-stats">
+      {stats.map((s, i) => (
+        <span key={i} className={`bs-stat-tag ${s.cls}`}>{s.label} {s.val}</span>
+      ))}
+    </div>
+  );
+}
+
 function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
   const [tab, setTab] = useState('craft');
   const [recipes, setRecipes] = useState([]);
@@ -30,6 +52,9 @@ function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
   const [craftFilter, setCraftFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [npcMsg, setNpcMsg] = useState('이 대장간에서 못 만드는 건 없지!');
+  const [sellPopup, setSellPopup] = useState(null);
+  const [sellQty, setSellQty] = useState(1);
+  const [confirmPopup, setConfirmPopup] = useState(null); // { type: 'craft'|'enhance', data }
 
   const NPC_MSGS = {
     craft: [
@@ -70,7 +95,7 @@ function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
   useEffect(() => {
     const msgs = NPC_MSGS[tab] || NPC_MSGS.craft;
     setNpcMsg(msgs[Math.floor(Math.random() * msgs.length)]);
-  }, [tab]);
+  }, [tab]); // eslint-disable-line
 
   const handleCraft = async (recipeId) => {
     setLoading(true);
@@ -169,10 +194,10 @@ function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
 
       {/* Tabs */}
       <div className="facility-tabs">
-        <button className={`facility-tab ${tab === 'craft' ? 'active' : ''}`} onClick={() => setTab('craft')}>
+        <button className={`facility-tab ${tab === 'craft' ? 'active' : ''}`} onClick={() => { setTab('craft'); setSelectedRecipe(null); }}>
           제조
         </button>
-        <button className={`facility-tab ${tab === 'enhance' ? 'active' : ''}`} onClick={() => setTab('enhance')}>
+        <button className={`facility-tab ${tab === 'enhance' ? 'active' : ''}`} onClick={() => { setTab('enhance'); setSelectedEnhance(null); setEnhanceResult(null); }}>
           강화
         </button>
         <button className={`facility-tab ${tab === 'materials' ? 'active' : ''}`} onClick={() => setTab('materials')}>
@@ -180,183 +205,249 @@ function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
         </button>
       </div>
 
-      {/* Craft Tab */}
+      {/* ===== Craft Tab (Left-Right split) ===== */}
       {tab === 'craft' && (
-        <div className="bs-craft-panel">
-          <div className="facility-filters">
-            <button className={`facility-filter-btn ${craftFilter === 'all' ? 'active' : ''}`} onClick={() => setCraftFilter('all')}>전체</button>
-            {uniqueTypes.map(t => (
-              <button key={t} className={`facility-filter-btn ${craftFilter === t ? 'active' : ''}`} onClick={() => setCraftFilter(t)}>
-                {TYPE_NAMES[t] || t}
-              </button>
-            ))}
-          </div>
-
-          <div className="bs-recipe-list">
-            {filteredRecipes.map(recipe => {
-              const craftable = canCraft(recipe);
-              const levelOk = charState && charState.level >= recipe.required_level;
-              return (
-                <div
-                  key={recipe.recipe_id}
-                  className={`bs-recipe-card ${selectedRecipe?.recipe_id === recipe.recipe_id ? 'selected' : ''} ${!craftable ? 'disabled' : ''}`}
-                  onClick={() => setSelectedRecipe(recipe)}
-                >
-                  <div className="bs-recipe-icon">
-                    <img src={`/equipment/${recipe.item_id}_icon.png`} alt={recipe.name} className="bs-recipe-img" onError={(e) => { e.target.style.display = 'none'; }} />
+        <div className="bs-split-layout">
+          {/* Left: Craft area */}
+          <div className="bs-split-left">
+            <div className="bs-section-title">제조 작업대</div>
+            {!selectedRecipe ? (
+              <div className="bs-empty-work">
+                <div className="bs-empty-icon">🔨</div>
+                <div className="bs-empty-text">오른쪽 목록에서 제조할<br/>아이템을 선택하세요</div>
+              </div>
+            ) : (
+              <div className="bs-work-area">
+                <div className="bs-work-item-preview">
+                  <div className="bs-work-icon-wrap">
+                    <img src={`/equipment/${selectedRecipe.item_id}_icon.png`} alt="" className="bs-work-icon-img" onError={(e) => { e.target.style.display = 'none'; }} />
                   </div>
-                  <div className="bs-recipe-info">
-                    <div className="bs-recipe-name" style={{ color: GRADE_COLORS[recipe.grade] }}>
-                      {recipe.name} <span className="bs-recipe-grade">[{recipe.grade}]</span>
+                  <div className="bs-work-item-info">
+                    <div className="bs-work-item-name" style={{ color: GRADE_COLORS[selectedRecipe.grade] }}>
+                      {selectedRecipe.name}
                     </div>
-                    <div className="bs-recipe-desc">{recipe.description}</div>
-                    <div className="bs-recipe-meta">
-                      <span className="bs-recipe-type">{TYPE_NAMES[recipe.type] || recipe.type}</span>
-                      {recipe.class_restriction && <span className="bs-recipe-class">{recipe.class_restriction}</span>}
-                      {!levelOk && <span className="bs-recipe-level-warn">Lv.{recipe.required_level} 필요</span>}
+                    <span className="bs-work-grade-tag" style={{ borderColor: GRADE_COLORS[selectedRecipe.grade], color: GRADE_COLORS[selectedRecipe.grade] }}>
+                      {selectedRecipe.grade}
+                    </span>
+                    <div className="bs-work-item-type">
+                      {TYPE_NAMES[selectedRecipe.type] || selectedRecipe.type}
+                      {selectedRecipe.class_restriction && <span> · {selectedRecipe.class_restriction}</span>}
                     </div>
                   </div>
-                  <div className="bs-recipe-cost">{recipe.gold_cost.toLocaleString()}G</div>
                 </div>
-              );
-            })}
-            {filteredRecipes.length === 0 && <div className="facility-empty">해당 카테고리의 레시피가 없습니다.</div>}
+                <div className="bs-work-item-desc">{selectedRecipe.description}</div>
+                <ItemStatTags item={selectedRecipe} />
+                {selectedRecipe.max_enhance > 0 && (
+                  <div className="bs-work-enhance-info">최대 강화 +{selectedRecipe.max_enhance}</div>
+                )}
+                <div className="bs-work-divider" />
+                <div className="bs-detail-mats">
+                  <div className="bs-detail-mats-title">필요 재료</div>
+                  {selectedRecipe.materials.map((mat, i) => (
+                    <div key={i} className={`bs-mat-row ${mat.owned_qty >= mat.required_qty ? 'ok' : 'missing'}`}>
+                      <span className="bs-mat-icon"><img src={`/materials/${mat.material_id}_icon.png`} alt="" style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 3 }} onError={e => { e.target.style.display='none'; e.target.parentElement.insertAdjacentText('beforeend', mat.icon); }} /></span>
+                      <span className="bs-mat-name" style={{ color: GRADE_COLORS[mat.grade] }}>{mat.name}</span>
+                      <span className="bs-mat-qty">{mat.owned_qty}/{mat.required_qty}</span>
+                    </div>
+                  ))}
+                  <div className={`bs-mat-row ${(charState?.gold || 0) >= selectedRecipe.gold_cost ? 'ok' : 'missing'}`}>
+                    <span className="bs-mat-icon">💰</span>
+                    <span className="bs-mat-name">골드</span>
+                    <span className="bs-mat-qty">{(charState?.gold || 0).toLocaleString()}/{selectedRecipe.gold_cost.toLocaleString()}</span>
+                  </div>
+                </div>
+                <button className="bs-craft-btn" disabled={!canCraft(selectedRecipe) || loading} onClick={() => setConfirmPopup({ type: 'craft', data: selectedRecipe })}>
+                  {loading ? '제작 중...' : '제작하기'}
+                </button>
+              </div>
+            )}
           </div>
 
-          {selectedRecipe && (
-            <div className="bs-recipe-detail">
-              <div className="bs-detail-header">
-                <h3 style={{ color: GRADE_COLORS[selectedRecipe.grade] }}>
-                  {selectedRecipe.name} <span className="bs-grade-tag">[{selectedRecipe.grade}]</span>
-                </h3>
-                <div className="bs-detail-stats">
-                  {selectedRecipe.effect_hp > 0 && <span>HP+{selectedRecipe.effect_hp}</span>}
-                  {selectedRecipe.effect_mp > 0 && <span>MP+{selectedRecipe.effect_mp}</span>}
-                  {selectedRecipe.effect_attack > 0 && <span>ATK+{selectedRecipe.effect_attack}</span>}
-                  {selectedRecipe.effect_defense > 0 && <span>DEF+{selectedRecipe.effect_defense}</span>}
-                  {selectedRecipe.max_enhance > 0 && <span>최대 +{selectedRecipe.max_enhance}</span>}
-                </div>
-              </div>
-              <div className="bs-detail-mats">
-                <div className="bs-detail-mats-title">필요 재료:</div>
-                {selectedRecipe.materials.map((mat, i) => (
-                  <div key={i} className={`bs-mat-row ${mat.owned_qty >= mat.required_qty ? 'ok' : 'missing'}`}>
-                    <span className="bs-mat-icon">{mat.icon}</span>
-                    <span className="bs-mat-name" style={{ color: GRADE_COLORS[mat.grade] }}>{mat.name}</span>
-                    <span className="bs-mat-qty">{mat.owned_qty}/{mat.required_qty}</span>
-                  </div>
-                ))}
-                <div className={`bs-mat-row ${(charState?.gold || 0) >= selectedRecipe.gold_cost ? 'ok' : 'missing'}`}>
-                  <span className="bs-mat-icon">G</span>
-                  <span className="bs-mat-name">골드</span>
-                  <span className="bs-mat-qty">{(charState?.gold || 0).toLocaleString()}/{selectedRecipe.gold_cost.toLocaleString()}</span>
-                </div>
-              </div>
-              <button className="bs-craft-btn" disabled={!canCraft(selectedRecipe) || loading} onClick={() => handleCraft(selectedRecipe.recipe_id)}>
-                {loading ? '제작 중...' : '제작하기'}
-              </button>
+          {/* Right: Recipe item list */}
+          <div className="bs-split-right">
+            <div className="bs-section-title">레시피 목록</div>
+            <div className="facility-filters">
+              <button className={`facility-filter-btn ${craftFilter === 'all' ? 'active' : ''}`} onClick={() => setCraftFilter('all')}>전체</button>
+              {uniqueTypes.map(t => (
+                <button key={t} className={`facility-filter-btn ${craftFilter === t ? 'active' : ''}`} onClick={() => setCraftFilter(t)}>
+                  {TYPE_NAMES[t] || t}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Enhance Tab */}
-      {tab === 'enhance' && (
-        <div className="bs-enhance-panel">
-          <div className="bs-enhance-list">
-            {enhanceItems.map(item => {
-              const rate = getEnhanceRate(item.enhance_level);
-              const maxed = item.enhance_level >= item.max_enhance;
-              return (
-                <div
-                  key={item.inventory_id}
-                  className={`bs-enhance-card ${selectedEnhance?.inventory_id === item.inventory_id ? 'selected' : ''} ${maxed ? 'maxed' : ''}`}
-                  onClick={() => { setSelectedEnhance(item); setEnhanceResult(null); }}
-                >
-                  <div className="bs-enhance-icon">
-                    <img src={`/equipment/${item.item_id}_icon.png`} alt={item.name} className="bs-enhance-img" onError={(e) => { e.target.style.display = 'none'; }} />
-                    {item.enhance_level > 0 && <span className="bs-enhance-badge">+{item.enhance_level}</span>}
-                  </div>
-                  <div className="bs-enhance-info">
-                    <div className="bs-enhance-name" style={{ color: GRADE_COLORS[item.grade] }}>
-                      {item.name} {item.enhance_level > 0 ? `+${item.enhance_level}` : ''}
-                    </div>
-                    <div className="bs-enhance-meta">
-                      <span className="bs-enhance-grade">[{item.grade}]</span>
-                      <span>{TYPE_NAMES[item.type] || item.type}</span>
-                      {item.equipped ? <span className="bs-equipped-tag">장착중</span> : null}
-                    </div>
-                    <div className="bs-enhance-bar">
-                      <div className="bs-enhance-bar-fill" style={{ width: `${(item.enhance_level / item.max_enhance) * 100}%` }} />
-                      <span className="bs-enhance-bar-text">{item.enhance_level}/{item.max_enhance}</span>
-                    </div>
-                  </div>
-                  {!maxed && rate && <div className="bs-enhance-rate">{Math.round(rate.success_rate * 100)}%</div>}
-                  {maxed && <div className="bs-enhance-max">MAX</div>}
-                </div>
-              );
-            })}
-            {enhanceItems.length === 0 && <div className="facility-empty">강화 가능한 장비가 없습니다.</div>}
-          </div>
-
-          {selectedEnhance && (
-            <div className="bs-enhance-detail">
-              <h3 style={{ color: GRADE_COLORS[selectedEnhance.grade] }}>
-                {selectedEnhance.name} +{selectedEnhance.enhance_level}
-              </h3>
-              {selectedEnhance.enhance_level >= selectedEnhance.max_enhance ? (
-                <div className="bs-enhance-maxed">최대 강화 단계입니다!</div>
-              ) : (() => {
-                const rate = getEnhanceRate(selectedEnhance.enhance_level);
-                const stoneName = getEnhanceStoneName(selectedEnhance.grade);
-                const ownedStones = getOwnedStones(selectedEnhance.grade);
-                if (!rate) return null;
+            <div className="bs-item-list">
+              {filteredRecipes.map(recipe => {
+                const craftable = canCraft(recipe);
+                const isSelected = selectedRecipe?.recipe_id === recipe.recipe_id;
                 return (
-                  <>
-                    <div className="bs-enhance-stats">
-                      <div className="bs-enhance-stat-row">
-                        <span>현재 강화:</span>
-                        <span>+{selectedEnhance.enhance_level} → +{selectedEnhance.enhance_level + 1}</span>
-                      </div>
-                      <div className="bs-enhance-stat-row">
-                        <span>성공 확률:</span>
-                        <span className={rate.success_rate >= 0.5 ? 'rate-high' : rate.success_rate >= 0.2 ? 'rate-mid' : 'rate-low'}>
-                          {Math.round(rate.success_rate * 100)}%
-                        </span>
-                      </div>
-                      <div className={`bs-enhance-stat-row ${(charState?.gold || 0) >= rate.gold_cost ? '' : 'missing'}`}>
-                        <span>필요 골드:</span>
-                        <span>{rate.gold_cost.toLocaleString()}G</span>
-                      </div>
-                      <div className={`bs-enhance-stat-row ${ownedStones >= rate.material_count ? '' : 'missing'}`}>
-                        <span>필요 {stoneName}:</span>
-                        <span>{ownedStones}/{rate.material_count}</span>
-                      </div>
-                      {selectedEnhance.enhance_level >= 7 && (
-                        <div className="bs-enhance-warning">+7 이상에서 실패 시 강화 단계가 1 하락합니다!</div>
-                      )}
+                  <div
+                    key={recipe.recipe_id}
+                    className={`bs-item-card ${isSelected ? 'selected' : ''} ${!craftable ? 'disabled' : ''}`}
+                    onClick={() => setSelectedRecipe(recipe)}
+                  >
+                    <div className="bs-item-card-icon">
+                      <img src={`/equipment/${recipe.item_id}_icon.png`} alt={recipe.name} className="bs-item-card-img" onError={(e) => { e.target.style.display = 'none'; }} />
                     </div>
-                    {enhanceResult && (
-                      <div className={`bs-enhance-result ${enhanceResult.enhanced ? 'success' : 'fail'}`}>
-                        {enhanceResult.enhanced ? '' : ''}{enhanceResult.message}
+                    <div className="bs-item-card-body">
+                      <div className="bs-item-card-header">
+                        <span className="bs-item-card-name" style={{ color: GRADE_COLORS[recipe.grade] }}>{recipe.name}</span>
+                        <span className="bs-item-card-cost">{recipe.gold_cost.toLocaleString()}G</span>
                       </div>
-                    )}
-                    <button
-                      className="bs-enhance-btn"
-                      disabled={loading || (charState?.gold || 0) < rate.gold_cost || ownedStones < rate.material_count}
-                      onClick={() => handleEnhance(selectedEnhance.inventory_id)}
-                    >
-                      {loading ? '강화 중...' : `강화하기 (${Math.round(rate.success_rate * 100)}%)`}
-                    </button>
-                  </>
+                      <div className="bs-item-card-meta">
+                        <span className="bs-item-card-type">{TYPE_NAMES[recipe.type] || recipe.type}</span>
+                        <span className="bs-item-card-grade" style={{ color: GRADE_COLORS[recipe.grade] }}>[{recipe.grade}]</span>
+                        {recipe.class_restriction && <span className="bs-item-card-class">{recipe.class_restriction}</span>}
+                      </div>
+                      <ItemStatTags item={recipe} />
+                    </div>
+                  </div>
                 );
-              })()}
+              })}
+              {filteredRecipes.length === 0 && <div className="facility-empty">해당 카테고리의 레시피가 없습니다.</div>}
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* Materials Tab */}
+      {/* ===== Enhance Tab (Left-Right split) ===== */}
+      {tab === 'enhance' && (
+        <div className="bs-split-layout">
+          {/* Left: Enhance area */}
+          <div className="bs-split-left">
+            <div className="bs-section-title">강화 작업대</div>
+            {!selectedEnhance ? (
+              <div className="bs-empty-work">
+                <div className="bs-empty-icon">🔥</div>
+                <div className="bs-empty-text">오른쪽 목록에서 강화할<br/>장비를 선택하세요</div>
+              </div>
+            ) : (
+              <div className="bs-work-area">
+                <div className="bs-work-item-preview">
+                  <div className="bs-work-icon-wrap enhance">
+                    <img src={`/equipment/${selectedEnhance.item_id}_icon.png`} alt="" className="bs-work-icon-img" onError={(e) => { e.target.style.display = 'none'; }} />
+                    {selectedEnhance.enhance_level > 0 && (
+                      <span className="bs-work-enhance-badge">+{selectedEnhance.enhance_level}</span>
+                    )}
+                  </div>
+                  <div className="bs-work-item-info">
+                    <div className="bs-work-item-name" style={{ color: GRADE_COLORS[selectedEnhance.grade] }}>
+                      {selectedEnhance.name} {selectedEnhance.enhance_level > 0 ? `+${selectedEnhance.enhance_level}` : ''}
+                    </div>
+                    <span className="bs-work-grade-tag" style={{ borderColor: GRADE_COLORS[selectedEnhance.grade], color: GRADE_COLORS[selectedEnhance.grade] }}>
+                      {selectedEnhance.grade}
+                    </span>
+                    <div className="bs-work-item-type">
+                      {TYPE_NAMES[selectedEnhance.type] || selectedEnhance.type}
+                      {selectedEnhance.equipped ? <span className="bs-equipped-inline"> · 장착중</span> : null}
+                    </div>
+                  </div>
+                </div>
+                <ItemStatTags item={selectedEnhance} />
+                <div className="bs-enhance-progress-section">
+                  <div className="bs-enhance-progress-label">강화 단계</div>
+                  <div className="bs-enhance-progress-bar">
+                    <div className="bs-enhance-progress-fill" style={{ width: `${(selectedEnhance.enhance_level / selectedEnhance.max_enhance) * 100}%` }} />
+                  </div>
+                  <div className="bs-enhance-progress-text">{selectedEnhance.enhance_level} / {selectedEnhance.max_enhance}</div>
+                </div>
+                <div className="bs-work-divider" />
+                {selectedEnhance.enhance_level >= selectedEnhance.max_enhance ? (
+                  <div className="bs-enhance-maxed">최대 강화 단계입니다!</div>
+                ) : (() => {
+                  const rate = getEnhanceRate(selectedEnhance.enhance_level);
+                  const stoneName = getEnhanceStoneName(selectedEnhance.grade);
+                  const ownedStones = getOwnedStones(selectedEnhance.grade);
+                  if (!rate) return null;
+                  return (
+                    <>
+                      <div className="bs-enhance-stats">
+                        <div className="bs-enhance-stat-row">
+                          <span>강화</span>
+                          <span>+{selectedEnhance.enhance_level} → <strong>+{selectedEnhance.enhance_level + 1}</strong></span>
+                        </div>
+                        <div className="bs-enhance-stat-row">
+                          <span>성공 확률</span>
+                          <span className={rate.success_rate >= 0.5 ? 'rate-high' : rate.success_rate >= 0.2 ? 'rate-mid' : 'rate-low'}>
+                            {Math.round(rate.success_rate * 100)}%
+                          </span>
+                        </div>
+                        <div className={`bs-enhance-stat-row ${(charState?.gold || 0) >= rate.gold_cost ? '' : 'missing'}`}>
+                          <span>필요 골드</span>
+                          <span>{rate.gold_cost.toLocaleString()}G</span>
+                        </div>
+                        <div className={`bs-enhance-stat-row ${ownedStones >= rate.material_count ? '' : 'missing'}`}>
+                          <span>필요 {stoneName}</span>
+                          <span>{ownedStones}/{rate.material_count}</span>
+                        </div>
+                        {selectedEnhance.enhance_level >= 7 && (
+                          <div className="bs-enhance-warning">+7 이상에서 실패 시 강화 단계가 1 하락합니다!</div>
+                        )}
+                      </div>
+                      {enhanceResult && (
+                        <div className={`bs-enhance-result ${enhanceResult.enhanced ? 'success' : 'fail'}`}>
+                          {enhanceResult.message}
+                        </div>
+                      )}
+                      <button
+                        className="bs-enhance-btn"
+                        disabled={loading || (charState?.gold || 0) < rate.gold_cost || ownedStones < rate.material_count}
+                        onClick={() => setConfirmPopup({ type: 'enhance', data: selectedEnhance, rate })}
+                      >
+                        {loading ? '강화 중...' : `강화하기 (${Math.round(rate.success_rate * 100)}%)`}
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Equipment item list */}
+          <div className="bs-split-right">
+            <div className="bs-section-title">보유 장비</div>
+            <div className="bs-item-list">
+              {enhanceItems.map(item => {
+                const rate = getEnhanceRate(item.enhance_level);
+                const maxed = item.enhance_level >= item.max_enhance;
+                const isSelected = selectedEnhance?.inventory_id === item.inventory_id;
+                return (
+                  <div
+                    key={item.inventory_id}
+                    className={`bs-item-card ${isSelected ? 'selected' : ''} ${maxed ? 'maxed' : ''}`}
+                    onClick={() => { setSelectedEnhance(item); setEnhanceResult(null); }}
+                  >
+                    <div className="bs-item-card-icon">
+                      <img src={`/equipment/${item.item_id}_icon.png`} alt={item.name} className="bs-item-card-img" onError={(e) => { e.target.style.display = 'none'; }} />
+                      {item.enhance_level > 0 && <span className="bs-item-card-badge">+{item.enhance_level}</span>}
+                    </div>
+                    <div className="bs-item-card-body">
+                      <div className="bs-item-card-header">
+                        <span className="bs-item-card-name" style={{ color: GRADE_COLORS[item.grade] }}>
+                          {item.name} {item.enhance_level > 0 ? `+${item.enhance_level}` : ''}
+                        </span>
+                        {!maxed && rate && <span className="bs-item-card-rate">{Math.round(rate.success_rate * 100)}%</span>}
+                        {maxed && <span className="bs-item-card-max">MAX</span>}
+                      </div>
+                      <div className="bs-item-card-meta">
+                        <span className="bs-item-card-type">{TYPE_NAMES[item.type] || item.type}</span>
+                        <span className="bs-item-card-grade" style={{ color: GRADE_COLORS[item.grade] }}>[{item.grade}]</span>
+                        {item.equipped ? <span className="bs-item-card-equipped">장착중</span> : null}
+                      </div>
+                      <div className="bs-item-card-enhance-bar">
+                        <div className="bs-item-card-enhance-fill" style={{ width: `${(item.enhance_level / item.max_enhance) * 100}%` }} />
+                        <span className="bs-item-card-enhance-text">{item.enhance_level}/{item.max_enhance}</span>
+                      </div>
+                      <ItemStatTags item={item} />
+                    </div>
+                  </div>
+                );
+              })}
+              {enhanceItems.length === 0 && <div className="facility-empty">강화 가능한 장비가 없습니다.</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Materials Tab ===== */}
       {tab === 'materials' && (
         <div className="bs-materials-panel">
           {GRADE_ORDER.map(grade => {
@@ -368,7 +459,7 @@ function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
                 <div className="bs-mat-grid">
                   {gradeMats.map(mat => (
                     <div key={mat.material_id} className="bs-mat-card">
-                      <div className="bs-mat-card-icon">{mat.icon}</div>
+                      <div className="bs-mat-card-icon"><img src={`/materials/${mat.material_id}_icon.png`} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6 }} onError={e => { e.target.style.display='none'; e.target.parentElement.insertAdjacentText('beforeend', mat.icon); }} /></div>
                       <div className="bs-mat-card-info">
                         <div className="bs-mat-card-name" style={{ color: GRADE_COLORS[mat.grade] }}>{mat.name}</div>
                         <div className="bs-mat-card-desc">{mat.description}</div>
@@ -376,11 +467,10 @@ function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
                       </div>
                       <button
                         className="bs-mat-sell-btn"
-                        onClick={() => handleSellMaterial(mat.material_id, 1)}
+                        onClick={() => { setSellPopup(mat); setSellQty(1); }}
                         disabled={mat.quantity <= 0}
-                        title={`판매 (${mat.sell_price}G)`}
                       >
-                        판매 ({mat.sell_price}G)
+                        판매
                       </button>
                     </div>
                   ))}
@@ -389,6 +479,167 @@ function BlacksmithArea({ charState, onCharStateUpdate, onLog }) {
             );
           })}
           {materials.length === 0 && <div className="facility-empty">보유한 재료가 없습니다. 몬스터를 사냥하여 재료를 획득하세요!</div>}
+        </div>
+      )}
+
+      {/* 제조/강화 확인 팝업 */}
+      {confirmPopup && (
+        <div className="bs-confirm-overlay" onClick={() => setConfirmPopup(null)}>
+          <div className="bs-confirm-popup" onClick={e => e.stopPropagation()}>
+            {confirmPopup.type === 'craft' ? (
+              <>
+                <div className="bs-confirm-icon-wrap craft">
+                  <img src={`/equipment/${confirmPopup.data.item_id}_icon.png`} alt="" className="bs-confirm-item-img" onError={e => { e.target.style.display='none'; }} />
+                </div>
+                <div className="bs-confirm-badge craft">제작 확인</div>
+                <div className="bs-confirm-item-name" style={{ color: GRADE_COLORS[confirmPopup.data.grade] }}>
+                  {confirmPopup.data.name}
+                  <span className="bs-confirm-grade" style={{ color: GRADE_COLORS[confirmPopup.data.grade] }}>[{confirmPopup.data.grade}]</span>
+                </div>
+                <div className="bs-confirm-desc">{confirmPopup.data.description}</div>
+                <div className="bs-confirm-cost-section">
+                  <div className="bs-confirm-cost-title">소모 재료</div>
+                  {confirmPopup.data.materials.map((mat, i) => (
+                    <div key={i} className="bs-confirm-cost-row">
+                      <img src={`/materials/${mat.material_id}_icon.png`} alt="" className="bs-confirm-cost-icon" onError={e => { e.target.style.display='none'; }} />
+                      <span style={{ color: GRADE_COLORS[mat.grade] }}>{mat.name}</span>
+                      <span className="bs-confirm-cost-qty">{mat.required_qty}개</span>
+                    </div>
+                  ))}
+                  <div className="bs-confirm-cost-row">
+                    <img src="/ui/gold_coin.png" alt="" className="bs-confirm-cost-icon" onError={e => { e.target.style.display='none'; }} />
+                    <span>골드</span>
+                    <span className="bs-confirm-cost-qty">{confirmPopup.data.gold_cost.toLocaleString()}G</span>
+                  </div>
+                </div>
+                <div className="bs-confirm-question">이 장비를 제작하시겠습니까?</div>
+                <div className="bs-confirm-actions">
+                  <button className="bs-confirm-btn craft" onClick={() => { const d = confirmPopup.data; setConfirmPopup(null); handleCraft(d.recipe_id); }}>
+                    🔨 제작하기
+                  </button>
+                  <button className="bs-confirm-cancel-btn" onClick={() => setConfirmPopup(null)}>취소</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bs-confirm-icon-wrap enhance">
+                  <img src={`/equipment/${confirmPopup.data.item_id}_icon.png`} alt="" className="bs-confirm-item-img" onError={e => { e.target.style.display='none'; }} />
+                  {confirmPopup.data.enhance_level > 0 && (
+                    <span className="bs-confirm-enhance-badge">+{confirmPopup.data.enhance_level}</span>
+                  )}
+                </div>
+                <div className="bs-confirm-badge enhance">강화 확인</div>
+                <div className="bs-confirm-item-name" style={{ color: GRADE_COLORS[confirmPopup.data.grade] }}>
+                  {confirmPopup.data.name} {confirmPopup.data.enhance_level > 0 ? `+${confirmPopup.data.enhance_level}` : ''}
+                </div>
+                <div className="bs-confirm-enhance-arrow">
+                  <span className="bs-confirm-from">+{confirmPopup.data.enhance_level}</span>
+                  <span className="bs-confirm-arrow">→</span>
+                  <span className="bs-confirm-to">+{confirmPopup.data.enhance_level + 1}</span>
+                </div>
+                <div className="bs-confirm-rate-wrap">
+                  <div className="bs-confirm-rate-bar">
+                    <div className="bs-confirm-rate-fill" style={{ width: `${Math.round(confirmPopup.rate.success_rate * 100)}%` }} />
+                  </div>
+                  <span className={`bs-confirm-rate-text ${confirmPopup.rate.success_rate >= 0.5 ? 'high' : confirmPopup.rate.success_rate >= 0.2 ? 'mid' : 'low'}`}>
+                    성공률 {Math.round(confirmPopup.rate.success_rate * 100)}%
+                  </span>
+                </div>
+                <div className="bs-confirm-cost-section">
+                  <div className="bs-confirm-cost-row">
+                    <img src="/ui/gold_coin.png" alt="" className="bs-confirm-cost-icon" onError={e => { e.target.style.display='none'; }} />
+                    <span>골드</span>
+                    <span className="bs-confirm-cost-qty">{confirmPopup.rate.gold_cost.toLocaleString()}G</span>
+                  </div>
+                  <div className="bs-confirm-cost-row">
+                    <span className="bs-confirm-cost-icon">💎</span>
+                    <span>{getEnhanceStoneName(confirmPopup.data.grade)}</span>
+                    <span className="bs-confirm-cost-qty">{confirmPopup.rate.material_count}개</span>
+                  </div>
+                </div>
+                {confirmPopup.data.enhance_level >= 7 && (
+                  <div className="bs-confirm-warning">⚠️ +7 이상에서 실패 시 강화 단계가 1 하락합니다!</div>
+                )}
+                <div className="bs-confirm-question">강화를 진행하시겠습니까?</div>
+                <div className="bs-confirm-actions">
+                  <button className="bs-confirm-btn enhance" onClick={() => { const d = confirmPopup.data; setConfirmPopup(null); handleEnhance(d.inventory_id); }}>
+                    🔥 강화하기
+                  </button>
+                  <button className="bs-confirm-cancel-btn" onClick={() => setConfirmPopup(null)}>취소</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 재료 판매 팝업 */}
+      {sellPopup && (
+        <div className="bs-sell-overlay" onClick={() => setSellPopup(null)}>
+          <div className="bs-sell-popup" onClick={e => e.stopPropagation()}>
+            <div className="bs-sell-popup-header">
+              <span className="bs-sell-popup-title">재료 판매</span>
+              <button className="bs-sell-popup-close" onClick={() => setSellPopup(null)}>&times;</button>
+            </div>
+            <div className="bs-sell-popup-item">
+              <div className="bs-sell-popup-icon">
+                <img src={`/materials/${sellPopup.material_id}_icon.png`} alt="" onError={e => { e.target.style.display='none'; }} />
+              </div>
+              <div className="bs-sell-popup-info">
+                <div className="bs-sell-popup-name" style={{ color: GRADE_COLORS[sellPopup.grade] }}>{sellPopup.name}</div>
+                <div className="bs-sell-popup-desc">{sellPopup.description}</div>
+                <div className="bs-sell-popup-owned">보유: {sellPopup.quantity}개 · 개당 {sellPopup.sell_price}G</div>
+              </div>
+            </div>
+            <div className="bs-sell-popup-controls">
+              <div className="bs-sell-qty-row">
+                <button className="bs-sell-qty-btn" onClick={() => setSellQty(q => Math.max(1, q - 10))}>-10</button>
+                <button className="bs-sell-qty-btn" onClick={() => setSellQty(q => Math.max(1, q - 1))}>-1</button>
+                <input
+                  type="number"
+                  className="bs-sell-qty-input"
+                  value={sellQty}
+                  min={1}
+                  max={sellPopup.quantity}
+                  onChange={e => {
+                    const v = Math.max(1, Math.min(sellPopup.quantity, Math.floor(Number(e.target.value) || 1)));
+                    setSellQty(v);
+                  }}
+                />
+                <button className="bs-sell-qty-btn" onClick={() => setSellQty(q => Math.min(sellPopup.quantity, q + 1))}>+1</button>
+                <button className="bs-sell-qty-btn" onClick={() => setSellQty(q => Math.min(sellPopup.quantity, q + 10))}>+10</button>
+              </div>
+              <input
+                type="range"
+                className="bs-sell-slider"
+                min={1}
+                max={sellPopup.quantity}
+                value={sellQty}
+                onChange={e => setSellQty(Number(e.target.value))}
+              />
+              <div className="bs-sell-qty-labels">
+                <span>1</span>
+                <button className="bs-sell-all-btn" onClick={() => setSellQty(sellPopup.quantity)}>전체</button>
+                <span>{sellPopup.quantity}</span>
+              </div>
+            </div>
+            <div className="bs-sell-popup-total">
+              <img src="/ui/gold_coin.png" alt="" className="bs-sell-gold-icon" onError={e => { e.target.style.display='none'; }} />
+              <span className="bs-sell-total-gold">{(sellQty * sellPopup.sell_price).toLocaleString()}G</span>
+            </div>
+            <div className="bs-sell-popup-actions">
+              <button
+                className="bs-sell-confirm-btn"
+                onClick={async () => {
+                  await handleSellMaterial(sellPopup.material_id, sellQty);
+                  setSellPopup(null);
+                }}
+              >
+                {sellQty}개 판매하기
+              </button>
+              <button className="bs-sell-cancel-btn" onClick={() => setSellPopup(null)}>취소</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

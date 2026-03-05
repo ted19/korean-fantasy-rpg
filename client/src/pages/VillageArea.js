@@ -6,6 +6,7 @@ import Quest from './Quest';
 import Summon from './Summon';
 import BlacksmithArea from './BlacksmithArea';
 import InnArea from './InnArea';
+import FortuneArea from './FortuneArea';
 
 function VillageImg({ id, fallback, className }) {
   const [err, setErr] = useState(false);
@@ -19,15 +20,26 @@ const VILLAGE_ACTIONS = [
   { id: 'blacksmith', name: '대장간', icon: '⚒️', desc: '장비 제작과 강화를 합니다.' },
   { id: 'quest', name: '길드', icon: '📜', desc: '퀘스트를 확인합니다.' },
   { id: 'summon', name: '소환술사의 집', icon: '👻', desc: '소환수를 고용하고 관리합니다.' },
+  { id: 'fortune', name: '운명술사의 집', icon: '🔮', desc: '운세, 점괘, 부적으로 힘을 얻습니다.' },
 ];
 
-function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummonsChanged, onMercenariesChanged }) {
-  const [activeView, setActiveView] = useState(null);
+function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummonsChanged, onMercenariesChanged, initialView, initialViewData, onInitialViewConsumed }) {
+  const [activeView, setActiveView] = useState(initialView || null);
+  const [viewData, setViewData] = useState(initialViewData || null);
+
+  React.useEffect(() => {
+    if (initialView) {
+      setActiveView(initialView);
+      setViewData(initialViewData || null);
+      if (onInitialViewConsumed) onInitialViewConsumed();
+    }
+  }, [initialView]);
 
   const handleBack = () => {
     if (activeView === 'summon' && onSummonsChanged) onSummonsChanged();
     if (activeView === 'inn' && onMercenariesChanged) onMercenariesChanged();
     setActiveView(null);
+    setViewData(null);
   };
 
   const handleAction = (id) => {
@@ -41,14 +53,15 @@ function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummons
       shop: <Shop character={character} charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
       blacksmith: <BlacksmithArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
       quest: <Quest charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
-      summon: <Summon charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
+      summon: <Summon charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} initialSummonId={viewData?.summonId} />,
+      fortune: <FortuneArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
     }[activeView];
 
     return (
       <div className="shop-wrapper" style={maxWidth ? { maxWidth } : undefined}>
-        <Button variant="outline-secondary" size="sm" className="mb-3" onClick={handleBack}>
-          &larr; 마을로 돌아가기
-        </Button>
+        <button className="village-back-btn" onClick={handleBack}>
+          ← 마을로 돌아가기
+        </button>
         {Content}
       </div>
     );

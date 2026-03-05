@@ -28,15 +28,77 @@ const SLOT_NAMES = {
   necklace: '목걸이',
 };
 
+const SUMMON_SLOTS = [
+  { level: 1,  slots: 1 },
+  { level: 10, slots: 2 },
+  { level: 20, slots: 3 },
+  { level: 30, slots: 4 },
+  { level: 40, slots: 5 },
+  { level: 50, slots: 6 },
+];
+
+function getSummonSlotInfo(charLevel, currentCount) {
+  let maxSlots = 1;
+  for (const s of SUMMON_SLOTS) {
+    if (charLevel >= s.level) maxSlots = s.slots;
+  }
+  const next = SUMMON_SLOTS.find(s => s.slots > maxSlots);
+  return { current: currentCount, max: maxSlots, next: next || null };
+}
+
 // 구매 가능한 소환수 목록
 router.get('/templates', auth, async (req, res) => {
   try {
     const [templates] = await pool.query('SELECT * FROM summon_templates ORDER BY type, required_level, price');
-    const templatesWithImages = templates.map(t => ({
-      ...t,
-      image_url: `/summons/${t.id}_full.png`,
-      icon_url: `/summons/${t.id}_icon.png`,
-    }));
+    const [growthRates] = await pool.query('SELECT * FROM summon_growth_rates');
+    const growthMap = {};
+    growthRates.forEach(g => { growthMap[g.summon_type] = g; });
+
+    // 소환 재료 비용 조회
+    const [matCosts] = await pool.query(
+      `SELECT smc.template_id, smc.material_id, smc.quantity, m.name, m.icon, m.grade
+       FROM summon_material_costs smc
+       JOIN materials m ON smc.material_id = m.id
+       ORDER BY smc.template_id, m.grade, m.name`
+    );
+    const costMap = {};
+    for (const mc of matCosts) {
+      if (!costMap[mc.template_id]) costMap[mc.template_id] = [];
+      costMap[mc.template_id].push({ material_id: mc.material_id, name: mc.name, icon: mc.icon, grade: mc.grade, quantity: mc.quantity });
+    }
+
+    // 캐릭터의 재료 인벤토리 조회
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    let myMaterials = {};
+    if (chars.length > 0) {
+      const [mats] = await pool.query('SELECT material_id, quantity FROM material_inventory WHERE character_id = ?', [chars[0].id]);
+      for (const m of mats) myMaterials[m.material_id] = m.quantity;
+    }
+
+    const templatesWithImages = templates.map(t => {
+      const gr = growthMap[t.type] || {};
+      const materials = (costMap[t.id] || []).map(mc => ({
+        ...mc,
+        owned: myMaterials[mc.material_id] || 0,
+      }));
+      return {
+        ...t,
+        image_url: `/summons/${t.id}_full.png`,
+        icon_url: `/summons/${t.id}_icon.png`,
+        growth_hp: gr.hp_per_level || 0,
+        growth_mp: gr.mp_per_level || 0,
+        growth_phys_attack: gr.phys_attack_per_level || 0,
+        growth_phys_defense: gr.phys_defense_per_level || 0,
+        growth_mag_attack: gr.mag_attack_per_level || 0,
+        growth_mag_defense: gr.mag_defense_per_level || 0,
+        summon_materials: materials,
+      };
+    });
     res.json({ templates: templatesWithImages });
   } catch (err) {
     console.error('Summon templates error:', err);
@@ -49,11 +111,11 @@ router.get('/my', auth, async (req, res) => {
   try {
     const [chars] = await pool.query(
       req.selectedCharId
-        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
-        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+        ? 'SELECT id, level FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id, level FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
       req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
     );
-    if (chars.length === 0) return res.json({ summons: [] });
+    if (chars.length === 0) return res.json({ summons: [], summonSlots: { current: 0, max: 1, next: null } });
 
     const [summons] = await pool.query(
       `SELECT cs.id, cs.level, cs.exp, cs.hp, cs.mp, cs.attack, cs.defense,
@@ -69,10 +131,22 @@ router.get('/my', auth, async (req, res) => {
       [chars[0].id]
     );
 
-    // 이미지 URL 추가
+    // 성장률 조회
+    const [growthRates] = await pool.query('SELECT * FROM summon_growth_rates');
+    const growthMap = {};
+    growthRates.forEach(g => { growthMap[g.summon_type] = g; });
+
+    // 이미지 URL + 성장률 추가
     for (const s of summons) {
       s.image_url = `/summons/${s.template_id}_full.png`;
       s.icon_url_img = `/summons/${s.template_id}_icon.png`;
+      const gr = growthMap[s.type] || {};
+      s.growth_hp = gr.hp_per_level || 0;
+      s.growth_mp = gr.mp_per_level || 0;
+      s.growth_phys_attack = gr.phys_attack_per_level || 0;
+      s.growth_phys_defense = gr.phys_defense_per_level || 0;
+      s.growth_mag_attack = gr.mag_attack_per_level || 0;
+      s.growth_mag_defense = gr.mag_defense_per_level || 0;
     }
 
     // 각 소환수의 습득 스킬 목록도 포함
@@ -86,7 +160,8 @@ router.get('/my', auth, async (req, res) => {
       s.learned_skills = learned;
     }
 
-    res.json({ summons });
+    const slotInfo = getSummonSlotInfo(chars[0].level, summons.length);
+    res.json({ summons, summonSlots: slotInfo });
   } catch (err) {
     console.error('My summons error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
@@ -113,12 +188,7 @@ router.post('/buy', auth, async (req, res) => {
     const tmpl = templates[0];
 
     if (char.level < tmpl.required_level) {
-      return res.status(400).json({ message: `레벨 ${tmpl.required_level} 이상만 고용할 수 있습니다.` });
-    }
-
-    const gold = char.gold || 0;
-    if (gold < tmpl.price) {
-      return res.status(400).json({ message: `골드가 부족합니다. (필요: ${tmpl.price}G, 보유: ${gold}G)` });
+      return res.status(400).json({ message: `레벨 ${tmpl.required_level} 이상만 소환할 수 있습니다.` });
     }
 
     const [existing] = await conn.query(
@@ -126,18 +196,86 @@ router.post('/buy', auth, async (req, res) => {
       [char.id, templateId]
     );
     if (existing.length > 0) {
-      return res.status(400).json({ message: '이미 고용한 소환수입니다.' });
+      return res.status(400).json({ message: '이미 소환한 소환수입니다.' });
+    }
+
+    // 슬롯 제한 확인
+    const [summonCount] = await conn.query('SELECT COUNT(*) as cnt FROM character_summons WHERE character_id = ?', [char.id]);
+    const slotInfo = getSummonSlotInfo(char.level, summonCount[0].cnt);
+    if (summonCount[0].cnt >= slotInfo.max) {
+      const nextMsg = slotInfo.next ? ` (Lv.${slotInfo.next.level}에서 ${slotInfo.next.slots}마리 해금)` : '';
+      return res.status(400).json({ message: `소환수 슬롯이 부족합니다.${nextMsg}` });
+    }
+
+    // 재료 비용 확인
+    const [matCosts] = await conn.query(
+      `SELECT smc.material_id, smc.quantity, m.name
+       FROM summon_material_costs smc
+       JOIN materials m ON smc.material_id = m.id
+       WHERE smc.template_id = ?`,
+      [templateId]
+    );
+
+    if (matCosts.length > 0) {
+      // 재료 충분한지 확인
+      for (const mc of matCosts) {
+        const [inv] = await conn.query(
+          'SELECT quantity FROM material_inventory WHERE character_id = ? AND material_id = ?',
+          [char.id, mc.material_id]
+        );
+        const owned = inv.length > 0 ? inv[0].quantity : 0;
+        if (owned < mc.quantity) {
+          return res.status(400).json({ message: `재료가 부족합니다. (${mc.name} 필요: ${mc.quantity}, 보유: ${owned})` });
+        }
+      }
+    } else {
+      // 재료 설정이 없으면 골드 차감 (하위 호환)
+      const gold = char.gold || 0;
+      if (gold < tmpl.price) {
+        return res.status(400).json({ message: `골드가 부족합니다. (필요: ${tmpl.price}G, 보유: ${gold}G)` });
+      }
     }
 
     await conn.beginTransaction();
 
-    await conn.query('UPDATE characters SET gold = gold - ? WHERE id = ?', [tmpl.price, char.id]);
+    if (matCosts.length > 0) {
+      for (const mc of matCosts) {
+        await conn.query(
+          'UPDATE material_inventory SET quantity = quantity - ? WHERE character_id = ? AND material_id = ?',
+          [mc.quantity, char.id, mc.material_id]
+        );
+      }
+    } else {
+      await conn.query('UPDATE characters SET gold = gold - ? WHERE id = ?', [tmpl.price, char.id]);
+    }
     await conn.query(
       `INSERT INTO character_summons (character_id, template_id, hp, mp, attack, defense,
         phys_attack, phys_defense, mag_attack, mag_defense, crit_rate, evasion)
-       VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0)`,
-      [char.id, templateId, tmpl.base_hp, tmpl.base_mp, tmpl.base_attack, tmpl.base_defense]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [char.id, templateId, tmpl.base_hp, tmpl.base_mp, tmpl.base_attack, tmpl.base_defense,
+       tmpl.base_phys_attack || 0, tmpl.base_phys_defense || 0,
+       tmpl.base_mag_attack || 0, tmpl.base_mag_defense || 0,
+       tmpl.base_crit_rate || 0, tmpl.base_evasion || 0]
     );
+
+    // 기본 스킬 자동 학습 (공통 + 해당 타입 레벨1 스킬)
+    const [inserted] = await conn.query('SELECT LAST_INSERT_ID() as summonId');
+    const newSummonId = inserted[0].summonId;
+
+    const [defaultSkills] = await conn.query(
+      `SELECT id FROM summon_skills
+       WHERE required_level <= 10
+         AND ((is_common = 1)
+           OR (summon_type = ? AND template_id IS NULL)
+           OR (template_id = ?))`,
+      [tmpl.type, templateId]
+    );
+    for (const sk of defaultSkills) {
+      await conn.query(
+        'INSERT IGNORE INTO summon_learned_skills (summon_id, skill_id) VALUES (?, ?)',
+        [newSummonId, sk.id]
+      );
+    }
 
     await conn.commit();
 
@@ -172,7 +310,7 @@ router.post('/sell', auth, async (req, res) => {
     const char = chars[0];
 
     const [summons] = await conn.query(
-      `SELECT cs.id, st.name, st.sell_price
+      `SELECT cs.id, st.name
        FROM character_summons cs
        JOIN summon_templates st ON cs.template_id = st.id
        WHERE cs.id = ? AND cs.character_id = ?`,
@@ -181,20 +319,22 @@ router.post('/sell', auth, async (req, res) => {
     if (summons.length === 0) return res.status(404).json({ message: '소환수를 찾을 수 없습니다.' });
     const summon = summons[0];
 
-    await conn.beginTransaction();
+    // 장비 장착 여부 확인
+    const [equipped] = await conn.query(
+      'SELECT COUNT(*) as cnt FROM summon_equipment WHERE summon_id = ?',
+      [summonId]
+    );
+    if (equipped[0].cnt > 0) {
+      return res.status(400).json({ message: '장비를 장착한 소환수는 해고할 수 없습니다. 먼저 장비를 해제해주세요.' });
+    }
 
-    // 장비 자동 해제 (summon_equipment 삭제 - 아이템은 인벤토리에 남음)
-    await conn.query('DELETE FROM summon_equipment WHERE summon_id = ?', [summonId]);
+    await conn.beginTransaction();
     await conn.query('DELETE FROM character_summons WHERE id = ?', [summonId]);
-    await conn.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [summon.sell_price, char.id]);
 
     await conn.commit();
 
-    const [updatedChar] = await pool.query('SELECT gold FROM characters WHERE id = ?', [char.id]);
-
     res.json({
-      message: `${summon.name}을(를) ${summon.sell_price}G에 해고했습니다.`,
-      gold: updatedChar[0].gold,
+      message: `${summon.name}을(를) 해고했습니다.`,
     });
   } catch (err) {
     await conn.rollback();
@@ -257,43 +397,67 @@ router.get('/:summonId/equipment', auth, async (req, res) => {
       };
     });
 
-    // 캐릭터 장착 아이템 ID
-    const [charEquipped] = await pool.query(
-      'SELECT item_id FROM equipment WHERE character_id = ?',
-      [charId]
-    );
-    const charEquippedIds = charEquipped.map((e) => e.item_id);
+    // 장착 중인 item_id별 개수 카운트
+    const equippedCountMap = {};
+    const addCount = (rows) => { for (const r of rows) equippedCountMap[r.item_id] = (equippedCountMap[r.item_id] || 0) + 1; };
 
-    // 모든 소환수 장착 아이템 ID (현재 소환수 제외)
+    const [charEquipped] = await pool.query('SELECT item_id FROM equipment WHERE character_id = ?', [charId]);
+    addCount(charEquipped);
+
     const [allSummonEquipped] = await pool.query(
       `SELECT se.item_id FROM summon_equipment se
        JOIN character_summons cs ON se.summon_id = cs.id
        WHERE cs.character_id = ? AND se.summon_id != ?`,
       [charId, summonId]
     );
-    const otherSummonEquippedIds = allSummonEquipped.map((e) => e.item_id);
+    addCount(allSummonEquipped);
+    addCount(equipped); // 현재 소환수 장착
 
-    // 현재 소환수 장착 아이템 ID
-    const currentSummonEquippedIds = equipped.map((e) => e.item_id);
+    const [allMercEquipped] = await pool.query(
+      `SELECT me.item_id FROM mercenary_equipment me
+       JOIN character_mercenaries cm ON me.mercenary_id = cm.id
+       WHERE cm.character_id = ?`,
+      [charId]
+    );
+    addCount(allMercEquipped);
 
-    // 사용 가능 인벤토리 (장비류만, 캐릭터 장착/다른 소환수 장착 제외, 클래스 제한 아이템 제외)
+    const [cosmeticEquipped] = await pool.query('SELECT item_id FROM equipped_cosmetics WHERE character_id = ?', [charId]);
+    addCount(cosmeticEquipped);
+
+    // 사용 가능 인벤토리 (장비류만, 클래스 제한 아이템 제외)
     const [inventory] = await pool.query(
       `SELECT i.*, it.name, it.type, it.slot, it.weapon_hand, it.description, it.price, it.sell_price,
               it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense,
               it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense,
               it.effect_crit_rate, it.effect_evasion,
-              it.required_level, it.class_restriction
+              it.required_level, it.class_restriction,
+              IFNULL(it.grade, '일반') as grade, it.cosmetic_effect
        FROM inventory i
        JOIN items it ON i.item_id = it.id
-       WHERE i.character_id = ? AND it.type != 'potion' AND it.class_restriction IS NULL
+       WHERE i.character_id = ? AND it.type != 'potion'
        ORDER BY it.type, it.name`,
       [charId]
     );
 
-    const excludeIds = [...charEquippedIds, ...otherSummonEquippedIds, ...currentSummonEquippedIds];
-    const availableInventory = inventory.filter((inv) => !excludeIds.includes(inv.item_id));
+    const usedCount = {};
+    const availableInventory = inventory.filter((inv) => {
+      const eq = equippedCountMap[inv.item_id] || 0;
+      const used = usedCount[inv.item_id] || 0;
+      if (used < eq) { usedCount[inv.item_id] = used + 1; return false; }
+      return true;
+    });
 
-    res.json({ equipped: equippedMap, inventory: availableInventory });
+    // 물약(소모품)
+    const [potions] = await pool.query(
+      `SELECT i.id as inv_id, i.item_id, i.quantity, it.name, it.type, it.description,
+              it.effect_hp, it.effect_mp, IFNULL(it.grade, '일반') as grade
+       FROM inventory i JOIN items it ON i.item_id = it.id
+       WHERE i.character_id = ? AND it.type = 'potion' AND i.quantity > 0
+       ORDER BY it.name`,
+      [charId]
+    );
+
+    res.json({ equipped: equippedMap, inventory: availableInventory, potions });
   } catch (err) {
     console.error('Summon equipment info error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
@@ -329,12 +493,13 @@ router.post('/:summonId/equip', auth, async (req, res) => {
     if (itemRows.length === 0) return res.status(404).json({ message: '아이템을 찾을 수 없습니다.' });
     const item = itemRows[0];
 
-    // 인벤토리 확인
+    // 인벤토리 확인 (보유 개수)
     const [invRows] = await conn.query(
       'SELECT * FROM inventory WHERE character_id = ? AND item_id = ?',
       [char.id, itemId]
     );
     if (invRows.length === 0) return res.status(400).json({ message: '보유하지 않은 아이템입니다.' });
+    const ownedCount = invRows.reduce((s, r) => s + (r.quantity || 1), 0);
 
     // 슬롯 유효성
     if (item.slot !== slot) {
@@ -346,24 +511,26 @@ router.post('/:summonId/equip', auth, async (req, res) => {
       return res.status(400).json({ message: '클래스 제한 아이템은 소환수에 장착할 수 없습니다.' });
     }
 
-    // 캐릭터가 장착 중인지 확인
+    // 장착 중인 총 개수 확인 (캐릭터 + 모든 소환수 + 용병)
     const [charEquip] = await conn.query(
-      'SELECT id FROM equipment WHERE character_id = ? AND item_id = ?',
+      'SELECT COUNT(*) as cnt FROM equipment WHERE character_id = ? AND item_id = ?',
       [char.id, itemId]
     );
-    if (charEquip.length > 0) {
-      return res.status(400).json({ message: '캐릭터가 장착 중인 아이템입니다.' });
-    }
-
-    // 다른 소환수가 장착 중인지 확인
-    const [otherEquip] = await conn.query(
-      `SELECT se.id FROM summon_equipment se
+    const [allSummonEquip] = await conn.query(
+      `SELECT COUNT(*) as cnt FROM summon_equipment se
        JOIN character_summons cs ON se.summon_id = cs.id
        WHERE cs.character_id = ? AND se.item_id = ? AND se.summon_id != ?`,
       [char.id, itemId, summonId]
     );
-    if (otherEquip.length > 0) {
-      return res.status(400).json({ message: '다른 소환수가 장착 중인 아이템입니다.' });
+    const [mercEquip] = await conn.query(
+      `SELECT COUNT(*) as cnt FROM mercenary_equipment me
+       JOIN character_mercenaries cm ON me.mercenary_id = cm.id
+       WHERE cm.character_id = ? AND me.item_id = ?`,
+      [char.id, itemId]
+    );
+    const totalEquipped = (charEquip[0].cnt || 0) + (allSummonEquip[0].cnt || 0) + (mercEquip[0].cnt || 0);
+    if (totalEquipped >= ownedCount) {
+      return res.status(400).json({ message: '사용 가능한 아이템이 없습니다. (모두 장착 중)' });
     }
 
     // 방패 장착 시 양손무기 체크
@@ -590,6 +757,7 @@ router.get('/:summonId/skills', auth, async (req, res) => {
         ...s,
         learned: learnedIds.includes(s.id),
         skill_category: s.is_common ? '공통' : s.template_id ? '고유' : s.summon_type,
+        gold_cost: Math.floor(s.required_level * 50 * (1 + (summon.level - 1) * 0.1)),
       })),
       summonLevel: summon.level,
     });
@@ -651,12 +819,23 @@ router.post('/:summonId/learn-skill', auth, async (req, res) => {
       return res.status(400).json({ message: '이미 습득한 스킬입니다.' });
     }
 
+    // 골드 비용: 스킬 요구레벨 기반 + 소환수 레벨 비례
+    const goldCost = Math.floor(skill.required_level * 50 * (1 + (summon.level - 1) * 0.1));
+
+    const [charRows] = await conn.query('SELECT gold FROM characters WHERE id = ?', [charId]);
+    if (charRows[0].gold < goldCost) {
+      return res.status(400).json({ message: `골드가 부족합니다. (필요: ${goldCost}G, 보유: ${charRows[0].gold}G)` });
+    }
+
+    await conn.query('UPDATE characters SET gold = gold - ? WHERE id = ?', [goldCost, charId]);
     await conn.query(
       'INSERT INTO summon_learned_skills (summon_id, skill_id) VALUES (?, ?)',
       [summonId, skillId]
     );
 
-    res.json({ message: `${skill.name} 스킬을 습득했습니다!` });
+    const [updated] = await conn.query('SELECT gold FROM characters WHERE id = ?', [charId]);
+
+    res.json({ message: `${skill.name} 스킬을 습득했습니다! (-${goldCost}G)`, gold: updated[0].gold });
   } catch (err) {
     console.error('Learn summon skill error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });

@@ -120,9 +120,35 @@ router.post('/hunt', auth, async (req, res) => {
     const monsterList = MONSTERS[location];
     const monster = { ...monsterList[Math.floor(Math.random() * monsterList.length)] };
 
-    // 소환수 참여 시 몬스터 HP 보정 (소환수 수 x 30%)
+    // 소환수 참여 시 몬스터 HP 보정 (체감 증가)
     if (activeSummons.length > 0) {
-      monster.hp = Math.floor(monster.hp * (1 + activeSummons.length * 0.3));
+      const penaltyRates = [0, 0.15, 0.25, 0.30];
+      const totalPenalty = penaltyRates[Math.min(activeSummons.length, 3)];
+      monster.hp = Math.floor(monster.hp * (1 + totalPenalty));
+    }
+
+    // 운세 버프 로드
+    const [fortuneBuffs] = await conn.query(
+      'SELECT * FROM character_fortunes WHERE character_id = ? AND remaining_battles > 0',
+      [char.id]
+    );
+    let fortuneAtkBonus = 0;   // attack: 공격력 % 증가
+    let fortuneDefBonus = 0;   // defense: 방어력 % 증가
+    let fortuneGoldBonus = 0;  // gold: 골드 획득 % 증가
+    let fortuneCritBonus = 0;  // crit: 치명타율 고정값 증가
+    let fortuneRegenBonus = 0; // regen: 전투 후 HP 회복 %
+    for (const fb of fortuneBuffs) {
+      if (fb.buff_type === 'attack') fortuneAtkBonus += fb.buff_value;
+      if (fb.buff_type === 'defense') fortuneDefBonus += fb.buff_value;
+      if (fb.buff_type === 'gold') fortuneGoldBonus += fb.buff_value;
+      if (fb.buff_type === 'crit') fortuneCritBonus += fb.buff_value;
+      if (fb.buff_type === 'regen') fortuneRegenBonus += fb.buff_value;
+      if (fb.buff_type === 'all') {
+        fortuneAtkBonus += fb.buff_value;
+        fortuneDefBonus += fb.buff_value;
+        fortuneGoldBonus += fb.buff_value;
+        fortuneCritBonus += Math.floor(fb.buff_value * 0.5);
+      }
     }
 
     // 전투 시뮬레이션
@@ -133,6 +159,19 @@ router.post('/hunt', auth, async (req, res) => {
     let totalDmgDealt = 0;
     let totalDmgTaken = 0;
     const battleLog = [];
+
+    // 운세 버프 안내
+    if (fortuneBuffs.length > 0) {
+      const buffNames = [];
+      if (fortuneAtkBonus > 0) buffNames.push(`공격+${fortuneAtkBonus}%`);
+      if (fortuneDefBonus > 0) buffNames.push(`방어+${fortuneDefBonus}%`);
+      if (fortuneGoldBonus > 0) buffNames.push(`골드+${fortuneGoldBonus}%`);
+      if (fortuneCritBonus > 0) buffNames.push(`치명+${fortuneCritBonus}%`);
+      if (fortuneRegenBonus > 0) buffNames.push(`재생+${fortuneRegenBonus}%`);
+      if (buffNames.length > 0) {
+        battleLog.push({ text: `✨ 운세 효과 활성: ${buffNames.join(', ')}`, type: 'system' });
+      }
+    }
 
     // 버프 상태
     let atkBuff = 0;
@@ -212,13 +251,20 @@ router.post('/hunt', auth, async (req, res) => {
         }
       }
 
-      // 플레이어 공격
+      // 플레이어 공격 (phys_attack/mag_attack 기반)
       let dmg;
-      const totalAtk = char.attack + atkBuff;
+      const baseAtk = char.phys_attack + char.attack * 0.5;
+      const fortuneAtkMul = 1 + fortuneAtkBonus / 100;
+      const totalAtk = (baseAtk + atkBuff) * fortuneAtkMul;
 
       if (isAttackSkill && round === 1) {
         playerMp -= skill.mp_cost;
-        dmg = Math.max(1, Math.floor(totalAtk * skill.damage_multiplier) + Math.floor(Math.random() * 5) - 2);
+        // 스킬 타입에 따라 물리/마법 스탯 적용
+        const skillAtk = (skill.type === 'attack' && char.mag_attack > char.phys_attack)
+          ? (char.mag_attack + char.attack * 0.3)
+          : (char.phys_attack + char.attack * 0.3);
+        const skillAtkTotal = (skillAtk + atkBuff) * fortuneAtkMul;
+        dmg = Math.max(1, Math.floor(skillAtkTotal * skill.damage_multiplier) - Math.floor(monster.defense * 0.3) + Math.floor(Math.random() * 5) - 2);
         battleLog.push({
           text: `[${round}] ${char.name}의 [${skill.name}]! ${monster.name}에게 ${dmg} 데미지 (남은 HP: ${Math.max(0, monsterHp - dmg)})`,
           type: 'normal',
@@ -233,7 +279,7 @@ router.post('/hunt', auth, async (req, res) => {
           }
         }
       } else {
-        dmg = Math.max(1, totalAtk + Math.floor(Math.random() * 5) - 2);
+        dmg = Math.max(1, Math.floor(totalAtk) - Math.floor(monster.defense * 0.3) + Math.floor(Math.random() * 5) - 2);
         battleLog.push({
           text: `[${round}] ${char.name}의 공격! ${monster.name}에게 ${dmg} 데미지 (남은 HP: ${Math.max(0, monsterHp - dmg)})`,
           type: 'normal',
@@ -306,9 +352,10 @@ router.post('/hunt', auth, async (req, res) => {
 
       if (monsterHp <= 0) break;
 
-      // 몬스터 공격 (플레이어 + 소환수 합산 방어력 보정)
-      const totalDef = char.defense + defBuff;
-      const mDmg = Math.max(1, monster.attack - totalDef + Math.floor(Math.random() * 4) - 1);
+      // 몬스터 공격 (방어력 스케일링 개선)
+      const fortuneDefMul = 1 + fortuneDefBonus / 100;
+      const totalDef = (char.defense + defBuff) * fortuneDefMul;
+      const mDmg = Math.max(1, monster.attack - Math.floor(totalDef * 0.7) + Math.floor(Math.random() * 4) - 1);
       playerHp = Math.max(0, playerHp - mDmg);
       totalDmgTaken += mDmg;
       battleLog.push({
@@ -341,20 +388,35 @@ router.post('/hunt', auth, async (req, res) => {
     if (victory) {
       expGained = monster.exp;
       goldGained = monster.gold;
+
+      // 운세 골드 보너스
+      if (fortuneGoldBonus > 0) {
+        const bonusGold = Math.floor(goldGained * fortuneGoldBonus / 100);
+        goldGained += bonusGold;
+      }
+
       newExp += expGained;
       newGold += goldGained;
 
+      const goldBonusText = fortuneGoldBonus > 0 ? ` (운세 +${fortuneGoldBonus}%)` : '';
       battleLog.push({
-        text: `${monster.name}을(를) 처치했다! EXP +${expGained}, Gold +${goldGained}`,
+        text: `${monster.name}을(를) 처치했다! EXP +${expGained}, Gold +${goldGained}${goldBonusText}`,
         type: 'heal',
       });
+
+      // 운세 재생 효과
+      if (fortuneRegenBonus > 0) {
+        const regenHp = Math.floor(char.hp * fortuneRegenBonus / 100);
+        playerHp = Math.min(char.hp, playerHp + regenHp);
+        battleLog.push({ text: `✨ 운세 재생 효과! HP +${regenHp} 회복 (HP: ${playerHp})`, type: 'heal' });
+      }
 
       // 소환수 경험치 분배 (몬스터 경험치의 70%)
       if (activeSummons.length > 0) {
         const summonExp = Math.floor(expGained * 0.7);
         for (const sm of activeSummons) {
           const newSmExp = (sm.exp || 0) + summonExp;
-          const expNeededSm = sm.level * 50;
+          const expNeededSm = Math.floor(40 * sm.level + 0.25 * sm.level * sm.level);
           if (newSmExp >= expNeededSm) {
             // 레벨업 (성장률 테이블 참조)
             const leftover = newSmExp - expNeededSm;
@@ -402,7 +464,7 @@ router.post('/hunt', auth, async (req, res) => {
       }
 
       // 레벨업 체크 (성장률 테이블 참조)
-      const expNeeded = newLevel * 100;
+      const expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
       if (newExp >= expNeeded) {
         newExp -= expNeeded;
         newLevel++;
@@ -424,7 +486,7 @@ router.post('/hunt', auth, async (req, res) => {
         }
         playerHp = newMaxHp;
         battleLog.push({
-          text: `레벨 업! Lv.${newLevel} 달성! (HP+${Math.floor(g.hp_per_level)} MP+${Math.floor(g.mp_per_level)} ATK+${Math.floor(g.attack_per_level)} DEF+${Math.floor(g.defense_per_level)})`,
+          text: `레벨 업! Lv.${newLevel} 달성! (HP+${Math.floor(g.hp_per_level)} MP+${Math.floor(g.mp_per_level)} ATK+${Math.floor(g.attack_per_level)} DEF+${Math.floor(g.defense_per_level)}) 스킬 포인트 +1`,
           type: 'level',
         });
       }
@@ -435,6 +497,9 @@ router.post('/hunt', auth, async (req, res) => {
       });
     }
 
+    // 레벨업 횟수만큼 스킬포인트 지급
+    const huntLevelUps = newLevel - levelBefore;
+
     await conn.beginTransaction();
 
     // 캐릭터 스탯 업데이트
@@ -444,10 +509,12 @@ router.post('/hunt', auth, async (req, res) => {
         level = ?, exp = ?, gold = ?, hp = ?, mp = ?,
         attack = ?, defense = ?, current_hp = ?, current_mp = ?,
         phys_attack = ?, phys_defense = ?, mag_attack = ?, mag_defense = ?,
-        crit_rate = ?, evasion = ?
+        crit_rate = ?, evasion = ?,
+        skill_points = skill_points + ?, total_skill_points = total_skill_points + ?
       WHERE id = ?`,
       [newLevel, newExp, newGold, newMaxHp, newMaxMp, newAtk, newDef, playerHp, Math.max(0, finalMp),
-       newPhysAtk, newPhysDef, newMagAtk, newMagDef, newCritRate, newEvasion, char.id]
+       newPhysAtk, newPhysDef, newMagAtk, newMagDef, newCritRate, newEvasion,
+       huntLevelUps, huntLevelUps, char.id]
     );
 
     // 전투 기록 저장
@@ -477,6 +544,36 @@ router.post('/hunt', auth, async (req, res) => {
          SET cq.progress = cq.progress + 1
          WHERE cq.character_id = ? AND cq.status = 'active'
            AND q.type = 'hunt_location' AND q.target = ?`,
+        [char.id, location]
+      );
+
+      // hunt_location 퀘스트: 'any' 타겟 (일일/업적)
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + 1
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'hunt_location' AND q.target = 'any'`,
+        [char.id]
+      );
+
+      // clear_dungeon 퀘스트: 'any' 타겟 (일일/업적)
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + 1
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'clear_dungeon' AND q.target = 'any'`,
+        [char.id]
+      );
+
+      // clear_dungeon 퀘스트: 특정 던전 클리어
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + 1
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'clear_dungeon' AND q.target = ?`,
         [char.id, location]
       );
 
@@ -523,11 +620,45 @@ router.post('/hunt', auth, async (req, res) => {
       }
     }
 
+    // collect_material 퀘스트 (일일/업적)
+    if (victory && droppedMaterials.length > 0) {
+      const totalMatQty = droppedMaterials.reduce((s, d) => s + d.quantity, 0);
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + ?
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'collect_material' AND q.target = 'any'`,
+        [totalMatQty, char.id]
+      );
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.status = 'completed', cq.completed_at = NOW()
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND cq.progress >= q.target_count`,
+        [char.id]
+      );
+    }
+
     // 완료된 퀘스트 수 조회
     const [completedQuests] = await conn.query(
       "SELECT COUNT(*) as cnt FROM character_quests WHERE character_id = ? AND status = 'completed'",
       [char.id]
     );
+
+    // 운세 버프 remaining_battles 차감
+    if (fortuneBuffs.length > 0) {
+      await conn.query(
+        'UPDATE character_fortunes SET remaining_battles = remaining_battles - 1 WHERE character_id = ? AND remaining_battles > 0',
+        [char.id]
+      );
+      // 소진된 버프 삭제
+      await conn.query(
+        'DELETE FROM character_fortunes WHERE character_id = ? AND remaining_battles <= 0',
+        [char.id]
+      );
+    }
 
     await conn.commit();
 
@@ -641,7 +772,7 @@ router.get('/history', auth, async (req, res) => {
 router.post('/srpg-result', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { location, victory, monstersDefeated, expGained, goldGained, rounds, activeSummonIds, activeMercenaryIds } = req.body;
+    const { location, victory, monstersDefeated, expGained, goldGained, rounds, activeSummonIds, activeMercenaryIds, summonExpMap, mercExpMap, playerHp: reqPlayerHp, playerMp: reqPlayerMp } = req.body;
 
     const [chars] = await conn.query(
       req.selectedCharId
@@ -666,8 +797,8 @@ router.post('/srpg-result', auth, async (req, res) => {
     let newMagDef = char.mag_defense || 0;
     let newCritRate = char.crit_rate || 0;
     let newEvasion = char.evasion || 0;
-    let playerHp = char.current_hp ?? char.hp;
-    let playerMp = char.current_mp ?? char.mp;
+    let playerHp = typeof reqPlayerHp === 'number' ? Math.max(0, reqPlayerHp) : (char.current_hp ?? char.hp);
+    let playerMp = typeof reqPlayerMp === 'number' ? Math.max(0, reqPlayerMp) : (char.current_mp ?? char.mp);
 
     if (victory) {
       newExp += expGained;
@@ -678,7 +809,7 @@ router.post('/srpg-result', auth, async (req, res) => {
         'SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]
       );
       const g2 = growthRows2[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
-      let expNeeded = newLevel * 100;
+      let expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
       while (newExp >= expNeeded) {
         newExp -= expNeeded;
         newLevel++;
@@ -694,20 +825,21 @@ router.post('/srpg-result', auth, async (req, res) => {
           newCritRate += Math.floor(g2.crit_rate_per_10level);
           newEvasion += Math.floor(g2.evasion_per_10level);
         }
+        // 레벨업 시 HP/MP 최대치로 회복
         playerHp = newMaxHp;
         playerMp = newMaxMp;
-        expNeeded = newLevel * 100;
+        expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
       }
 
-      // 소환수 경험치 분배
+      // 소환수 경험치 분배 (기여도 기반)
       if (activeSummonIds && activeSummonIds.length > 0) {
-        const summonExp = Math.floor(expGained * 0.7);
         for (const smId of activeSummonIds) {
           const [smRows] = await conn.query('SELECT * FROM character_summons WHERE id = ? AND character_id = ?', [smId, char.id]);
           if (smRows.length === 0) continue;
           const sm = smRows[0];
+          const summonExp = (summonExpMap && summonExpMap[smId]) ? summonExpMap[smId] : Math.floor(expGained * 0.7);
           let newSmExp = (sm.exp || 0) + summonExp;
-          const expNeededSm = sm.level * 50;
+          const expNeededSm = Math.floor(40 * sm.level + 0.25 * sm.level * sm.level);
           if (newSmExp >= expNeededSm) {
             const leftover = newSmExp - expNeededSm;
             const newSmLevel = sm.level + 1;
@@ -741,15 +873,15 @@ router.post('/srpg-result', auth, async (req, res) => {
           }
         }
       }
-      // 용병 경험치 분배
+      // 용병 경험치 분배 (기여도 기반)
       if (activeMercenaryIds && activeMercenaryIds.length > 0) {
-        const mercExp = Math.floor(expGained * 0.5);
         for (const mId of activeMercenaryIds) {
           const [mRows] = await conn.query('SELECT * FROM character_mercenaries WHERE id = ? AND character_id = ?', [mId, char.id]);
           if (mRows.length === 0) continue;
           const merc = mRows[0];
+          const mercExp = (mercExpMap && mercExpMap[mId]) ? mercExpMap[mId] : Math.floor(expGained * 0.5);
           let newMercExp = (merc.exp || 0) + mercExp;
-          const expNeededMerc = merc.level * 50;
+          const expNeededMerc = Math.floor(40 * merc.level + 0.25 * merc.level * merc.level);
           if (newMercExp >= expNeededMerc) {
             const leftover = newMercExp - expNeededMerc;
             const newMercLevel = merc.level + 1;
@@ -766,14 +898,34 @@ router.post('/srpg-result', auth, async (req, res) => {
                mt.growth_phys_attack, mt.growth_phys_defense,
                mt.growth_mag_attack, mt.growth_mag_defense, merc.id]
             );
+            // 레벨업 시 새 스킬 자동 학습
+            const [newSkills] = await conn.query(
+              `SELECT id FROM mercenary_skills
+               WHERE required_level <= ? AND (is_common = 1 OR class_type = ?)
+               AND id NOT IN (SELECT skill_id FROM mercenary_learned_skills WHERE mercenary_id = ?)`,
+              [newMercLevel, mt.class_type, merc.id]
+            );
+            for (const sk of newSkills) {
+              await conn.query('INSERT IGNORE INTO mercenary_learned_skills (mercenary_id, skill_id) VALUES (?, ?)', [merc.id, sk.id]);
+            }
           } else {
             await conn.query('UPDATE character_mercenaries SET exp = ? WHERE id = ?', [newMercExp, merc.id]);
           }
         }
       }
+      // 용병 피로도 차감 (전투 참여 시 1 소모)
+      if (activeMercenaryIds && activeMercenaryIds.length > 0) {
+        await conn.query(
+          `UPDATE character_mercenaries SET fatigue = GREATEST(0, fatigue - 1) WHERE id IN (?) AND character_id = ?`,
+          [activeMercenaryIds, char.id]
+        );
+      }
     } else {
       playerHp = 0;
     }
+
+    // 레벨업 횟수만큼 스킬포인트 지급
+    const srpgLevelUps = newLevel - levelBefore;
 
     await conn.beginTransaction();
 
@@ -781,11 +933,13 @@ router.post('/srpg-result', auth, async (req, res) => {
       `UPDATE characters SET level = ?, exp = ?, gold = ?, hp = ?, mp = ?,
         attack = ?, defense = ?, current_hp = ?, current_mp = ?,
         phys_attack = ?, phys_defense = ?, mag_attack = ?, mag_defense = ?,
-        crit_rate = ?, evasion = ?
+        crit_rate = ?, evasion = ?,
+        skill_points = skill_points + ?, total_skill_points = total_skill_points + ?
       WHERE id = ?`,
       [newLevel, newExp, newGold, newMaxHp, newMaxMp, newAtk, newDef,
         Math.max(0, playerHp), Math.max(0, playerMp),
-        newPhysAtk, newPhysDef, newMagAtk, newMagDef, newCritRate, newEvasion, char.id]
+        newPhysAtk, newPhysDef, newMagAtk, newMagDef, newCritRate, newEvasion,
+        srpgLevelUps, srpgLevelUps, char.id]
     );
 
     // 전투 기록
@@ -817,6 +971,34 @@ router.post('/srpg-result', auth, async (req, res) => {
            AND q.type = 'hunt_location' AND q.target = ?`,
         [monstersDefeated.length, char.id, location]
       );
+      // hunt_location 'any' 타겟 (일일/업적)
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + ?
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'hunt_location' AND q.target = 'any'`,
+        [monstersDefeated.length, char.id]
+      );
+      // clear_dungeon 'any' 타겟 (일일/업적)
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + 1
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'clear_dungeon' AND q.target = 'any'`,
+        [char.id]
+      );
+      // clear_dungeon 특정 던전
+      await conn.query(
+        `UPDATE character_quests cq
+         JOIN quests q ON cq.quest_id = q.id
+         SET cq.progress = cq.progress + 1
+         WHERE cq.character_id = ? AND cq.status = 'active'
+           AND q.type = 'clear_dungeon' AND q.target = ?`,
+        [char.id, location]
+      );
+      // 목표 달성 시 completed
       await conn.query(
         `UPDATE character_quests cq
          JOIN quests q ON cq.quest_id = q.id
@@ -869,7 +1051,7 @@ router.post('/srpg-result', auth, async (req, res) => {
     let summonResults = [];
     if (victory && activeSummonIds && activeSummonIds.length > 0) {
       const [smList] = await conn.query(
-        `SELECT cs.id, cs.name, cs.level, cs.exp, st.icon, st.type
+        `SELECT cs.id, cs.template_id, st.name, cs.level, cs.exp, st.icon, st.type
          FROM character_summons cs
          JOIN summon_templates st ON cs.template_id = st.id
          WHERE cs.id IN (?) AND cs.character_id = ?`,
@@ -877,12 +1059,39 @@ router.post('/srpg-result', auth, async (req, res) => {
       );
       summonResults = smList.map(s => ({
         id: s.id,
+        templateId: s.template_id,
         name: s.name,
         level: s.level,
         exp: s.exp,
         icon: s.icon,
         type: s.type,
-        expNeeded: s.level * 50,
+        expNeeded: Math.floor(40 * s.level + 0.25 * s.level * s.level),
+      }));
+    }
+
+    // 운세 버프 remaining_battles 차감 (SRPG 전투)
+    await conn.query(
+      'UPDATE character_fortunes SET remaining_battles = remaining_battles - 1 WHERE character_id = ? AND remaining_battles > 0',
+      [char.id]
+    );
+    await conn.query(
+      'DELETE FROM character_fortunes WHERE character_id = ? AND remaining_battles <= 0',
+      [char.id]
+    );
+
+    // 용병 최신 정보
+    let mercenaryResults = [];
+    if (victory && activeMercenaryIds && activeMercenaryIds.length > 0) {
+      const [mercList] = await conn.query(
+        `SELECT cm.id, cm.template_id, cm.level, cm.exp, mt.name, mt.icon, mt.class_type
+         FROM character_mercenaries cm
+         JOIN mercenary_templates mt ON cm.template_id = mt.id
+         WHERE cm.id IN (?) AND cm.character_id = ?`,
+        [activeMercenaryIds, char.id]
+      );
+      mercenaryResults = mercList.map(m => ({
+        id: m.id, templateId: m.template_id, name: m.name, level: m.level, exp: m.exp,
+        icon: m.icon, classType: m.class_type, expNeeded: Math.floor(40 * m.level + 0.25 * m.level * m.level),
       }));
     }
 
@@ -892,6 +1101,7 @@ router.post('/srpg-result', auth, async (req, res) => {
       droppedMaterials,
       leveledUp: newLevel > levelBefore,
       levelBefore,
+      mercenaryResults,
       character: {
         level: newLevel,
         exp: newExp,

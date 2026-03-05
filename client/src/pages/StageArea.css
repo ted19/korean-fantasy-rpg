@@ -75,6 +75,105 @@
   letter-spacing: 1px;
 }
 
+/* ===== Country Navigation (좌우 화살표) ===== */
+.stage-country-nav {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 28px;
+  padding: 0 8px;
+}
+
+.stage-country-arrow {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border-dark);
+  background: rgba(30, 37, 56, 0.8);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+.stage-country-arrow:hover:not(:disabled) {
+  border-color: var(--gold-dim);
+  color: var(--gold);
+  background: rgba(212, 168, 67, 0.1);
+  transform: scale(1.1);
+}
+.stage-country-arrow:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.stage-country-center {
+  text-align: center;
+  flex: 1;
+  max-width: 400px;
+}
+
+.stage-country-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.stage-country-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.stage-country-dot.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: 0 0 8px rgba(212,168,67,0.4);
+  transform: scale(1.2);
+}
+.stage-country-dot.locked {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.06);
+  cursor: not-allowed;
+}
+
+.stage-country-flag {
+  font-size: 2.2rem;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
+}
+
+.stage-country-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 3px;
+  text-shadow: 0 2px 12px rgba(212,168,67,0.4);
+  margin-bottom: 4px;
+}
+
+.stage-country-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.stage-country-locked-msg {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--red);
+  opacity: 0.8;
+  letter-spacing: 0.5px;
+}
+
 /* ===== Stage Card Grid ===== */
 .stage-grid {
   position: relative;
@@ -254,20 +353,25 @@
 }
 
 .stage-back-btn {
-  background: none;
-  border: 1px solid var(--border-dark);
-  color: var(--text-dim);
-  padding: 7px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-family: var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 22px;
   margin-bottom: 14px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.35);
 }
 .stage-back-btn:hover {
-  border-color: var(--gold);
-  color: var(--gold);
+  background: linear-gradient(135deg, #7c7ff7, #9d78fa);
+  box-shadow: 0 6px 20px rgba(99,102,241,0.45);
+  transform: translateX(-2px);
 }
 
 /* Detail Header */
@@ -439,7 +543,7 @@
   gap: 0;
   justify-content: center;
   row-gap: 18px;
-  padding: 18px 0 24px;
+  padding: 12px 0 8px;
   overflow: visible;
 }
 
