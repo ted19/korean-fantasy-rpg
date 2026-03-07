@@ -17,10 +17,10 @@ const ELEMENT_AURA_MAP = {
   light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
 };
 const CLASS_ELEMENT_MAP = {
-  '풍수사': 'wind', '무당': 'dark', '승려': 'light',
+  '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark',
 };
 
-function StageBattle({ stage, character, charState, learnedSkills, passiveBonuses, activeSummons, activeMercenaries, monsters, groupKey, onBattleEnd, onLog }) {
+function StageBattle({ stage, character, charState, learnedSkills, passiveBonuses, activeSummons, activeMercenaries, monsters, groupKey, onBattleEnd, onLog, savedEnemySetup, savedRetreatFailed }) {
   const [units, setUnits] = useState([]);
   const [turnOrder, setTurnOrder] = useState([]);
   const [currentTurnIdx, setCurrentTurnIdx] = useState(0);
@@ -44,14 +44,20 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   const [totalExpGained, setTotalExpGained] = useState(0);
   const [totalGoldGained, setTotalGoldGained] = useState(0);
   const [dropAnims, setDropAnims] = useState([]);
-  const [autoAll, setAutoAll] = useState(false); // 전체 자동전투
+  const [defeatPenalty, setDefeatPenalty] = useState(null); // { goldLoss, expLoss }
+  const isPrologue = groupKey === 'prologue';
+  const [autoAll, setAutoAll] = useState(isPrologue); // 전체 자동전투 (프롤로그는 강제 자동)
   const [autoCompanion, setAutoCompanion] = useState(false); // 소환수/용병만 자동전투
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
+  const [retreatFailed, setRetreatFailed] = useState(false); // 후퇴 실패 여부
+  const [retreatDisabled, setRetreatDisabled] = useState(!!savedRetreatFailed); // 후퇴 버튼 비활성화 (DB에서 복원)
+  const [battleEntering, setBattleEntering] = useState(true); // 입장 연출
   const [contributions, setContributions] = useState([]); // {id, name, icon, imageUrl, damage, kills, pct, exp}
   const [eliteAlert, setEliteAlert] = useState(null); // { name, icon, monsterId, tier }
   const battleSummonIdsRef = useRef([]);
   const battleMercIdsRef = useRef([]);
   const contributionRef = useRef({}); // unitId -> { damage, kills }
+  const initDoneRef = useRef(false); // 중복 초기화 방지
   const logRef = useRef(null);
   const popupId = useRef(0);
   const projectileId = useRef(0);
@@ -218,6 +224,8 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   // 초기화
   useEffect(() => {
     if (phase !== 'init') return;
+    if (initDoneRef.current) return; // 이미 초기화 완료
+    initDoneRef.current = true;
 
     const initBattle = async () => {
       const playerUnit = createCardPlayerUnit(
@@ -333,16 +341,16 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         }
 
         // 적군은 기본 배치
-        const enemyTeam = buildEnemyTeam();
+        const { enemyTeam, eliteInfo } = buildEnemyTeam();
         const eFront = enemyTeam.filter(u => u.row === 'front');
         if (eFront.length === 0 && enemyTeam.length > 0) enemyTeam[0].row = 'front';
         // 적군만 assignGridPositions의 적 로직 적용
         assignEnemyGrid(enemyTeam);
 
-        finalizeBattle(playerTeam, enemyTeam);
+        finalizeBattle(playerTeam, enemyTeam, eliteInfo);
       } else {
         // 진영 데이터 없으면 기존 로직
-        const enemyTeam = buildEnemyTeam();
+        const { enemyTeam, eliteInfo } = buildEnemyTeam();
 
         const pFront = playerTeam.filter(u => u.row === 'front');
         if (pFront.length === 0 && playerTeam.length > 0) playerTeam[0].row = 'front';
@@ -350,39 +358,86 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         if (eFront.length === 0 && enemyTeam.length > 0) enemyTeam[0].row = 'front';
 
         assignGridPositions(playerTeam, enemyTeam);
-        finalizeBattle(playerTeam, enemyTeam);
+        finalizeBattle(playerTeam, enemyTeam, eliteInfo);
       }
     };
 
     const buildEnemyTeam = () => {
       const monsterCount = Math.min(stage.monsterCount || 3, 9);
       const availableMonsters = monsters || [];
-      // 정예 몬스터 결정 (한 전투에 최대 1마리)
-      const eliteTier = rollEliteTier();
+
+      // 저장된 적 구성이 있으면 그대로 복원 (정예 리롤 방지)
+      if (savedEnemySetup && savedEnemySetup.length > 0) {
+        let eliteInfo = null;
+        const enemyTeam = [];
+        for (let i = 0; i < savedEnemySetup.length; i++) {
+          const setup = savedEnemySetup[i];
+          const template = availableMonsters.find(m => m.id === setup.templateId);
+          if (!template) continue;
+          const statScale = isPrologue ? 0.3 : 1;
+          let scaled = {
+            ...template,
+            level: setup.level,
+            hp: Math.floor(template.hp * (1 + (setup.level - 1) * 0.12) * statScale),
+            attack: Math.floor(template.attack * (1 + (setup.level - 1) * 0.08) * statScale),
+            defense: Math.floor((template.defense || 0) * (1 + (setup.level - 1) * 0.08) * statScale),
+            phys_attack: Math.floor((template.phys_attack || 0) * (1 + (setup.level - 1) * 0.08) * statScale),
+            mag_attack: Math.floor((template.mag_attack || 0) * (1 + (setup.level - 1) * 0.08) * statScale),
+          };
+          if (setup.eliteTier) {
+            scaled = applyEliteStats(scaled, setup.eliteTier);
+            eliteInfo = { name: scaled.name, icon: scaled.icon, monsterId: scaled.id, tier: setup.eliteTier };
+          }
+          enemyTeam.push(createCardMonsterUnit(scaled, i));
+        }
+        return { enemyTeam, eliteInfo };
+      }
+
+      // 프롤로그에서는 정예 등장 안 함
+      const eliteTier = isPrologue ? null : rollEliteTier();
       const eliteIdx = eliteTier ? Math.floor(Math.random() * monsterCount) : -1;
 
+      let eliteInfo = null;
       const enemyTeam = [];
+      const enemySetup = []; // 적 구성 저장용
       for (let i = 0; i < monsterCount && availableMonsters.length > 0; i++) {
         const template = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
         const levelBonus = (stage.monsterLevelMin || 1) + Math.floor(Math.random() * ((stage.monsterLevelMax || 3) - (stage.monsterLevelMin || 1) + 1));
+        // 프롤로그: 몬스터 스탯 대폭 약화 (30%)
+        const statScale = isPrologue ? 0.3 : 1;
         let scaled = {
           ...template,
           level: levelBonus,
-          hp: Math.floor(template.hp * (1 + (levelBonus - 1) * 0.12)),
-          attack: Math.floor(template.attack * (1 + (levelBonus - 1) * 0.08)),
-          defense: Math.floor((template.defense || 0) * (1 + (levelBonus - 1) * 0.08)),
-          phys_attack: Math.floor((template.phys_attack || 0) * (1 + (levelBonus - 1) * 0.08)),
-          mag_attack: Math.floor((template.mag_attack || 0) * (1 + (levelBonus - 1) * 0.08)),
+          hp: Math.floor(template.hp * (1 + (levelBonus - 1) * 0.12) * statScale),
+          attack: Math.floor(template.attack * (1 + (levelBonus - 1) * 0.08) * statScale),
+          defense: Math.floor((template.defense || 0) * (1 + (levelBonus - 1) * 0.08) * statScale),
+          phys_attack: Math.floor((template.phys_attack || 0) * (1 + (levelBonus - 1) * 0.08) * statScale),
+          mag_attack: Math.floor((template.mag_attack || 0) * (1 + (levelBonus - 1) * 0.08) * statScale),
         };
 
-        if (i === eliteIdx && eliteTier) {
+        const isElite = (i === eliteIdx && eliteTier);
+        if (isElite) {
           scaled = applyEliteStats(scaled, eliteTier);
-          setEliteAlert({ name: scaled.name, icon: scaled.icon, monsterId: scaled.id, tier: eliteTier });
+          eliteInfo = { name: scaled.name, icon: scaled.icon, monsterId: scaled.id, tier: eliteTier };
         }
 
+        enemySetup.push({ templateId: template.id, level: levelBonus, eliteTier: isElite ? eliteTier : null });
         enemyTeam.push(createCardMonsterUnit(scaled, i));
       }
-      return enemyTeam;
+
+      // 적 구성을 DB 세션에 저장 (정예 리롤 방지)
+      try {
+        api.post('/battle/session/save', {
+          battleType: 'stage',
+          context: {
+            dungeonKey: stage.dungeonKey || 'forest',
+            stage, monsters, groupKey,
+            enemySetup,
+          },
+        });
+      } catch {}
+
+      return { enemyTeam, eliteInfo };
     };
 
     const assignEnemyGrid = (enemyTeam) => {
@@ -394,9 +449,10 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       overflow.slice(0, 3).forEach((u, i) => { u.gridCol = 1; u.gridRow = i; });
     };
 
-    const finalizeBattle = async (playerTeam, enemyTeam) => {
+    const finalizeBattle = async (playerTeam, enemyTeam, eliteInfo) => {
       const allUnits = [...playerTeam, ...enemyTeam];
       setUnits(allUnits);
+      if (eliteInfo) setEliteAlert(eliteInfo);
 
       const order = calculateTurnOrder(allUnits);
       setTurnOrder(order);
@@ -420,15 +476,24 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       addLog(`=== 전투 시작: ${stage.name} ===`, 'system');
       addLog(`아군 ${playerTeam.length}명 vs 적 ${enemyTeam.length}명`, 'system');
 
-      const firstUnit = allUnits.find(u => u.id === order[0]);
-      if (firstUnit) {
-        onTurnStart(firstUnit);
-        if (firstUnit.team === 'player') {
-          setPhase('player_action');
-        } else {
-          setPhase('enemy_turn');
+      const startFirstTurn = () => {
+        const firstUnit = allUnits.find(u => u.id === order[0]);
+        if (firstUnit) {
+          onTurnStart(firstUnit);
+          if (firstUnit.team === 'player') {
+            setPhase('player_action');
+          } else {
+            setPhase('enemy_turn');
+          }
         }
-      }
+      };
+
+      // 입장 연출 후 전투 시작
+      setBattleEntering(true);
+      setTimeout(() => {
+        setBattleEntering(false);
+        startFirstTurn();
+      }, 1800);
     };
 
     initBattle();
@@ -726,7 +791,13 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       }
 
       addLog(`\n전투 승리! EXP +${rewards.exp}, Gold +${rewards.gold}`, 'heal');
-      const deadEnemies = units.filter(u => u.team === 'enemy' && u.hp <= 0).map(u => u.name);
+      const deadEnemyUnits = units.filter(u => u.team === 'enemy' && u.hp <= 0);
+      const deadEnemies = deadEnemyUnits.map(u => u.name);
+      // 몬스터 도감 기록
+      const defeatedMonsterIds = deadEnemyUnits.map(u => u.monsterId).filter(Boolean);
+      if (defeatedMonsterIds.length > 0) {
+        api.post('/monsters/record-kills', { monsterIds: defeatedMonsterIds }).catch(() => {});
+      }
       api.post('/stage/battle-result', {
         monstersDefeated: deadEnemies,
         expGained: playerExp,
@@ -762,7 +833,16 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       api.post('/stage/battle-result', {
         monstersDefeated: [], expGained: 0, goldGained: 0, victory: false,
         playerHp: 0, playerMp: 0,
-        activeSummonIds: [], activeMercenaryIds: [],
+        activeSummonIds: battleSummonIdsRef.current,
+        activeMercenaryIds: battleMercIdsRef.current,
+      }).catch(() => {});
+      // 패배 패널티 적용
+      api.post('/battle/session/penalty', { penaltyType: 'defeat' }).then(res => {
+        if (res.data.penalty) {
+          const p = res.data.penalty;
+          setDefeatPenalty(p);
+          addLog(`패배 패널티: 골드 -${p.goldLoss}, 경험치 -${p.expLoss}`, 'damage');
+        }
       }).catch(() => {});
     }
   }, [phase, battleResult, units, stage, addLog]); // eslint-disable-line
@@ -1039,7 +1119,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
 
       {/* 전투 배경 이미지 */}
       <div className="cb-bg-layer">
-        <img src="/ui/battle/battle_bg.png" alt="" className="cb-bg-img" onError={(e) => { e.target.style.display='none'; }} />
+        <img src={isPrologue ? '/dungeons/swamp_bg.png' : '/ui/battle/battle_bg.png'} alt="" className="cb-bg-img" onError={(e) => { e.target.style.display='none'; }} />
         <div className="cb-bg-overlay" />
       </div>
 
@@ -1052,26 +1132,30 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
             <img src="/ui/battle/round_badge.png" alt="" className="cb-round-icon" onError={(e) => { e.target.style.display='none'; }} />
             라운드 {round}
           </div>
-          <div className="cb-auto-btns">
-            <button
-              className={`cb-auto-btn ${autoAll ? 'active' : ''}`}
-              onClick={() => { setAutoAll(v => !v); if (!autoAll) setAutoCompanion(false); }}
-              title="전체 자동전투"
-            >
-              {autoAll ? '⚡' : '▶'} 모두자동
+          {!isPrologue && (
+            <div className="cb-auto-btns">
+              <button
+                className={`cb-auto-btn ${autoAll ? 'active' : ''}`}
+                onClick={() => { setAutoAll(v => !v); if (!autoAll) setAutoCompanion(false); }}
+                title="전체 자동전투"
+              >
+                {autoAll ? '⚡' : '▶'} 모두자동
+              </button>
+              <button
+                className={`cb-auto-btn companion ${autoCompanion ? 'active' : ''}`}
+                onClick={() => { setAutoCompanion(v => !v); if (!autoCompanion) setAutoAll(false); }}
+                title="소환수/용병만 자동전투"
+              >
+                {autoCompanion ? '⚡' : '▶'} 동료자동
+              </button>
+            </div>
+          )}
+          {!isPrologue && (
+            <button className="cb-retreat-btn" onClick={() => setShowRetreatConfirm(true)} disabled={retreatDisabled} style={retreatDisabled ? {opacity:0.4, cursor:'not-allowed'} : {}}>
+              <img src="/ui/battle/action_retreat.png" alt="" className="cb-btn-icon" onError={(e) => { e.target.style.display='none'; }} />
+              {retreatDisabled ? '후퇴불가' : '후퇴'}
             </button>
-            <button
-              className={`cb-auto-btn companion ${autoCompanion ? 'active' : ''}`}
-              onClick={() => { setAutoCompanion(v => !v); if (!autoCompanion) setAutoAll(false); }}
-              title="소환수/용병만 자동전투"
-            >
-              {autoCompanion ? '⚡' : '▶'} 동료자동
-            </button>
-          </div>
-          <button className="cb-retreat-btn" onClick={() => setShowRetreatConfirm(true)}>
-            <img src="/ui/battle/action_retreat.png" alt="" className="cb-btn-icon" onError={(e) => { e.target.style.display='none'; }} />
-            후퇴
-          </button>
+          )}
         </div>
       </div>
 
@@ -1096,7 +1180,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
 
       {/* 배틀 필드: 아군 3x3 | VS | 적군 3x3 */}
       <div className="cb-field">
-        <div className="cb-side cb-side-player">
+        <div className={`cb-side cb-side-player${battleEntering ? ' entering' : ''}`}>
           <div className="cb-side-label">아군</div>
           <div className="cb-side-grid">
             {playerGrid.map((row, rIdx) => (
@@ -1111,12 +1195,12 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
           </div>
         </div>
 
-        <div className="cb-vs">
+        <div className={`cb-vs${battleEntering ? ' entering' : ''}`}>
           <img src="/ui/battle/vs_emblem.png" alt="VS" className="cb-vs-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display=''; }} />
           <span className="cb-vs-text" style={{ display: 'none' }}>VS</span>
         </div>
 
-        <div className="cb-side cb-side-enemy">
+        <div className={`cb-side cb-side-enemy${battleEntering ? ' entering' : ''}`}>
           <div className="cb-side-label">적군</div>
           <div className="cb-side-grid">
             {enemyGrid.map((row, rIdx) => (
@@ -1177,7 +1261,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       )}
 
       {/* 액션 패널 */}
-      {phase === 'player_action' && currentUnit && currentUnit.team === 'player' && !showSkillList && !showItemList && (
+      {!isPrologue && phase === 'player_action' && currentUnit && currentUnit.team === 'player' && !showSkillList && !showItemList && (
         <div className="cb-actions">
           <img src="/ui/battle/action_panel_bg.png" alt="" className="cb-actions-bg" onError={(e) => { e.target.style.display='none'; }} />
           <div className="cb-actions-inner">
@@ -1209,7 +1293,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       )}
 
       {/* 스킬 목록 */}
-      {phase === 'player_action' && currentUnit && currentUnit.team === 'player' && showSkillList && (
+      {!isPrologue && phase === 'player_action' && currentUnit && currentUnit.team === 'player' && showSkillList && (
         <div className="cb-actions">
           <div className="cb-action-label">스킬 선택</div>
           <div className="cb-action-buttons">
@@ -1239,7 +1323,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       )}
 
       {/* 물품 목록 */}
-      {phase === 'player_action' && currentUnit && currentUnit.team === 'player' && showItemList && (
+      {!isPrologue && phase === 'player_action' && currentUnit && currentUnit.team === 'player' && showItemList && (
         <div className="cb-actions">
           <div className="cb-action-label">물품 사용</div>
           <div className="cb-action-buttons cb-item-list">
@@ -1269,7 +1353,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         </div>
       )}
 
-      {phase === 'select_target' && (
+      {!isPrologue && phase === 'select_target' && (
         <div className="cb-actions">
           <div className="cb-action-label">
             대상 선택 ({selectedAction === 'guard' ? '수호할 아군' : selectedSkill?.type === 'heal' ? '치유할 아군' : '공격할 적'})
@@ -1280,7 +1364,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         </div>
       )}
 
-      {phase === 'enemy_turn' && (
+      {!isPrologue && phase === 'enemy_turn' && (
         <div className="cb-actions">
           <div className="cb-action-label cb-enemy-label">{currentUnit?.name || '적'}의 턴...</div>
         </div>
@@ -1294,7 +1378,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         const leveled = rd?.leveledUp;
         const summons = rd?.summonResults || [];
         const mercs = rd?.mercenaryResults || [];
-        const expNeeded = charInfo ? Math.floor(80 * charInfo.level + 0.5 * charInfo.level * charInfo.level) : 100;
+        const expNeeded = charInfo ? Math.floor(120 * charInfo.level + 3 * charInfo.level * charInfo.level) : 100;
         const expPct = charInfo ? Math.min(100, (charInfo.exp / expNeeded) * 100) : 0;
 
         return (
@@ -1407,7 +1491,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                       </div>
                       <div className="srpg-result-char-info">
                         <div className="srpg-result-char-level">
-                          {leveled && <img src="/ui/levelup_effect.png" alt="" className="srpg-result-lvup-glow" />}
+                          {leveled && <div className="srpg-result-lvup-glow" />}
                           <span className="srpg-result-char-lv">Lv.{charInfo.level}</span>
                           {leveled && <span className="srpg-result-lvup-badge">LEVEL UP!</span>}
                         </div>
@@ -1502,6 +1586,27 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                 </div>
               )}
 
+              {/* 패배 시 패널티 표시 */}
+              {!isVictory && defeatPenalty && (
+                <div className="srpg-result-content">
+                  <div className="srpg-result-rewards-panel" style={{borderColor:'#e94560'}}>
+                    <div className="srpg-result-section-title" style={{color:'#e94560'}}>
+                      <span>패배 패널티</span>
+                    </div>
+                    <div className="srpg-result-reward-grid">
+                      <div className="srpg-rr-item" style={{color:'#e94560'}}>
+                        <span className="srpg-rr-label">골드 차감</span>
+                        <span className="srpg-rr-value" style={{color:'#e94560'}}>-{defeatPenalty.goldLoss}</span>
+                      </div>
+                      <div className="srpg-rr-item" style={{color:'#e94560'}}>
+                        <span className="srpg-rr-label">경험치 차감</span>
+                        <span className="srpg-rr-value" style={{color:'#e94560'}}>-{defeatPenalty.expLoss}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 className={`srpg-result-continue-btn ${isVictory ? 'victory' : 'defeat'}`}
                 onClick={handleBattleEndClick}
@@ -1515,18 +1620,94 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       })()}
 
       {/* 후퇴 확인 팝업 */}
-      {showRetreatConfirm && (
-        <div className="cb-result-overlay" style={{ zIndex: 60 }}>
-          <div className="cb-retreat-confirm">
-            <div className="cb-retreat-confirm-title">후퇴 확인</div>
-            <div className="cb-retreat-confirm-text">전투에서 후퇴하시겠습니까?<br/>진행 상황이 모두 사라집니다.</div>
-            <div className="cb-retreat-confirm-btns">
-              <button className="cb-retreat-confirm-yes" onClick={() => onBattleEnd('retreat', 0, 0)}>후퇴</button>
-              <button className="cb-retreat-confirm-no" onClick={() => setShowRetreatConfirm(false)}>취소</button>
+      {showRetreatConfirm && (() => {
+        const retreatPct = Math.min(80, 40 + round * 5);
+        const pctClass = retreatPct >= 65 ? 'high' : retreatPct >= 45 ? 'mid' : 'low';
+        return (
+          <div className="retreat-overlay" onClick={() => setShowRetreatConfirm(false)}>
+            <div className="retreat-popup" onClick={e => e.stopPropagation()}>
+              {/* 배경 */}
+              <div className="retreat-bg">
+                <img src="/ui/battle/retreat_bg.png" alt="" />
+                <div className="retreat-bg-overlay" />
+              </div>
+              {/* 안개 */}
+              <div className="retreat-fog">
+                <div className="retreat-fog-particle" />
+                <div className="retreat-fog-particle" />
+                <div className="retreat-fog-particle" />
+              </div>
+
+              <div className="retreat-content">
+                <img src="/ui/battle/retreat_emblem.png" alt="" className="retreat-emblem" />
+                <div className="retreat-banner-wrap">
+                  <img src="/ui/battle/retreat_banner.png" alt="" />
+                </div>
+                <div className="retreat-title">후퇴하시겠습니까?</div>
+                <div className="retreat-subtitle">전장에서 물러나 안전한 곳으로 퇴각합니다</div>
+
+                {/* 확률 게이지 */}
+                <div className="retreat-gauge-section">
+                  <div className="retreat-gauge-label">
+                    <span className="retreat-gauge-text">후퇴 성공 확률</span>
+                    <span className={`retreat-gauge-pct ${pctClass}`}>{retreatPct}%</span>
+                  </div>
+                  <div className="retreat-gauge-track">
+                    <div className={`retreat-gauge-fill ${pctClass}`} style={{width: `${retreatPct}%`}} />
+                    <img src="/ui/battle/retreat_gauge_frame.png" alt="" className="retreat-gauge-frame" />
+                  </div>
+                </div>
+
+                {/* 경고 카드 */}
+                <div className="retreat-info-cards">
+                  <div className="retreat-info-card fail">
+                    <div className="retreat-info-card-icon">&#x1F6AB;</div>
+                    <div className="retreat-info-card-label">실패 시</div>
+                    <div className="retreat-info-card-value">후퇴 봉인<br/>(재시도 불가)</div>
+                  </div>
+                  <div className="retreat-info-card penalty">
+                    <div className="retreat-info-card-icon">&#x26A0;&#xFE0F;</div>
+                    <div className="retreat-info-card-label">성공 시 패널티</div>
+                    <div className="retreat-info-card-value">골드 -10%<br/>경험치 -5%</div>
+                  </div>
+                </div>
+
+                {/* 버튼 */}
+                <div className="retreat-actions">
+                  <button className="retreat-btn retreat-btn-try" onClick={() => {
+                    const successRate = retreatPct / 100;
+                    if (Math.random() < successRate) {
+                      addLog('후퇴에 성공했습니다!', 'system');
+                      setShowRetreatConfirm(false);
+                      api.post('/battle/session/penalty', { penaltyType: 'retreat' }).then(res => {
+                        if (res.data.penalty) {
+                          addLog(`패널티: 골드 -${res.data.penalty.goldLoss}, 경험치 -${res.data.penalty.expLoss}`, 'damage');
+                        }
+                      }).catch(() => {});
+                      setTimeout(() => onBattleEnd('retreat', 0, 0), 500);
+                    } else {
+                      addLog('후퇴에 실패했습니다! 더 이상 후퇴할 수 없습니다.', 'damage');
+                      setShowRetreatConfirm(false);
+                      setRetreatFailed(true);
+                      setRetreatDisabled(true);
+                      api.post('/battle/session/retreat-failed').catch(() => {});
+                    }
+                  }}>
+                    <span className="retreat-btn-emoji">&#x1F3C3;</span>
+                    후퇴 시도
+                  </button>
+                  <button className="retreat-btn retreat-btn-stay" onClick={() => setShowRetreatConfirm(false)}>
+                    <span className="retreat-btn-emoji">&#x2694;&#xFE0F;</span>
+                    전투 계속
+                  </button>
+                </div>
+
+                <div className="retreat-glow-line" />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 전투 로그 */}
       <div className="cb-log" ref={logRef}>

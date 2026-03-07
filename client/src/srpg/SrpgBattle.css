@@ -73,6 +73,13 @@
   border: 1px solid rgba(255,255,255,0.15);
   flex-shrink: 0;
   aspect-ratio: 1 / 1;
+  animation: srpgPortraitGlow 2s ease-in-out infinite;
+}
+.srpg-active-unit.player .srpg-active-portrait { box-shadow: 0 0 6px rgba(34, 211, 238, 0.5); }
+.srpg-active-unit.enemy .srpg-active-portrait { box-shadow: 0 0 6px rgba(239, 68, 68, 0.5); }
+@keyframes srpgPortraitGlow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.15); }
 }
 
 /* Turn Order */
@@ -86,9 +93,9 @@
   padding: 3px 4px; background: rgba(0, 0, 0, 0.65); border-radius: var(--radius-sm);
   border: 2px solid transparent; backdrop-filter: blur(4px);
 }
-.srpg-turn-unit.active { border-color: var(--gold-bright); background: rgba(240, 208, 96, 0.12); }
-.srpg-turn-unit.player { border-color: rgba(6, 182, 212, 0.25); }
-.srpg-turn-unit.enemy { border-color: rgba(239, 68, 68, 0.25); }
+.srpg-turn-unit.active { border-color: var(--gold-bright); background: rgba(240, 208, 96, 0.12); box-shadow: 0 0 8px rgba(255, 215, 0, 0.4); }
+.srpg-turn-unit.player { border-color: rgba(6, 182, 212, 0.4); box-shadow: 0 0 6px rgba(6, 182, 212, 0.2); }
+.srpg-turn-unit.enemy { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 6px rgba(239, 68, 68, 0.2); }
 .srpg-turn-icon { font-size: 14px; }
 .srpg-turn-portrait {
   width: 24px; height: 24px;
@@ -97,6 +104,9 @@
   aspect-ratio: 1 / 1;
   flex-shrink: 0;
 }
+.srpg-turn-unit.player .srpg-turn-portrait { box-shadow: 0 0 5px rgba(34, 211, 238, 0.5); }
+.srpg-turn-unit.enemy .srpg-turn-portrait { box-shadow: 0 0 5px rgba(239, 68, 68, 0.5); }
+.srpg-turn-unit.active .srpg-turn-portrait { box-shadow: 0 0 8px rgba(255, 215, 0, 0.6); }
 .srpg-turn-hp-bar { width: 24px; height: 3px; background: var(--border-dark); border-radius: 2px; overflow: hidden; }
 .srpg-turn-hp-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.3s; }
 .srpg-turn-mp-bar { width: 24px; height: 2px; background: var(--border-dark); border-radius: 2px; overflow: hidden; margin-top: 1px; }
@@ -124,9 +134,11 @@
   width: 28px; height: 28px;
   object-fit: cover;
   border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
   flex-shrink: 0;
   aspect-ratio: 1 / 1;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+  animation: srpgPortraitGlow 2s ease-in-out infinite;
 }
 .srpg-unit-bars { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
 .srpg-bar { display: flex; align-items: center; gap: 6px; }
@@ -250,6 +262,7 @@
 .srpg-ctx-btn.skill-item:hover:not(:disabled) { background: rgba(139, 92, 246, 0.15); }
 .srpg-ctx-btn.skill-item.disabled { border-left-color: #555; }
 .srpg-ctx-skill-icon { width: 20px; height: 20px; border-radius: 3px; object-fit: cover; flex-shrink: 0; filter: drop-shadow(0 0 2px rgba(139,92,246,0.4)); }
+
 
 .srpg-ctx-btn.wait { color: #94a3b8; border-left: 3px solid #64748b; }
 .srpg-ctx-btn.wait:hover:not(:disabled) { background: rgba(148, 163, 184, 0.1); }
@@ -518,13 +531,19 @@
 }
 .srpg-result-lvup-glow {
   position: absolute;
-  left: -20px;
-  top: -20px;
-  width: 60px;
-  height: 60px;
-  opacity: 0.5;
+  left: 50%;
+  top: 50%;
+  width: 120%;
+  height: 120%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251,191,36,0.4) 0%, rgba(251,191,36,0.1) 40%, transparent 70%);
   pointer-events: none;
-  animation: srpgGlow 1.5s infinite;
+  animation: srpgLvGlow 2s ease-in-out infinite;
+}
+@keyframes srpgLvGlow {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(0.9); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
 }
 .srpg-result-char-lv {
   font-size: 1.3rem;
@@ -839,11 +858,27 @@
   background: rgba(255,255,255,0.04);
   font-size: 0.78rem;
 }
+.srpg-contrib-row.player {
+  background: rgba(79,195,247,0.1);
+  border: 1px solid rgba(79,195,247,0.2);
+}
+.srpg-contrib-unit {
+  display: flex; align-items: center; gap: 5px;
+  min-width: 80px; flex-shrink: 0;
+}
+.srpg-contrib-icon {
+  width: 24px; height: 24px; border-radius: 4px;
+  object-fit: cover; background: rgba(0,0,0,0.3);
+}
 .srpg-contrib-name {
   color: #ddd; font-weight: 600; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
-  min-width: 70px; max-width: 90px; flex-shrink: 0;
+  overflow: hidden; text-overflow: ellipsis; max-width: 60px;
 }
+.srpg-contrib-stats {
+  display: flex; gap: 6px; min-width: 90px; flex-shrink: 0;
+}
+.srpg-contrib-dmg { color: #ef5350; font-size: 0.72rem; }
+.srpg-contrib-kills { color: #ffa726; font-size: 0.72rem; font-weight: 700; }
 .srpg-contrib-bar-wrap {
   flex: 1; height: 14px; background: rgba(255,255,255,0.08);
   border-radius: 7px; position: relative; overflow: hidden;
@@ -854,9 +889,17 @@
   background: linear-gradient(90deg, #4fc3f7, #29b6f6);
   transition: width 0.6s ease;
 }
+.srpg-contrib-row.player .srpg-contrib-bar {
+  background: linear-gradient(90deg, #ffa726, #ff9800);
+}
+.srpg-contrib-pct {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  font-size: 0.68rem; color: #fff; font-weight: 700;
+  text-shadow: 0 0 3px rgba(0,0,0,0.8);
+}
 .srpg-contrib-exp {
   color: #81c784; font-weight: 700; font-size: 0.75rem;
-  min-width: 80px; text-align: right; flex-shrink: 0;
+  min-width: 55px; text-align: right; flex-shrink: 0;
 }
 
 /* ===== Skill Cut-In ===== */
@@ -903,6 +946,23 @@
   box-shadow: 0 0 30px rgba(239, 68, 68, 0.2);
 }
 
+.srpg-cutin-portrait {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.6);
+  box-shadow: 0 0 12px rgba(255,255,255,0.3);
+  filter: drop-shadow(0 0 6px rgba(255,255,255,0.4));
+}
+.srpg-skill-cutin.player .srpg-cutin-portrait {
+  border-color: rgba(96, 165, 250, 0.8);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.4);
+}
+.srpg-skill-cutin.enemy .srpg-cutin-portrait {
+  border-color: rgba(239, 68, 68, 0.8);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
 .srpg-cutin-icon {
   font-size: 28px;
   filter: drop-shadow(0 0 6px rgba(255,255,255,0.4));
@@ -967,12 +1027,16 @@
 .pm2d-grid {
   display: grid;
   gap: 0;
+  grid-auto-rows: 104px;
   background: transparent;
   border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
   box-shadow: 0 0 40px rgba(50, 30, 100, 0.25);
   flex-shrink: 0;
   will-change: transform;
+  line-height: 0;
+  font-size: 0;
+  position: relative;
 }
 
 /* Tiles - dirt_rough.jpg 텍스처 */
@@ -981,17 +1045,41 @@
   height: 104px;
   position: relative;
   cursor: pointer;
-  transition: filter 0.15s;
   border: none;
+  padding: 0;
+  margin: 0;
   background-size: cover;
   background-position: center;
+  z-index: auto;
+  overflow: hidden;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: normal;
+  /* z-index: auto = stacking context 생성 안 함. transition/filter 제거로 stacking context 방지 */
 }
-.pm2d-tile:hover { filter: brightness(1.2); z-index: 2; }
+/* 유닛 오버레이 레이어 - 모든 타일 위에 렌더 */
+.pm2d-unit-layer {
+  position: absolute;
+  top: 0; left: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+.pm2d-tile:hover { filter: brightness(1.2); }
 .pm2d-tile.pm2d-wall    { cursor: not-allowed; }
 .pm2d-tile.pm2d-water   { }
 .pm2d-tile.pm2d-special { }
 .pm2d-tile.pm2d-accent1 { filter: brightness(1.05) saturate(1.2); }
 .pm2d-tile.pm2d-accent2 { }
+
+/* 타일 색조 (유닛이 별도 레이어이므로 filter 자유롭게 사용) */
+.pm2d-tile.pm2d-ice { filter: brightness(1.15) hue-rotate(180deg) saturate(0.7); }
+.pm2d-tile.pm2d-poison { filter: brightness(0.85) hue-rotate(90deg) saturate(1.5); }
+.pm2d-tile.pm2d-holy { filter: brightness(1.25) saturate(0.5) sepia(0.2); }
+.pm2d-tile.pm2d-thorns { filter: brightness(0.9) hue-rotate(60deg) saturate(1.3); }
+.pm2d-tile.pm2d-wind { filter: brightness(1.1) hue-rotate(150deg) saturate(0.6); }
+.pm2d-tile.pm2d-lava { filter: brightness(0.9) hue-rotate(-30deg) saturate(1.8); }
+.pm2d-tile.pm2d-shadow { filter: brightness(0.6) saturate(0.3); }
+.pm2d-tile.pm2d-crystal { filter: brightness(1.2) hue-rotate(260deg) saturate(1.4); }
 
 .pm2d-tile.h1 { filter: brightness(1.08); }
 .pm2d-tile.h2 { filter: brightness(1.16); }
@@ -1005,10 +1093,7 @@
   z-index: 3;
   pointer-events: none;
 }
-.pm2d-obstacle.has-unit {
-  opacity: 0.4;
-  z-index: 1;
-}
+/* has-unit 불필요 - 유닛이 별도 레이어에 있음 */
 
 /* 벽 - 바위 장애물 */
 .pm2d-obs-wall {
@@ -1101,6 +1186,32 @@
     0 2px 6px rgba(0,0,0,0.4);
 }
 
+/* 새 지형 장애물 */
+.pm2d-obs-ice { width: 50px; height: 50px; background: radial-gradient(circle, rgba(150,220,255,0.5), rgba(100,180,255,0.15) 60%, transparent 80%); border-radius: 50%; box-shadow: 0 0 12px rgba(100,200,255,0.3); animation: pm2dIceShimmer 2s ease-in-out infinite; }
+.pm2d-obs-ice::before { content: '🧊'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 20px; }
+.pm2d-obs-poison { width: 50px; height: 50px; background: radial-gradient(circle, rgba(80,200,50,0.4), rgba(50,150,30,0.15) 60%, transparent 80%); border-radius: 50%; animation: pm2dPoisonBubble 1.8s ease-in-out infinite; }
+.pm2d-obs-poison::before { content: '☠️'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 18px; opacity: 0.8; }
+.pm2d-obs-holy { width: 55px; height: 55px; background: radial-gradient(circle, rgba(255,255,200,0.5), rgba(255,230,150,0.15) 60%, transparent 80%); border-radius: 50%; box-shadow: 0 0 15px rgba(255,240,180,0.3); animation: pm2dHolyPulse 2.5s ease-in-out infinite; }
+.pm2d-obs-holy::before { content: '🕊️'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 20px; }
+.pm2d-obs-thorns { width: 50px; height: 45px; background: radial-gradient(ellipse, rgba(50,120,30,0.5), rgba(30,80,20,0.15) 65%, transparent 85%); border-radius: 40% 50% 45% 55%; }
+.pm2d-obs-thorns::before { content: '🌿'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 20px; }
+.pm2d-obs-wind { width: 55px; height: 55px; border-radius: 50%; animation: pm2dWindSpin 3s linear infinite; }
+.pm2d-obs-wind::before { content: '🌀'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 22px; animation: pm2dWindSpin 2s linear infinite; }
+.pm2d-obs-lava { width: 55px; height: 55px; background: radial-gradient(circle, rgba(255,80,0,0.6), rgba(200,40,0,0.2) 55%, transparent 80%); border-radius: 50%; box-shadow: 0 0 18px rgba(255,60,0,0.4); animation: pm2dLavaGlow 1.5s ease-in-out infinite; }
+.pm2d-obs-lava::before { content: '🌋'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 20px; }
+.pm2d-obs-shadow { width: 55px; height: 55px; background: radial-gradient(circle, rgba(20,0,40,0.6), rgba(40,0,60,0.2) 55%, transparent 80%); border-radius: 50%; animation: pm2dShadowPulse 2s ease-in-out infinite; }
+.pm2d-obs-shadow::before { content: '🌑'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 20px; opacity: 0.7; }
+.pm2d-obs-crystal { width: 45px; height: 50px; background: radial-gradient(circle, rgba(180,100,255,0.4), rgba(130,60,200,0.15) 60%, transparent 80%); border-radius: 30% 70% 40% 60%; box-shadow: 0 0 14px rgba(160,80,240,0.3); animation: pm2dCrystalGlow 2.2s ease-in-out infinite; }
+.pm2d-obs-crystal::before { content: '💎'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 18px; }
+
+@keyframes pm2dIceShimmer { 0%,100% { opacity: 0.8; } 50% { opacity: 1; } }
+@keyframes pm2dPoisonBubble { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-50%,-50%) scale(1.08); } }
+@keyframes pm2dHolyPulse { 0%,100% { box-shadow: 0 0 15px rgba(255,240,180,0.3); } 50% { box-shadow: 0 0 25px rgba(255,240,180,0.5); } }
+@keyframes pm2dWindSpin { from { transform: translate(-50%,-50%) rotate(0deg); } to { transform: translate(-50%,-50%) rotate(360deg); } }
+@keyframes pm2dLavaGlow { 0%,100% { box-shadow: 0 0 12px rgba(255,60,0,0.4); } 50% { box-shadow: 0 0 22px rgba(255,80,0,0.6); } }
+@keyframes pm2dShadowPulse { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes pm2dCrystalGlow { 0%,100% { box-shadow: 0 0 10px rgba(160,80,240,0.3); } 50% { box-shadow: 0 0 20px rgba(160,80,240,0.5); } }
+
 @keyframes pm2dWaterRipple {
   0%, 100% { transform: translate(-50%, -50%) scale(1); }
   50% { transform: translate(-50%, -50%) scale(1.05); }
@@ -1129,36 +1240,34 @@
 /* Tile highlights */
 .pm2d-tile.move-range { box-shadow: inset 0 0 0 2px var(--cyan, #22d3ee); }
 .pm2d-tile.move-range::after {
-  content: ''; position: absolute; inset: 2px;
+  content: ''; position: absolute; inset: 2px; z-index: 0;
   background: rgba(6, 182, 212, 0.2); animation: pm2dPulse 1.2s ease-in-out infinite;
 }
 .pm2d-tile.atk-range { box-shadow: inset 0 0 0 2px var(--red, #ef4444); }
 .pm2d-tile.atk-range::after {
-  content: ''; position: absolute; inset: 2px;
+  content: ''; position: absolute; inset: 2px; z-index: 0;
   background: rgba(239, 68, 68, 0.2); animation: pm2dPulse 1s ease-in-out infinite;
 }
 .pm2d-tile.skill-range { box-shadow: inset 0 0 0 2px #8b5cf6; }
 .pm2d-tile.skill-range::after {
-  content: ''; position: absolute; inset: 2px;
+  content: ''; position: absolute; inset: 2px; z-index: 0;
   background: rgba(139, 92, 246, 0.2); animation: pm2dPulse 1s ease-in-out infinite;
 }
 .pm2d-tile.selected-tile { box-shadow: inset 0 0 0 2px var(--gold, #ffd700); }
 
 @keyframes pm2dPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 
-/* Units on tiles */
+/* Units on overlay layer (absolute positioned via left/top from JS) */
 .pm2d-unit {
   position: absolute;
-  top: 50%; left: 50%;
   transform: translate(-50%, -55%);
   width: 80px; height: 80px;
-  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.05s;
+  pointer-events: auto;
 }
-.pm2d-unit.active-unit { animation: pm2dBounce 0.8s ease-in-out infinite; z-index: 8; }
+.pm2d-unit.active-unit { animation: pm2dBounce 0.8s ease-in-out infinite; z-index: 5; }
 .pm2d-unit.acted { opacity: 0.55; filter: saturate(0.4); }
 .pm2d-unit.dead-unit {
   opacity: 0;
@@ -1172,6 +1281,48 @@
   50% { transform: translate(-50%, -62%); }
 }
 
+/* 걷기 애니메이션 오버레이 */
+.pm2d-walking-unit {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pm2dWalk 0.4s ease-in-out forwards;
+  left: var(--from-x);
+  top: var(--from-y);
+}
+.pm2d-walking-unit .pm2d-unit-sprite {
+  width: 72px; height: 72px;
+  image-rendering: pixelated;
+  object-fit: contain;
+  border: 2px solid;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.5);
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7));
+}
+.pm2d-walking-unit.ally .pm2d-unit-sprite { border-color: var(--cyan, #22d3ee); }
+.pm2d-walking-unit.enemy .pm2d-unit-sprite { border-color: var(--red, #ef4444); }
+
+@keyframes pm2dWalk {
+  0% {
+    left: var(--from-x); top: var(--from-y);
+    transform: translate(-50%, -55%);
+  }
+  15% { transform: translate(-50%, calc(-55% - 12px)); }
+  30% { transform: translate(-50%, calc(-55% - 2px)); }
+  50% {
+    transform: translate(-50%, calc(-55% - 14px));
+  }
+  65% { transform: translate(-50%, calc(-55% - 2px)); }
+  80% { transform: translate(-50%, calc(-55% - 10px)); }
+  100% {
+    left: var(--to-x); top: var(--to-y);
+    transform: translate(-50%, -55%);
+  }
+}
+
 .pm2d-unit-sprite {
   width: 72px; height: 72px;
   image-rendering: pixelated;
@@ -1179,12 +1330,70 @@
   border: 2px solid;
   background: rgba(0, 0, 0, 0.4);
   border-radius: 6px;
+  position: relative;
+  z-index: 1;
 }
 .pm2d-unit.ally .pm2d-unit-sprite { border-color: var(--cyan, #22d3ee); }
 .pm2d-unit.enemy .pm2d-unit-sprite { border-color: var(--red, #ef4444); }
 .pm2d-unit.active-unit .pm2d-unit-sprite {
   border-color: var(--gold, #ffd700);
   box-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
+/* ===== 유닛 오라 ===== */
+.pm2d-unit-aura {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 96px; height: 96px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  animation: pm2dAuraPulse 2s ease-in-out infinite;
+}
+.pm2d-unit.ally .pm2d-unit-aura {
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.45) 0%, rgba(34, 211, 238, 0.15) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.4), 0 0 4px rgba(34, 211, 238, 0.2);
+}
+.pm2d-unit.enemy .pm2d-unit-aura {
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.45) 0%, rgba(239, 68, 68, 0.15) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.4), 0 0 4px rgba(239, 68, 68, 0.2);
+}
+.pm2d-unit.active-unit .pm2d-unit-aura {
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.4) 0%, rgba(255, 215, 0, 0.12) 50%, transparent 70%);
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.2);
+  animation: pm2dAuraPulse 1.2s ease-in-out infinite;
+}
+/* 엘리트 몬스터 오라 */
+.pm2d-unit.elite .pm2d-unit-aura {
+  background: radial-gradient(circle, color-mix(in srgb, var(--elite-color, #e94560) 40%, transparent) 0%, color-mix(in srgb, var(--elite-color, #e94560) 12%, transparent) 50%, transparent 70%);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--elite-color, #e94560) 50%, transparent), inset 0 0 10px color-mix(in srgb, var(--elite-color, #e94560) 20%, transparent);
+  animation: pm2dAuraPulse 1s ease-in-out infinite;
+  width: 100px; height: 100px;
+}
+.pm2d-unit.elite .pm2d-unit-sprite {
+  border-color: var(--elite-color, #e94560);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--elite-color, #e94560) 50%, transparent);
+}
+.pm2d-unit.dead-unit .pm2d-unit-aura,
+.pm2d-unit.acted .pm2d-unit-aura { opacity: 0; }
+@keyframes pm2dAuraPulse {
+  0%, 100% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+/* 엘리트 배지 */
+.pm2d-elite-badge {
+  position: absolute;
+  top: -18px; right: -6px;
+  font-size: 14px;
+  z-index: 10;
+  filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+  animation: pm2dEliteBadge 1.5s ease-in-out infinite;
+}
+@keyframes pm2dEliteBadge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
 }
 
 .pm2d-unit-icon-text { font-size: 24px; line-height: 1; filter: drop-shadow(1px 1px 0 #000); }
@@ -1200,51 +1409,159 @@
 .pm2d-unit-hp-fill.mid { background: #eab308; }
 .pm2d-unit-hp-fill.low { background: var(--red, #ef4444); }
 
-.pm2d-unit-name {
-  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
-  font-size: 11px; color: #ccc; white-space: nowrap;
-  text-shadow: 1px 1px 2px #000, -1px -1px 2px #000;
-  pointer-events: none; font-family: var(--font-ui, 'Noto Sans KR', sans-serif);
+/* Unit MP bar */
+.pm2d-unit-mp-bar {
+  position: absolute; bottom: -13px; left: 50%; transform: translateX(-50%);
+  width: 68px; height: 5px;
+  background: rgba(0, 0, 0, 0.6); border-radius: 3px; overflow: hidden;
 }
+.pm2d-unit-mp-fill {
+  height: 100%; border-radius: 2px; transition: width 0.3s;
+  background: #3b82f6;
+}
+
+.pm2d-unit-name {
+  position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+  font-size: 13px; font-weight: 700; color: #eee; white-space: nowrap;
+  text-shadow: 1px 1px 3px #000, -1px -1px 3px #000, 0 0 6px rgba(0,0,0,0.8);
+  pointer-events: none; font-family: var(--font-ui, 'Noto Sans KR', sans-serif);
+  letter-spacing: 0.3px;
+}
+.pm2d-unit.enemy .pm2d-unit-name { color: #fca5a5; }
+.pm2d-unit.ally .pm2d-unit-name { color: #a5f3fc; }
 
 /* Damage Popup */
 .pm2d-dmg-popup {
-  position: absolute; z-index: 20;
-  font-size: 16px; font-weight: 800; pointer-events: none;
-  animation: pm2dDmgRise 0.9s ease-out forwards;
-  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
+  position: absolute; z-index: 30;
+  font-size: 22px; font-weight: 900; pointer-events: none;
+  animation: pm2dDmgRise 1s ease-out forwards;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 0 0 6px rgba(0,0,0,0.6);
   font-family: var(--font-title, serif);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
 }
-.pm2d-dmg-popup.damage { color: var(--red, #ef4444); }
-.pm2d-dmg-popup.heal { color: var(--green, #2ed573); }
-.pm2d-dmg-popup.crit { color: var(--gold, #ffd700); font-size: 20px; }
-.pm2d-dmg-popup.miss, .pm2d-dmg-popup.system { color: var(--text-muted, #94a3b8); font-size: 13px; }
-.pm2d-dmg-popup.element { color: #ffa502; font-size: 13px; }
-.pm2d-dmg-popup.element-weak { color: #888; font-size: 13px; }
+.pm2d-dmg-popup.damage { color: var(--red, #ef4444); font-size: 24px; }
+.pm2d-dmg-popup.heal { color: var(--green, #2ed573); font-size: 24px; }
+.pm2d-dmg-popup.crit { color: var(--gold, #ffd700); font-size: 28px; }
+.pm2d-dmg-popup.miss, .pm2d-dmg-popup.system { color: var(--text-muted, #94a3b8); font-size: 18px; }
+.pm2d-dmg-popup.element { color: #ffa502; font-size: 18px; }
+.pm2d-dmg-popup.element-weak { color: #888; font-size: 18px; }
+.pm2d-dmg-popup.joint { color: #ffaa44; font-size: 22px; font-style: italic; }
 
 @keyframes pm2dDmgRise {
   0% { opacity: 1; transform: translate(-50%, 0) scale(0.5); }
-  15% { opacity: 1; transform: translate(-50%, -10px) scale(1.3); }
-  100% { opacity: 0; transform: translate(-50%, -40px) scale(0.8); }
+  15% { opacity: 1; transform: translate(-50%, -14px) scale(1.4); }
+  100% { opacity: 0; transform: translate(-50%, -55px) scale(0.9); }
 }
 
-/* Hit Effect */
+/* Hit Effect - 피격 이펙트 (오버레이 레이어에서 절대 위치) */
 .pm2d-hit-fx {
-  position: absolute; z-index: 15;
-  top: 50%; left: 50%;
-  width: 96px; height: 96px;
+  position: absolute; z-index: 25;
+  width: 110px; height: 110px;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  animation: pm2dHit 0.35s ease-out forwards;
+  animation: pm2dHit 0.4s ease-out forwards;
 }
-.pm2d-hit-fx.slash { border: 3px solid #fff; border-radius: 50%; }
-.pm2d-hit-fx.magic { background: radial-gradient(circle, rgba(180,100,255,0.6), transparent 70%); border-radius: 50%; }
-.pm2d-hit-fx.heal-fx { background: radial-gradient(circle, rgba(100,255,150,0.5), transparent 70%); border-radius: 50%; }
+/* 근접 베기 - 방향 지원 */
+.pm2d-hit-fx.slash {
+  border: 3px solid rgba(255,255,255,0.9); border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.2), transparent 60%);
+  transform: translate(-50%, -50%) rotate(var(--fx-angle, 0deg));
+}
+.pm2d-hit-fx.slash::before {
+  content: ''; position: absolute; top: 15%; left: 10%; width: 80%; height: 4px;
+  background: linear-gradient(90deg, transparent, #fff, rgba(255,200,100,0.9), transparent);
+  transform: rotate(-30deg); animation: pm2dSlashLine 0.35s ease-out;
+}
+.pm2d-hit-fx.slash::after {
+  content: ''; position: absolute; top: 40%; left: 15%; width: 70%; height: 4px;
+  background: linear-gradient(90deg, transparent, rgba(255,220,120,0.9), transparent);
+  transform: rotate(20deg); animation: pm2dSlashLine 0.35s ease-out 0.06s;
+}
+/* 화살 적중 */
+.pm2d-hit-fx.arrow-hit {
+  background: radial-gradient(circle, rgba(255,220,100,0.6), transparent 55%);
+  border-radius: 50%;
+}
+.pm2d-hit-fx.arrow-hit::before {
+  content: '🏹'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(var(--fx-angle, 0deg));
+  font-size: 28px; opacity: 0.9;
+}
+/* 마법 적중 */
+.pm2d-hit-fx.magic {
+  background: radial-gradient(circle, rgba(180,100,255,0.7), transparent 65%);
+  border-radius: 50%;
+}
+.pm2d-hit-fx.magic::before {
+  content: '✦'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 30px; color: rgba(200,150,255,0.95); animation: pm2dMagicSpin 0.4s linear;
+}
+/* 힐 이펙트 */
+.pm2d-hit-fx.heal-fx {
+  background: radial-gradient(circle, rgba(100,255,150,0.6), transparent 65%);
+  border-radius: 50%;
+}
+.pm2d-hit-fx.heal-fx::before {
+  content: '+'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 34px; font-weight: 900; color: rgba(100,255,150,0.9);
+}
+/* 근접 돌진 이펙트 - 방향 지원 */
+.pm2d-hit-fx.melee-rush {
+  background: none; border: none;
+  animation: pm2dMeleeRush 0.35s ease-out forwards;
+  transform: translate(-50%, -50%) rotate(var(--fx-angle, 0deg));
+}
+.pm2d-hit-fx.melee-rush::before {
+  content: '💨'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 34px;
+}
+/* 화살 발사 이펙트 - 방향 지원 */
+.pm2d-hit-fx.arrow-proj {
+  background: none; border: none;
+  animation: pm2dArrowFly 0.4s ease-in forwards;
+  transform: translate(-50%, -50%) rotate(var(--fx-angle, 0deg));
+}
+.pm2d-hit-fx.arrow-proj::before {
+  content: '➜'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 30px; color: #ffa502;
+}
+/* 마법 발사 이펙트 */
+.pm2d-hit-fx.magic-proj {
+  background: radial-gradient(circle, rgba(160,80,255,0.5), transparent 60%);
+  border-radius: 50%;
+  animation: pm2dMagicProj 0.45s ease-in forwards;
+}
+.pm2d-hit-fx.magic-proj::before {
+  content: '✨'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 28px;
+}
 
 @keyframes pm2dHit {
   0% { opacity: 1; transform: translate(-50%, -50%) scale(0.3); }
   50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+}
+@keyframes pm2dSlashLine {
+  from { opacity: 0; width: 0; } to { opacity: 1; width: 70%; }
+}
+@keyframes pm2dMagicSpin {
+  from { transform: translate(-50%,-50%) rotate(0deg) scale(0.5); }
+  to { transform: translate(-50%,-50%) rotate(180deg) scale(1.2); }
+}
+@keyframes pm2dMeleeRush {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5) translateX(-30px); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1.1) translateX(5px); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8) translateX(0); }
+}
+@keyframes pm2dArrowFly {
+  0% { opacity: 1; transform: translate(-80%, -50%) scale(0.8); }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-20%, -50%) scale(0.6); }
+}
+@keyframes pm2dMagicProj {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  40% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
 }
 
 /* Unit shake */

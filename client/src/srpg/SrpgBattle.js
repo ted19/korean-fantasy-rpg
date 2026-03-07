@@ -8,6 +8,7 @@ import {
   getMovementRange, getAttackRange, getSkillRange,
   calcDamage, calcHeal, determineTurnOrder, aiDecide,
   checkBattleEnd, generateEnemies, getWeaponInfo, getTerrainEffect, getTileTurnEffect,
+  getJointAttackAllies, calcJointDamage,
   ELITE_TIERS,
 } from './battleEngine';
 import api from '../api';
@@ -19,12 +20,13 @@ const PHASE = {
   PLAYER_MOVE: 'player_move',
   PLAYER_ATTACK: 'player_attack',
   PLAYER_SKILL: 'player_skill',
+
   ENEMY_TURN: 'enemy_turn',
   ANIMATING: 'animating',
   BATTLE_END: 'battle_end',
 };
 
-const CLASS_KEY = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
+const CLASS_KEY = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
 
 function getUnitPortrait(unit) {
   if (unit.id === 'player') {
@@ -54,6 +56,7 @@ export default function SrpgBattle({
   activeMercenaries,
   onBattleEnd,
   use2DMap = false,
+  savedRetreatFailed = false,
 }) {
   const [mapData, setMapData] = useState(null);
   const [units, setUnits] = useState([]);
@@ -72,9 +75,12 @@ export default function SrpgBattle({
   const [roundCount, setRoundCount] = useState(1);
   const [loading, setLoading] = useState(true);
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
+  const [retreatDisabled, setRetreatDisabled] = useState(!!savedRetreatFailed);
+  const [defeatPenalty, setDefeatPenalty] = useState(null);
   const [autoAll, setAutoAll] = useState(false);
   const [autoSummon, setAutoSummon] = useState(false);
   const [ctxMenu, setCtxMenu] = useState({ show: false, mode: 'main' });
+  const [movingUnit, setMovingUnit] = useState(null); // { id, fromX, fromZ, toX, toZ }
   const [potions, setPotions] = useState([]);
   const [droppedMaterials, setDroppedMaterials] = useState([]);
   const [droppedTickets, setDroppedTickets] = useState([]);
@@ -139,7 +145,7 @@ export default function SrpgBattle({
 
   // 스킬 컷인 연출
   const playSkillCutIn = (unit, skill) => {
-    setSkillCutIn({ name: unit.name, icon: unit.icon, skillName: skill.name, skillIcon: skill.icon || '✨', team: unit.team });
+    setSkillCutIn({ name: unit.name, icon: unit.icon, portrait: getUnitPortrait(unit), skillName: skill.name, skillIcon: skill.icon || '✨', team: unit.team });
     setTimeout(() => setSkillCutIn(null), 1200);
   };
 
@@ -415,39 +421,50 @@ export default function SrpgBattle({
     if (!effect) return;
 
     setTimeout(() => {
+      const u = unitsRef.current.find(uu => uu.id === unit.id);
+      if (!u || u.hp <= 0) return;
+      let logMsg = '', logType = 'system', popupText = '', popupType = 'damage';
+      const updates = {};
+      if (effect.type === 'damage') {
+        const dmg = Math.max(1, Math.floor(u.maxHp * effect.percent / 100));
+        updates.hp = Math.max(1, u.hp - dmg);
+        popupText = `-${dmg}`; popupType = 'damage';
+        logMsg = `${effect.icon} ${u.name}: ${effect.label} (-${dmg} HP)`; logType = 'damage';
+      } else if (effect.type === 'heal') {
+        const heal = Math.max(1, Math.floor(u.maxHp * effect.percent / 100));
+        updates.hp = Math.min(u.maxHp, u.hp + heal);
+        popupText = `+${heal}`; popupType = 'heal';
+        logMsg = `${effect.icon} ${u.name}: ${effect.label} (+${heal} HP)`; logType = 'heal';
+      } else if (effect.type === 'buff' || effect.type === 'debuff') {
+        const STAT_LABELS = { magAttack:'마공', defense:'방어', evasion:'회피', critRate:'치명타', magDefense:'마방', attack:'공격' };
+        updates[effect.stat] = (u[effect.stat] || 0) + effect.value;
+        const label = STAT_LABELS[effect.stat] || effect.stat;
+        const sign = effect.value > 0 ? '+' : '';
+        popupText = `${label}${sign}${effect.value}`; popupType = effect.value > 0 ? 'element' : 'damage';
+        logMsg = `${effect.icon} ${u.name}: ${effect.label} (${sign}${effect.value})`; logType = 'skill';
+      }
       setUnits(prev => {
-        const updated = prev.map(u => {
-          if (u.id !== unit.id || u.hp <= 0) return u;
-          const copy = { ...u };
-          if (effect.type === 'damage') {
-            const dmg = Math.max(1, Math.floor(u.maxHp * effect.percent / 100));
-            copy.hp = Math.max(1, u.hp - dmg);
-            addPopup(u.x, u.z, `-${dmg}`, 'damage');
-            addLog(`${effect.icon} ${u.name}: ${effect.label} (-${dmg} HP)`, 'damage');
-          } else if (effect.type === 'heal') {
-            const heal = Math.max(1, Math.floor(u.maxHp * effect.percent / 100));
-            copy.hp = Math.min(u.maxHp, u.hp + heal);
-            addPopup(u.x, u.z, `+${heal}`, 'heal');
-            addLog(`${effect.icon} ${u.name}: ${effect.label} (+${heal} HP)`, 'heal');
-          } else if (effect.type === 'buff') {
-            copy[effect.stat] = (u[effect.stat] || 0) + effect.value;
-            addPopup(u.x, u.z, `${effect.stat === 'magAttack' ? '마공' : '방어'}+${effect.value}`, 'element');
-            addLog(`${effect.icon} ${u.name}: ${effect.label} (+${effect.value})`, 'skill');
-          }
-          return copy;
-        });
+        const updated = prev.map(uu => uu.id !== unit.id ? uu : { ...uu, ...updates });
         unitsRef.current = updated;
         return updated;
       });
+      if (popupText) addPopup(u.x, u.z, popupText, popupType);
+      if (logMsg) addLog(logMsg, logType);
     }, 200);
   }, [activeUnitId, use2DMap, mapData]); // eslint-disable-line
 
-  // phase 변경시 메뉴 닫기 (이동/공격 모드 진입 등)
+  // phase 변경시 메뉴 관리 (행동 완전 종료 전까지 유지)
   useEffect(() => {
-    if (phase !== PHASE.PLAYER_SELECT) {
+    // 적 턴, 애니메이션, 전투 종료시만 메뉴 닫기
+    if (phase === PHASE.ENEMY_TURN || phase === PHASE.ANIMATING || phase === PHASE.BATTLE_END) {
       setCtxMenu({ show: false, mode: 'main' });
     }
   }, [phase]);
+
+  // 활성 유닛 변경시 메뉴 닫기 (다음 유닛 턴으로 넘어갈 때)
+  useEffect(() => {
+    setCtxMenu({ show: false, mode: 'main' });
+  }, [activeUnitId]);
 
   // 자동 모드 토글시 현재 플레이어 턴이면 즉시 전환
   useEffect(() => {
@@ -518,8 +535,11 @@ export default function SrpgBattle({
         return;
       }
 
-      // AI 이동
+      // AI 이동 (걷기 애니메이션 포함)
       if (decision.moveTarget) {
+        setMovingUnit({ id: latestUnit.id, fromX: latestUnit.x, fromZ: latestUnit.z, toX: decision.moveTarget.x, toZ: decision.moveTarget.z });
+        await wait(400);
+        if (cancelled) return;
         setUnits(prev => {
           const updated = prev.map(u =>
             u.id === latestUnit.id ? { ...u, x: decision.moveTarget.x, z: decision.moveTarget.z, moved: true } : u
@@ -527,10 +547,11 @@ export default function SrpgBattle({
           unitsRef.current = updated;
           return updated;
         });
+        setMovingUnit(null);
         addLog(`[R${roundCount}] ${latestUnit.icon}${latestUnit.name}이(가) 이동!`, 'system');
       }
 
-      await wait(500);
+      await wait(300);
       if (cancelled) return;
 
       const movedUnit = unitsRef.current.find(u => u.id === latestUnit.id);
@@ -542,6 +563,7 @@ export default function SrpgBattle({
         const healTarget = unitsRef.current.find(u => u.id === decision.target.id);
         if (healTarget && healTarget.hp > 0) {
           const healAmt = decision.skill.heal_amount || 30;
+          const selfHeal = healTarget.id === movedUnit.id;
           setUnits(prev => {
             const updated = prev.map(u => {
               if (u.id === healTarget.id) {
@@ -555,16 +577,15 @@ export default function SrpgBattle({
               return u;
             });
             unitsRef.current = updated;
-            const healed = updated.find(u => u.id === healTarget.id);
-            const selfHeal = healTarget.id === movedUnit.id;
-            addLog(
-              `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${decision.skill.icon || '✨'}[${decision.skill.name}]! ${selfHeal ? '자신을' : `${healTarget.icon}${healTarget.name}을(를)`} ${healAmt} 치유! (HP: ${healed?.hp}/${healed?.maxHp})`,
-              'heal'
-            );
-            addPopup(healTarget.x, healTarget.z, `+${healAmt}`, 'heal');
-            addEffect(healTarget.x, healTarget.z, 'heal');
             return updated;
           });
+          const healed = unitsRef.current.find(u => u.id === healTarget.id);
+          addLog(
+            `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${decision.skill.icon || '✨'}[${decision.skill.name}]! ${selfHeal ? '자신을' : `${healTarget.icon}${healTarget.name}을(를)`} ${healAmt} 치유! (HP: ${healed?.hp}/${healed?.maxHp})`,
+            'heal'
+          );
+          addPopup(healTarget.x, healTarget.z, `+${healAmt}`, 'heal');
+          addEffect(healTarget.x, healTarget.z, 'heal');
         }
       } else if (decision.action === 'buff' && decision.skill) {
         // 버프/디버프
@@ -589,16 +610,16 @@ export default function SrpgBattle({
             return u;
           });
           unitsRef.current = updated;
-          const STAT_NAMES = { attack:'공격력', defense:'방어력', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명타', evasion:'회피' };
-          const statName = STAT_NAMES[decision.skill.buff_stat] || decision.skill.buff_stat;
-          addLog(
-            `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${decision.skill.icon || '✨'}[${decision.skill.name}]! ${statName}${decision.skill.buff_value > 0 ? '+' : ''}${decision.skill.buff_value}!`,
-            'system'
-          );
-          addPopup(movedUnit.x, movedUnit.z, `${statName}${decision.skill.buff_value > 0 ? '↑' : '↓'}`, 'system');
-          addEffect(movedUnit.x, movedUnit.z, 'buff', decision.skill.buff_stat === 'attack' || decision.skill.buff_stat === 'phys_attack' || decision.skill.buff_stat === 'mag_attack' ? '#ff6600' : '#4488ff');
           return updated;
         });
+        const STAT_NAMES = { attack:'공격력', defense:'방어력', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명타', evasion:'회피' };
+        const statName = STAT_NAMES[decision.skill.buff_stat] || decision.skill.buff_stat;
+        addLog(
+          `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${decision.skill.icon || '✨'}[${decision.skill.name}]! ${statName}${decision.skill.buff_value > 0 ? '+' : ''}${decision.skill.buff_value}!`,
+          'system'
+        );
+        addPopup(movedUnit.x, movedUnit.z, `${statName}${decision.skill.buff_value > 0 ? '↑' : '↓'}`, 'system');
+        addEffect(movedUnit.x, movedUnit.z, 'buff', decision.skill.buff_stat === 'attack' || decision.skill.buff_stat === 'phys_attack' || decision.skill.buff_stat === 'mag_attack' ? '#ff6600' : '#4488ff');
       } else if (decision.canAttack && decision.target) {
         // 공격 (일반 or 스킬)
         const targetUnit = unitsRef.current.find(u => u.id === decision.target.id);
@@ -607,6 +628,7 @@ export default function SrpgBattle({
           if (skill) playSkillCutIn(movedUnit, skill);
           const result = calcDamage(movedUnit, targetUnit, skill, mapRef.current);
           const dmg = result.damage;
+          let lifeStealAmt = 0;
 
           setUnits(prev => {
             const updated = prev.map(u => {
@@ -622,16 +644,10 @@ export default function SrpgBattle({
                 if (skill) {
                   newMp -= (skill.mp_cost || 0);
                   cd[skill.id] = skill.cooldown || 0;
-                  // 생명력 흡수
                   if (!result.evaded && skill.heal_amount > 0) {
-                    const healed = Math.min(skill.heal_amount, u.maxHp - u.hp);
+                    lifeStealAmt = Math.min(skill.heal_amount, u.maxHp - u.hp);
                     newHp = Math.min(u.maxHp, u.hp + skill.heal_amount);
-                    if (healed > 0) {
-                      addLog(`  ${movedUnit.icon}${movedUnit.name} 생명력 ${healed} 흡수!`, 'heal');
-                      addPopup(u.x, u.z, `+${healed}`, 'heal');
-                    }
                   }
-                  // 자폭
                   if (skill.name === '자폭') {
                     newHp = 0;
                   }
@@ -641,39 +657,77 @@ export default function SrpgBattle({
               return u;
             });
             unitsRef.current = updated;
-
-            const target = updated.find(u => u.id === decision.target.id);
-            const skillName = skill ? `${skill.icon || '✨'}[${skill.name}]` : '공격';
-
-            if (result.evaded) {
-              addLog(`[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${decision.target.icon}${decision.target.name}이(가) 회피!`, 'system');
-              addPopup(decision.target.x, decision.target.z, 'MISS', 'system');
-            } else {
-              let extra = result.heightInfo.label ? ` (${result.heightInfo.label})` : '';
-              if (result.elementLabel) extra += ` [${result.elementLabel}]`;
-              addLog(
-                `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${decision.target.icon}${decision.target.name}에게 ${dmg} 데미지!${extra} (HP: ${target?.hp}/${target?.maxHp})`,
-                'damage'
-              );
-              addPopup(decision.target.x, decision.target.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
-              if (result.elementLabel) addPopup(decision.target.x, decision.target.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
-              if (result.isCrit) addLog(`치명타!`, 'damage');
-              // 기여도 기록 (아군이 적에게 데미지)
-              if (movedUnit.team === 'player' && decision.target.team === 'enemy') {
-                trackContribution(movedUnit.id, dmg);
-              }
-              // 스킬 이펙트
-              const { effectType: fx, color: fxColor } = getAttackEffect(movedUnit, skill, result.isCrit);
-              addEffect(decision.target.x, decision.target.z, fx, fxColor);
-              if (result.isCrit && fx !== 'crit') addEffect(decision.target.x, decision.target.z, 'crit', '#ffdd00');
-            }
-            if (target && target.hp <= 0) {
-              addLog(`${decision.target.icon}${decision.target.name} 쓰러짐!`, 'system');
-              // 킬 기여도 기록
-              if (movedUnit.team === 'player') trackContribution(movedUnit.id, 0, true);
-            }
             return updated;
           });
+
+          // 로그/이펙트는 setUnits 바깥에서
+          const target = unitsRef.current.find(u => u.id === decision.target.id);
+          const skillName = skill ? `${skill.icon || '✨'}[${skill.name}]` : '공격';
+
+          if (lifeStealAmt > 0) {
+            addLog(`  ${movedUnit.icon}${movedUnit.name} 생명력 ${lifeStealAmt} 흡수!`, 'heal');
+            addPopup(movedUnit.x, movedUnit.z, `+${lifeStealAmt}`, 'heal');
+          }
+
+          if (result.evaded) {
+            addLog(`[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${decision.target.icon}${decision.target.name}이(가) 회피!`, 'system');
+            addPopup(decision.target.x, decision.target.z, 'MISS', 'system');
+          } else {
+            let extra = result.heightInfo.label ? ` (${result.heightInfo.label})` : '';
+            if (result.elementLabel) extra += ` [${result.elementLabel}]`;
+            addLog(
+              `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${decision.target.icon}${decision.target.name}에게 ${dmg} 데미지!${extra} (HP: ${target?.hp}/${target?.maxHp})`,
+              'damage'
+            );
+            addPopup(decision.target.x, decision.target.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
+            if (result.elementLabel) addPopup(decision.target.x, decision.target.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
+            if (result.isCrit) addLog(`치명타!`, 'damage');
+            if (movedUnit.team === 'player' && decision.target.team === 'enemy') {
+              trackContribution(movedUnit.id, dmg);
+            }
+            const { effectType: fx, color: fxColor } = getAttackEffect(movedUnit, skill, result.isCrit);
+            addEffect(decision.target.x, decision.target.z, fx, fxColor);
+            if (result.isCrit && fx !== 'crit') addEffect(decision.target.x, decision.target.z, 'crit', '#ffdd00');
+
+            // AI 협공 처리 (대상이 살아있고 회피하지 않았을 때)
+            const tgtAfterAI = unitsRef.current.find(u => u.id === decision.target.id);
+            if (tgtAfterAI && tgtAfterAI.hp > 0 && !result.evaded) {
+              const jointAllies = getJointAttackAllies(movedUnit, decision.target, unitsRef.current);
+              if (jointAllies.length > 0) {
+                let totalJointDmg = 0;
+                const jointUpdates = [];
+                for (const ally of jointAllies) {
+                  const jDmg = calcJointDamage(ally, decision.target, mapRef.current);
+                  totalJointDmg += jDmg;
+                  jointUpdates.push({ allyId: ally.id, dmg: jDmg, ally });
+                }
+                setUnits(prev => {
+                  const updated = prev.map(u => {
+                    if (u.id === decision.target.id) {
+                      return { ...u, hp: Math.max(0, u.hp - totalJointDmg) };
+                    }
+                    const ju = jointUpdates.find(j => j.allyId === u.id);
+                    if (ju) return { ...u, attackAnim: { tx: decision.target.x, tz: decision.target.z } };
+                    return u;
+                  });
+                  unitsRef.current = updated;
+                  return updated;
+                });
+                for (const ju of jointUpdates) {
+                  addLog(`  ⚔️ ${ju.ally.icon}${ju.ally.name} 협공! ${ju.dmg} 데미지!`, 'damage');
+                  addPopup(decision.target.x, decision.target.z, `-${ju.dmg}`, 'joint');
+                  addEffect(decision.target.x, decision.target.z, 'slash', '#ffaa44');
+                  if (movedUnit.team === 'player') trackContribution(ju.allyId, ju.dmg);
+                }
+                addLog(`  → 협공 총 추가 데미지: ${totalJointDmg}`, 'damage');
+              }
+            }
+          }
+          const tgtFinalAI = unitsRef.current.find(u => u.id === decision.target.id);
+          if (tgtFinalAI && tgtFinalAI.hp <= 0) {
+            addLog(`${decision.target.icon}${decision.target.name} 쓰러짐!`, 'system');
+            if (movedUnit.team === 'player') trackContribution(movedUnit.id, 0, true);
+          }
         }
       }
 
@@ -713,27 +767,33 @@ export default function SrpgBattle({
         setCtxMenu(prev => prev.show ? { show: false, mode: 'main' } : { show: true, mode: 'main' });
         return;
       }
-      // 다른 곳 클릭시 메뉴 닫기
-      if (ctxMenu.show) {
-        setCtxMenu({ show: false, mode: 'main' });
-        return;
-      }
+      // 다른 곳 클릭해도 메뉴 유지 (행동 종료 전까지)
+      return;
     }
 
     // 이동 모드
     if (phase === PHASE.PLAYER_MOVE) {
       const canMove = movableRange.some(t => t.x === tile.x && t.z === tile.z);
       if (canMove) {
-        setUnits(prev => {
-          const updated = prev.map(u =>
-            u.id === activeUnit.id ? { ...u, x: tile.x, z: tile.z, moved: true } : u
-          );
-          unitsRef.current = updated;
-          return updated;
-        });
+        // 걷기 애니메이션: movingUnit 상태로 이동 경로 설정
+        const fromX = activeUnit.x, fromZ = activeUnit.z;
+        const toX = tile.x, toZ = tile.z;
+        setMovingUnit({ id: activeUnit.id, fromX, fromZ, toX, toZ });
         setMovableRange([]);
-        setPhase(PHASE.PLAYER_SELECT);
-        addLog(`${activeUnit.icon}${activeUnit.name}이(가) (${tile.x},${tile.z})로 이동!`, 'system');
+        // 애니메이션 후 실제 위치 업데이트
+        setTimeout(() => {
+          setUnits(prev => {
+            const updated = prev.map(u =>
+              u.id === activeUnit.id ? { ...u, x: toX, z: toZ, moved: true } : u
+            );
+            unitsRef.current = updated;
+            return updated;
+          });
+          setMovingUnit(null);
+          setPhase(PHASE.PLAYER_SELECT);
+          setCtxMenu({ show: true, mode: 'main' }); // 이동 완료 후 메뉴 다시 열기
+          addLog(`${activeUnit.icon}${activeUnit.name}이(가) (${toX},${toZ})로 이동!`, 'system');
+        }, 400);
       } else {
         setMovableRange([]);
         setPhase(PHASE.PLAYER_SELECT);
@@ -757,13 +817,11 @@ export default function SrpgBattle({
       if (selectedSkill && selectedSkill.type === 'heal') {
         if (targetUnit && targetUnit.team === 'player') {
           const healAmt = calcHeal(activeUnit, selectedSkill);
+          const tu = unitsRef.current.find(u => u.id === targetUnit.id);
+          const actualHeal = tu ? Math.min(healAmt, tu.maxHp - tu.hp) : healAmt;
           setUnits(prev => {
             const updated = prev.map(u => {
               if (u.id === targetUnit.id) {
-                const actualHeal = Math.min(healAmt, u.maxHp - u.hp);
-                addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 [${selectedSkill.name}]! ${u.icon}${u.name} HP ${actualHeal} 회복!`, 'heal');
-                addPopup(u.x, u.z, `+${actualHeal}`, 'heal');
-                addEffect(u.x, u.z, 'heal', '#44ff88');
                 return { ...u, hp: Math.min(u.maxHp, u.hp + healAmt) };
               }
               if (u.id === activeUnit.id) {
@@ -774,6 +832,9 @@ export default function SrpgBattle({
             unitsRef.current = updated;
             return updated;
           });
+          addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 [${selectedSkill.name}]! ${targetUnit.icon}${targetUnit.name} HP ${actualHeal} 회복!`, 'heal');
+          addPopup(targetUnit.x, targetUnit.z, `+${actualHeal}`, 'heal');
+          addEffect(targetUnit.x, targetUnit.z, 'heal', '#44ff88');
           setAttackRange([]);
           setSelectedSkill(null);
           setTimeout(() => advanceTurn(), 500);
@@ -787,11 +848,12 @@ export default function SrpgBattle({
         if (skill) playSkillCutIn(activeUnit, skill);
         const result = calcDamage(activeUnit, targetUnit, skill, mapRef.current);
         const dmg = result.damage;
+        let lifeStealAmt = 0;
 
         setUnits(prev => {
           const updated = prev.map(u => {
             if (u.id === targetUnit.id) {
-              if (result.evaded) return u; // 회피 시 HP 변동 없음
+              if (result.evaded) return u;
               const newHp = Math.max(0, u.hp - dmg);
               return { ...u, hp: newHp };
             }
@@ -800,51 +862,86 @@ export default function SrpgBattle({
               let newHp = u.hp;
               if (skill) newMp -= skill.mp_cost;
               if (!result.evaded && skill && skill.heal_amount > 0) {
-                const healed = Math.min(skill.heal_amount, u.maxHp - u.hp);
+                lifeStealAmt = Math.min(skill.heal_amount, u.maxHp - u.hp);
                 newHp = Math.min(u.maxHp, u.hp + skill.heal_amount);
-                if (healed > 0) {
-                  addLog(`  생명력 ${healed} 흡수!`, 'heal');
-                  addPopup(u.x, u.z, `+${healed}`, 'heal');
-                }
               }
               return { ...u, mp: newMp, hp: newHp, acted: true, attackAnim: { tx: targetUnit.x, tz: targetUnit.z } };
             }
             return u;
           });
           unitsRef.current = updated;
-
-          const target = updated.find(u => u.id === targetUnit.id);
-          const skillName = skill ? `[${skill.name}]` : '공격';
-
-          if (result.evaded) {
-            addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${targetUnit.icon}${targetUnit.name}이(가) 회피!`, 'system');
-            addPopup(targetUnit.x, targetUnit.z, 'MISS', 'system');
-          } else {
-            let extra = '';
-            if (result.heightInfo.label) extra += ` ${result.heightInfo.label}`;
-            if (result.terrainDef !== 0) extra += ` 지형방어${result.terrainDef > 0 ? '+' : ''}${result.terrainDef}`;
-            if (result.elementLabel) extra += ` [${result.elementLabel}]`;
-            addLog(
-              `[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${targetUnit.icon}${targetUnit.name}에게 ${dmg} 데미지!${extra} (HP: ${target?.hp}/${target?.maxHp})`,
-              'normal'
-            );
-            addPopup(targetUnit.x, targetUnit.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
-            if (result.elementLabel) addPopup(targetUnit.x, targetUnit.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
-            if (result.isCrit) addLog(`치명타!`, 'damage');
-            // 기여도 기록
-            trackContribution(activeUnit.id, dmg);
-            // 플레이어 공격 이펙트
-            const { effectType: fx, color: fxColor } = getAttackEffect(activeUnit, skill, result.isCrit);
-            addEffect(targetUnit.x, targetUnit.z, fx, fxColor);
-            if (result.isCrit && fx !== 'crit') addEffect(targetUnit.x, targetUnit.z, 'crit', '#ffdd00');
-            if (target && target.hp <= 0) {
-              addLog(`${targetUnit.icon}${targetUnit.name} 처치!`, 'heal');
-              trackContribution(activeUnit.id, 0, true);
-            }
-          }
-
           return updated;
         });
+
+        // 로그/이펙트는 setUnits 바깥에서
+        const target = unitsRef.current.find(u => u.id === targetUnit.id);
+        const skillName = skill ? `[${skill.name}]` : '공격';
+
+        if (lifeStealAmt > 0) {
+          addLog(`  생명력 ${lifeStealAmt} 흡수!`, 'heal');
+          addPopup(activeUnit.x, activeUnit.z, `+${lifeStealAmt}`, 'heal');
+        }
+
+        if (result.evaded) {
+          addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${targetUnit.icon}${targetUnit.name}이(가) 회피!`, 'system');
+          addPopup(targetUnit.x, targetUnit.z, 'MISS', 'system');
+        } else {
+          let extra = '';
+          if (result.heightInfo.label) extra += ` ${result.heightInfo.label}`;
+          if (result.terrainDef !== 0) extra += ` 지형방어${result.terrainDef > 0 ? '+' : ''}${result.terrainDef}`;
+          if (result.elementLabel) extra += ` [${result.elementLabel}]`;
+          addLog(
+            `[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${targetUnit.icon}${targetUnit.name}에게 ${dmg} 데미지!${extra} (HP: ${target?.hp}/${target?.maxHp})`,
+            'normal'
+          );
+          addPopup(targetUnit.x, targetUnit.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
+          if (result.elementLabel) addPopup(targetUnit.x, targetUnit.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
+          if (result.isCrit) addLog(`치명타!`, 'damage');
+          trackContribution(activeUnit.id, dmg);
+          const { effectType: fx, color: fxColor } = getAttackEffect(activeUnit, skill, result.isCrit);
+          addEffect(targetUnit.x, targetUnit.z, fx, fxColor);
+          if (result.isCrit && fx !== 'crit') addEffect(targetUnit.x, targetUnit.z, 'crit', '#ffdd00');
+
+          // 협공 처리 (대상이 아직 살아있을 때)
+          const tgtAfterMain = unitsRef.current.find(u => u.id === targetUnit.id);
+          if (tgtAfterMain && tgtAfterMain.hp > 0 && !result.evaded) {
+            const jointAllies = getJointAttackAllies(activeUnit, targetUnit, unitsRef.current);
+            if (jointAllies.length > 0) {
+              let totalJointDmg = 0;
+              const jointUpdates = []; // {allyId, dmg}
+              for (const ally of jointAllies) {
+                const jDmg = calcJointDamage(ally, targetUnit, mapRef.current);
+                totalJointDmg += jDmg;
+                jointUpdates.push({ allyId: ally.id, dmg: jDmg, ally });
+              }
+              setUnits(prev => {
+                const updated = prev.map(u => {
+                  if (u.id === targetUnit.id) {
+                    return { ...u, hp: Math.max(0, u.hp - totalJointDmg) };
+                  }
+                  // 협공 아군에게 attackAnim 설정 (모션용)
+                  const ju = jointUpdates.find(j => j.allyId === u.id);
+                  if (ju) return { ...u, attackAnim: { tx: targetUnit.x, tz: targetUnit.z } };
+                  return u;
+                });
+                unitsRef.current = updated;
+                return updated;
+              });
+              for (const ju of jointUpdates) {
+                addLog(`  ⚔️ ${ju.ally.icon}${ju.ally.name} 협공! ${ju.dmg} 데미지!`, 'damage');
+                addPopup(targetUnit.x, targetUnit.z, `-${ju.dmg}`, 'joint');
+                addEffect(targetUnit.x, targetUnit.z, 'slash', '#ffaa44');
+                trackContribution(ju.allyId, ju.dmg);
+              }
+              addLog(`  → 협공 총 추가 데미지: ${totalJointDmg}`, 'damage');
+            }
+          }
+          const tgtFinal = unitsRef.current.find(u => u.id === targetUnit.id);
+          if (tgtFinal && tgtFinal.hp <= 0) {
+            addLog(`${targetUnit.icon}${targetUnit.name} 처치!`, 'heal');
+            trackContribution(activeUnit.id, 0, true);
+          }
+        }
 
         setAttackRange([]);
         setSelectedSkill(null);
@@ -876,11 +973,11 @@ export default function SrpgBattle({
     const range = getSkillRange(skill);
     if (range === 0) {
       // 자기 버프
+      const bs = skill.buff_stat;
       setUnits(prev => {
         const updated = prev.map(u => {
           if (u.id === activeUnit.id) {
             const newU = { ...u, mp: u.mp - skill.mp_cost, acted: true };
-            const bs = skill.buff_stat;
             if (bs === 'attack') newU.attack += skill.buff_value;
             if (bs === 'defense') newU.defense += skill.buff_value;
             if (bs === 'phys_attack') newU.physAttack = (newU.physAttack||0) + skill.buff_value;
@@ -889,11 +986,6 @@ export default function SrpgBattle({
             if (bs === 'mag_defense') newU.magDefense = (newU.magDefense||0) + skill.buff_value;
             if (bs === 'crit_rate') newU.critRate = (newU.critRate||0) + skill.buff_value;
             if (bs === 'evasion') newU.evasion = (newU.evasion||0) + skill.buff_value;
-            const STAT_NAMES = { attack:'공격력', defense:'방어력', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명타', evasion:'회피' };
-            const statLabel = STAT_NAMES[bs] || bs;
-            addLog(`[R${roundCount}] ${u.icon}${u.name}의 [${skill.name}]! ${statLabel}+${skill.buff_value}!`, 'system');
-            addPopup(u.x, u.z, `${statLabel}↑`, 'system');
-            addEffect(u.x, u.z, 'buff', bs === 'attack' || bs === 'phys_attack' || bs === 'mag_attack' ? '#ff6600' : '#4488ff');
             return newU;
           }
           return u;
@@ -901,6 +993,11 @@ export default function SrpgBattle({
         unitsRef.current = updated;
         return updated;
       });
+      const STAT_NAMES = { attack:'공격력', defense:'방어력', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명타', evasion:'회피' };
+      const statLabel = STAT_NAMES[bs] || bs;
+      addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 [${skill.name}]! ${statLabel}+${skill.buff_value}!`, 'system');
+      addPopup(activeUnit.x, activeUnit.z, `${statLabel}↑`, 'system');
+      addEffect(activeUnit.x, activeUnit.z, 'buff', bs === 'attack' || bs === 'phys_attack' || bs === 'mag_attack' ? '#ff6600' : '#4488ff');
       setTimeout(() => advanceTurn(), 500);
       return;
     }
@@ -918,19 +1015,19 @@ export default function SrpgBattle({
 
   // 물약 사용
   const handleUseItem = async (potion) => {
-    if (!activeUnit || activeUnit.team !== 'ally') return;
-    const isPlayer = activeUnit.id === 'player';
-    if (!isPlayer) {
+    if (!activeUnit || activeUnit.team !== 'player') return;
+    if (activeUnit.id !== 'player') {
       addLog('물약은 플레이어만 사용할 수 있습니다.', 'system');
       return;
     }
     try {
-      const res = await api.post('/shop/use', { itemId: potion.item_id });
-      const { current_hp, current_mp } = res.data.character;
+      await api.post('/shop/use', { itemId: potion.item_id });
 
       setUnits(prev => prev.map(u => {
         if (u.id !== 'player') return u;
-        return { ...u, hp: Math.min(u.maxHp, current_hp), mp: Math.min(u.maxMp, current_mp) };
+        const newHp = Math.min(u.maxHp, u.hp + (potion.effect_hp || 0));
+        const newMp = Math.min(u.maxMp, u.mp + (potion.effect_mp || 0));
+        return { ...u, hp: newHp, mp: newMp };
       }));
 
       setPotions(prev => prev.map(p => {
@@ -950,23 +1047,24 @@ export default function SrpgBattle({
     }
   };
 
-  // 컨텍스트 메뉴 액션 핸들러
+  // 컨텍스트 메뉴 액션 핸들러 (행동 종료 전까지 메뉴 유지)
   const handleMenuAction = (action, data) => {
     if (action === 'move') {
       handleMove();
-      setCtxMenu({ show: false, mode: 'main' });
+      setCtxMenu({ show: false, mode: 'main' }); // 이동 중 닫기 (이동 완료 후 다시 열림)
     } else if (action === 'attack') {
       handleAttack();
-      setCtxMenu({ show: false, mode: 'main' });
+      setCtxMenu({ show: false, mode: 'main' }); // 공격 대상 선택 중 닫기
     } else if (action === 'showSkills') {
       setCtxMenu({ show: true, mode: 'skills' });
     } else if (action === 'showItems') {
       setCtxMenu({ show: true, mode: 'items' });
     } else if (action === 'useItem') {
       handleUseItem(data);
+      setCtxMenu({ show: false, mode: 'main' });
     } else if (action === 'skill') {
       handleSkill(data);
-      setCtxMenu({ show: false, mode: 'main' });
+      setCtxMenu({ show: false, mode: 'main' }); // 스킬 대상 선택 중 닫기
     } else if (action === 'back') {
       setCtxMenu({ show: true, mode: 'main' });
     } else if (action === 'wait') {
@@ -1001,7 +1099,7 @@ export default function SrpgBattle({
       const totalDamage = Object.values(contribData).reduce((sum, c) => sum + c.damage, 0) || 1;
       const contribList = playerTeam.map(u => {
         const c = contribData[u.id] || { damage: 0, kills: 0 };
-        return { id: u.id, name: u.name, icon: u.icon, damage: c.damage, kills: c.kills, rawPct: c.damage / totalDamage };
+        return { id: u.id, name: u.name, icon: u.icon, imageUrl: u.imageUrl, damage: c.damage, kills: c.kills, rawPct: c.damage / totalDamage };
       });
       const participantCount = contribList.filter(c => c.damage > 0 || (units.find(u => u.id === c.id)?.hp ?? 0) > 0).length || 1;
       const minPct = Math.min(0.05, 1 / participantCount);
@@ -1029,6 +1127,12 @@ export default function SrpgBattle({
           const mId = parseInt(c.id.replace('merc_', ''));
           mercExpMap[mId] = c.exp;
         }
+      }
+
+      // 몬스터 도감 기록
+      const defeatedMonsterIds = defeated.map(m => m.monsterId).filter(Boolean);
+      if (defeatedMonsterIds.length > 0) {
+        api.post('/monsters/record-kills', { monsterIds: defeatedMonsterIds }).catch(() => {});
       }
 
       api.post('/battle/srpg-result', {
@@ -1062,15 +1166,37 @@ export default function SrpgBattle({
       api.post('/battle/srpg-result', {
         location, victory: false,
         monstersDefeated: [], expGained: 0, goldGained: 0, rounds: roundCount,
-        activeSummonIds: [], activeMercenaryIds: [],
+        activeSummonIds: battleSummonIdsRef.current, activeMercenaryIds: battleMercIdsRef.current,
         playerHp: 0, playerMp: finalMp,
       }).catch(console.error);
+      // 패배 패널티
+      api.post('/battle/session/penalty', { penaltyType: 'defeat' }).then(res => {
+        if (res.data.penalty) {
+          const p = res.data.penalty;
+          setDefeatPenalty(p);
+          addLog(`패배 패널티: 골드 -${p.goldLoss}, 경험치 -${p.expLoss}`, 'damage');
+        }
+      }).catch(() => {});
     }
   }, [phase, battleResult]); // eslint-disable-line
 
   const handleRetreat = () => {
-    addLog('전투에서 후퇴했습니다.', 'damage');
-    onBattleEnd('retreat', 0, 0);
+    const successRate = Math.min(80, 40 + roundCount * 5) / 100;
+    if (Math.random() < successRate) {
+      addLog('후퇴에 성공했습니다!', 'system');
+      api.post('/battle/session/penalty', { penaltyType: 'retreat' }).then(res => {
+        if (res.data.penalty) {
+          addLog(`후퇴 패널티: 골드 -${res.data.penalty.goldLoss}, 경험치 -${res.data.penalty.expLoss}`, 'damage');
+        }
+      }).catch(() => {});
+      setShowRetreatConfirm(false);
+      setTimeout(() => onBattleEnd('retreat', 0, 0), 500);
+    } else {
+      addLog('후퇴에 실패했습니다! 더 이상 후퇴할 수 없습니다.', 'damage');
+      setShowRetreatConfirm(false);
+      setRetreatDisabled(true);
+      api.post('/battle/session/retreat-failed').catch(() => {});
+    }
   };
 
   if (loading || !mapData) return <div className="srpg-loading">맵 로딩 중...</div>;
@@ -1119,10 +1245,11 @@ export default function SrpgBattle({
             damagePopups={damagePopups}
             menuState={ctxMenu}
             onMenuAction={handleMenuAction}
-            onCanvasMiss={() => { if (ctxMenu.show) setCtxMenu({ show: false, mode: 'main' }); }}
+            onCanvasMiss={() => {}}
             skillEffects={skillEffects}
             potions={potions}
             location={location}
+            movingUnit={movingUnit}
           />
         ) : (
           <IsometricMap
@@ -1169,8 +1296,10 @@ export default function SrpgBattle({
               <button
                 className="srpg-retreat-btn"
                 onClick={() => setShowRetreatConfirm(true)}
+                disabled={retreatDisabled}
+                style={retreatDisabled ? {opacity:0.4, cursor:'not-allowed'} : {}}
               >
-                후퇴
+                {retreatDisabled ? '후퇴불가' : '후퇴'}
               </button>
             </div>
           )}
@@ -1291,35 +1420,79 @@ export default function SrpgBattle({
         </div>
       </div>
 
-      {showRetreatConfirm && (
-        <div className="srpg-retreat-overlay" onClick={() => setShowRetreatConfirm(false)}>
-          <div className="srpg-retreat-popup" onClick={e => e.stopPropagation()}>
-            <div className="srpg-retreat-icon">⚔️</div>
-            <h2 className="srpg-retreat-title">후퇴하시겠습니까?</h2>
-            <p className="srpg-retreat-desc">
-              전투를 포기하고 마을로 돌아갑니다.<br/>경험치와 골드를 받을 수 없습니다.
-            </p>
-            <div className="srpg-retreat-actions">
-              <button className="srpg-retreat-confirm-btn" onClick={handleRetreat}>
-                후퇴하기
-              </button>
-              <button
-                className="srpg-retreat-cancel-btn"
-                onClick={() => setShowRetreatConfirm(false)}
-              >
-                전투 계속
-              </button>
+      {showRetreatConfirm && (() => {
+        const retreatPct = Math.min(80, 40 + roundCount * 5);
+        const pctClass = retreatPct >= 65 ? 'high' : retreatPct >= 45 ? 'mid' : 'low';
+        return (
+          <div className="retreat-overlay" onClick={() => setShowRetreatConfirm(false)}>
+            <div className="retreat-popup" onClick={e => e.stopPropagation()}>
+              <div className="retreat-bg">
+                <img src="/ui/battle/retreat_bg.png" alt="" />
+                <div className="retreat-bg-overlay" />
+              </div>
+              <div className="retreat-fog">
+                <div className="retreat-fog-particle" />
+                <div className="retreat-fog-particle" />
+                <div className="retreat-fog-particle" />
+              </div>
+
+              <div className="retreat-content">
+                <img src="/ui/battle/retreat_emblem.png" alt="" className="retreat-emblem" />
+                <div className="retreat-banner-wrap">
+                  <img src="/ui/battle/retreat_banner.png" alt="" />
+                </div>
+                <div className="retreat-title">후퇴하시겠습니까?</div>
+                <div className="retreat-subtitle">전장에서 물러나 안전한 곳으로 퇴각합니다</div>
+
+                <div className="retreat-gauge-section">
+                  <div className="retreat-gauge-label">
+                    <span className="retreat-gauge-text">후퇴 성공 확률</span>
+                    <span className={`retreat-gauge-pct ${pctClass}`}>{retreatPct}%</span>
+                  </div>
+                  <div className="retreat-gauge-track">
+                    <div className={`retreat-gauge-fill ${pctClass}`} style={{width: `${retreatPct}%`}} />
+                    <img src="/ui/battle/retreat_gauge_frame.png" alt="" className="retreat-gauge-frame" />
+                  </div>
+                </div>
+
+                <div className="retreat-info-cards">
+                  <div className="retreat-info-card fail">
+                    <div className="retreat-info-card-icon">&#x1F6AB;</div>
+                    <div className="retreat-info-card-label">실패 시</div>
+                    <div className="retreat-info-card-value">후퇴 봉인<br/>(재시도 불가)</div>
+                  </div>
+                  <div className="retreat-info-card penalty">
+                    <div className="retreat-info-card-icon">&#x26A0;&#xFE0F;</div>
+                    <div className="retreat-info-card-label">성공 시 패널티</div>
+                    <div className="retreat-info-card-value">골드 -10%<br/>경험치 -5%</div>
+                  </div>
+                </div>
+
+                <div className="retreat-actions">
+                  <button className="retreat-btn retreat-btn-try" onClick={handleRetreat}>
+                    <span className="retreat-btn-emoji">&#x1F3C3;</span>
+                    후퇴 시도
+                  </button>
+                  <button className="retreat-btn retreat-btn-stay" onClick={() => setShowRetreatConfirm(false)}>
+                    <span className="retreat-btn-emoji">&#x2694;&#xFE0F;</span>
+                    전투 계속
+                  </button>
+                </div>
+
+                <div className="retreat-glow-line" />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 스킬 컷인 */}
       {skillCutIn && (
         <div className={`srpg-skill-cutin ${skillCutIn.team}`}>
           <div className="srpg-cutin-line" />
           <div className="srpg-cutin-content">
-            <span className="srpg-cutin-icon">{skillCutIn.icon}</span>
+            {skillCutIn.portrait ? <img src={skillCutIn.portrait} alt="" className="srpg-cutin-portrait" onError={e => { e.target.style.display='none'; e.target.nextSibling && (e.target.nextSibling.style.display=''); }} /> : null}
+            <span className="srpg-cutin-icon" style={skillCutIn.portrait ? {display:'none'} : undefined}>{skillCutIn.icon}</span>
             <span className="srpg-cutin-name">{skillCutIn.name}</span>
             <span className="srpg-cutin-skill">{skillCutIn.skillIcon} {skillCutIn.skillName}</span>
           </div>
@@ -1334,7 +1507,7 @@ export default function SrpgBattle({
         const leveled = rd?.leveledUp;
         const summons = rd?.summonResults || [];
         const mercs = rd?.mercenaryResults || [];
-        const expNeeded = charInfo ? Math.floor(80 * charInfo.level + 0.5 * charInfo.level * charInfo.level) : 100;
+        const expNeeded = charInfo ? Math.floor(120 * charInfo.level + 3 * charInfo.level * charInfo.level) : 100;
         const expPct = charInfo ? Math.min(100, (charInfo.exp / expNeeded) * 100) : 0;
 
         return (
@@ -1419,7 +1592,7 @@ export default function SrpgBattle({
                       </div>
                       <div className="srpg-result-char-info">
                         <div className="srpg-result-char-level">
-                          {leveled && <img src="/ui/levelup_effect.png" alt="" className="srpg-result-lvup-glow" />}
+                          {leveled && <div className="srpg-result-lvup-glow" />}
                           <span className="srpg-result-char-lv">Lv.{charInfo.level}</span>
                           {leveled && <span className="srpg-result-lvup-badge">LEVEL UP!</span>}
                         </div>
@@ -1523,17 +1696,46 @@ export default function SrpgBattle({
                           .filter(c => c.pct > 0)
                           .sort((a, b) => b.pct - a.pct)
                           .map(c => (
-                            <div key={c.id} className="srpg-contrib-row">
-                              <span className="srpg-contrib-name">{c.icon}{c.name}</span>
+                            <div key={c.id} className={`srpg-contrib-row ${c.id === 'player' ? 'player' : ''}`}>
+                              <div className="srpg-contrib-unit">
+                                <img src={c.imageUrl} alt="" className="srpg-contrib-icon" onError={e => { e.target.style.display='none'; }} />
+                                <span className="srpg-contrib-name">{c.name}</span>
+                              </div>
+                              <div className="srpg-contrib-stats">
+                                <span className="srpg-contrib-dmg">{c.damage.toLocaleString()} DMG</span>
+                                {c.kills > 0 && <span className="srpg-contrib-kills">{c.kills} Kill</span>}
+                              </div>
                               <div className="srpg-contrib-bar-wrap">
                                 <div className="srpg-contrib-bar" style={{ width: `${c.pct}%` }} />
+                                <span className="srpg-contrib-pct">{c.pct}%</span>
                               </div>
-                              <span className="srpg-contrib-exp">{c.exp} EXP ({c.pct}%)</span>
+                              <span className="srpg-contrib-exp">+{c.exp} EXP</span>
                             </div>
                           ))}
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 패배 시 패널티 표시 */}
+              {!isVictory && defeatPenalty && (
+                <div className="srpg-result-content">
+                  <div className="srpg-result-rewards-panel" style={{borderColor:'#e94560'}}>
+                    <div className="srpg-result-section-title" style={{color:'#e94560'}}>
+                      <span>패배 패널티</span>
+                    </div>
+                    <div className="srpg-result-reward-grid">
+                      <div className="srpg-rr-item" style={{color:'#e94560'}}>
+                        <span className="srpg-rr-label">골드 차감</span>
+                        <span className="srpg-rr-value" style={{color:'#e94560'}}>-{defeatPenalty.goldLoss}</span>
+                      </div>
+                      <div className="srpg-rr-item" style={{color:'#e94560'}}>
+                        <span className="srpg-rr-label">경험치 차감</span>
+                        <span className="srpg-rr-value" style={{color:'#e94560'}}>-{defeatPenalty.expLoss}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 

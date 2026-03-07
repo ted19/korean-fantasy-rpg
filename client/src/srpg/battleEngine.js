@@ -56,6 +56,14 @@ const TILE_KEY_TERRAIN = {
   special: 'dark',
   accent1: 'grass',
   accent2: 'dirt',
+  ice:     'water',
+  poison:  'dirt',
+  holy:    'grass',
+  thorns:  'dirt',
+  wind:    'grass',
+  lava:    'water',
+  shadow:  'dark',
+  crystal: 'dirt',
 };
 
 // tileKey 기반 턴 시작 효과 (타워맵 장애물 시스템)
@@ -64,6 +72,14 @@ const TILE_TURN_EFFECTS = {
   danger:  { type: 'damage', percent: 8, label: '위험 지형 피해', icon: '🔥' },
   special: { type: 'heal', percent: 10, label: '룬의 축복', icon: '✦' },
   accent2: { type: 'buff', stat: 'defense', value: 3, label: '땅 속성 강화', icon: '🪨' },
+  ice:     { type: 'debuff', stat: 'evasion', value: -5, label: '빙결 지형', icon: '🧊' },
+  poison:  { type: 'damage', percent: 5, label: '독 지형 피해', icon: '☠️' },
+  holy:    { type: 'heal', percent: 6, label: '신성한 땅', icon: '🕊️' },
+  thorns:  { type: 'damage', percent: 4, label: '가시덤불 피해', icon: '🌿' },
+  wind:    { type: 'buff', stat: 'evasion', value: 5, label: '바람 속성 강화', icon: '🌀' },
+  lava:    { type: 'damage', percent: 12, label: '용암 피해', icon: '🌋' },
+  shadow:  { type: 'buff', stat: 'critRate', value: 5, label: '그림자 은신', icon: '🌑' },
+  crystal: { type: 'buff', stat: 'magDefense', value: 4, label: '수정 보호막', icon: '💎' },
 };
 
 /**
@@ -149,7 +165,8 @@ export function createPlayerUnit(char, skills, spawnPos, equippedWeapon, passive
     z: spawnPos.z,
     acted: false,
     moved: false,
-    icon: char.class_type === '풍수사' ? '🧙' : char.class_type === '무당' ? '🔮' : '📿',
+    icon: { '풍수사': '🧙', '무당': '🔮', '승려': '📿', '저승사자': '💀' }[char.class_type] || '📿',
+    imageUrl: `/characters/${{ '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' }[char.class_type] || 'monk'}_icon.png`,
     color: '#4fc3f7',
     weaponType,
     weaponName: equippedWeapon?.name || null,
@@ -185,6 +202,7 @@ export function createSummonUnit(summon, spawnPos) {
     acted: false,
     moved: false,
     icon: summon.icon || '👻',
+    imageUrl: `/summons/${summon.template_id}_icon.png`,
     color: '#81c784',
     weaponType: 'default',
     weaponName: null,
@@ -221,6 +239,7 @@ export function createMercenaryUnit(merc, spawnPos) {
     acted: false,
     moved: false,
     icon: '🗡️',
+    imageUrl: `/mercenaries/${merc.template_id}_icon.png`,
     color: '#ffb347',
     weaponType,
     weaponName: null,
@@ -741,32 +760,51 @@ export function aiDecide(unit, mapData, allUnits) {
         };
       }
     }
-    // 버프
+    // 버프 (아군에게)
     if (chosenSkill && chosenSkill.type === 'buff') {
-      return { target: unit, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'buff' };
+      const buffTarget = allies.find(a => a.id !== unit.id) || unit;
+      return { target: buffTarget, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'buff' };
     }
-    // 디버프/공격 폴백
+    // 디버프 (가장 위협적인 적에게)
+    if (chosenSkill && chosenSkill.type === 'debuff') {
+      const debuffTarget = reachByThreat[0] || sortedByThreat[0];
+      if (debuffTarget) {
+        const debuffRange = chosenSkill.range || 3;
+        const debuffPos = findApproachPosition(candidates, debuffTarget, debuffRange);
+        const dist = debuffPos ? manhattan(debuffPos, debuffTarget) : manhattan(unit, debuffTarget);
+        if (dist <= debuffRange) {
+          return {
+            target: debuffTarget,
+            moveTarget: debuffPos && !(debuffPos.x === unit.x && debuffPos.z === unit.z) ? debuffPos : null,
+            canAttack: true, skill: chosenSkill, action: 'skill',
+          };
+        }
+      }
+    }
+    // 공격 폴백
     target = reachByDist[0] || sortedByDist[0];
     moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
   } else if (aiType === 'boss') {
     // 보스: 스킬 적극 활용 + 페이즈 전환
     // Phase 1 (HP>50%): 공격적
-    // Phase 2 (HP<=50%): 버프 + 힐 + 강력한 스킬 사용
-    if (hpRatio > 0.5) {
-      target = reachByThreat[0] || sortedByThreat[0];
-      moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
-    } else {
-      // 힐이 있으면 사용
-      if (chosenSkill && (chosenSkill.type === 'heal')) {
+    // Phase 2 (HP<=50%): 힐/버프 간헐적 사용 + 공격 병행
+    target = reachByThreat[0] || sortedByThreat[0];
+    moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
+    if (hpRatio <= 0.5) {
+      // HP < 30%: 힐 우선 (있으면)
+      if (hpRatio < 0.3 && chosenSkill && chosenSkill.type === 'heal') {
         return { target: unit, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'heal' };
       }
-      // 버프 사용
-      if (chosenSkill && chosenSkill.type === 'buff') {
-        return { target: unit, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'buff' };
+      // 40% 확률로 버프/힐 사용 (공격과 병행)
+      if (Math.random() < 0.4) {
+        if (chosenSkill && chosenSkill.type === 'heal') {
+          return { target: unit, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'heal' };
+        }
+        if (chosenSkill && chosenSkill.type === 'buff') {
+          return { target: unit, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'buff' };
+        }
       }
-      // 광역 스킬 우선
-      target = reachByThreat[0] || sortedByThreat[0];
-      moveTarget = findAttackPosition(candidates, target, effectiveRange, mapData);
+      // 나머지 60%는 공격 (moveTarget 유지)
     }
   } else {
     // aggressive (기본): 도달 가능한 적 중 가장 위협적인 적에게 돌진
@@ -928,6 +966,40 @@ function findApproachPosition(candidates, target, range) {
     }
   }
   return bestPos;
+}
+
+// ========== 협공 (Joint Attack) ==========
+/**
+ * 공격 대상 주변에 인접한 아군 유닛 목록을 반환 (공격자 제외, 행동 가능 여부 불문)
+ * 협공 데미지 = 각 아군 공격력의 30%
+ */
+export function getJointAttackAllies(attacker, target, allUnits) {
+  const allies = allUnits.filter(u =>
+    u.id !== attacker.id &&
+    u.team === attacker.team &&
+    u.hp > 0 &&
+    manhattan(u, target) <= 1
+  );
+  return allies;
+}
+
+/**
+ * 협공 데미지 계산 (아군 공격력의 30%)
+ */
+export function calcJointDamage(ally, defender, mapData) {
+  const isMagic = (ally.magAttack || 0) > (ally.physAttack || 0);
+  const atkStat = isMagic
+    ? ((ally.magAttack ?? 0) || Math.floor((ally.attack || 0) * 0.5))
+    : ((ally.physAttack ?? 0) || ally.attack || 0);
+  const defStat = isMagic
+    ? ((defender.magDefense ?? 0) || Math.floor((defender.defense || 0) * 0.4))
+    : ((defender.physDefense ?? 0) || Math.floor((defender.defense || 0) * 0.7));
+
+  const base = Math.floor(atkStat * 0.3); // 30% 공격력
+  const def = defStat;
+  const variance = Math.floor(Math.random() * 3) - 1;
+  const dmg = Math.max(1, Math.floor(base * (100 / (100 + def * 1.2))) + variance);
+  return dmg;
 }
 
 // ========== 전투 종료 판정 ==========

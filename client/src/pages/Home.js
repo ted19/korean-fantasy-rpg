@@ -10,9 +10,11 @@ import BattleLog from './BattleLog';
 import SrpgBattle from '../srpg/SrpgBattle';
 import StageBattle from '../srpg/StageBattle';
 import SpecialDungeonArea from './SpecialDungeonArea';
+import PrologueArea from './PrologueArea';
 
 function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSelect }) {
-  const [currentLocation, setCurrentLocation] = useState('home');
+  const [prologueCleared, setPrologueCleared] = useState(character.prologue_cleared === 1);
+  const [currentLocation, setCurrentLocation] = useState(character.prologue_cleared === 1 ? 'home' : 'prologue');
   const [logs, setLogs] = useState([{ text: `${character.name}님이 접속했습니다.`, type: 'system' }]);
   const [charState, setCharState] = useState({
     currentHp: character.current_hp ?? character.hp,
@@ -52,6 +54,10 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [returnSpecialType, setReturnSpecialType] = useState(null);
   const [villageTarget, setVillageTarget] = useState(null);
   const [villageTargetData, setVillageTargetData] = useState(null);
+  const [homeInitialTab, setHomeInitialTab] = useState(null);
+  const [battleResumePrompt, setBattleResumePrompt] = useState(null); // 전투 복귀 프롬프트
+  const savedEnemySetupRef = React.useRef(null); // 정예 리롤 방지용 적 구성
+  const savedRetreatFailedRef = React.useRef(false); // 후퇴 실패 기록
 
   const loadMySummons = async () => {
     try {
@@ -73,7 +79,20 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     } catch {}
   };
 
-  useEffect(() => { loadMySummons(); loadMyMercenaries(); }, []);
+  useEffect(() => {
+    loadMySummons();
+    loadMyMercenaries();
+    // 전투 세션 복구 체크
+    const checkBattleSession = async () => {
+      try {
+        const res = await api.get('/battle/session/check');
+        if (res.data.session) {
+          setBattleResumePrompt(res.data.session);
+        }
+      } catch {}
+    };
+    if (character.prologue_cleared === 1) checkBattleSession();
+  }, []); // eslint-disable-line
 
   // 캐릭터 상태 전체 갱신
   const refreshCharState = async () => {
@@ -156,17 +175,99 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     );
   };
 
+  const checkFormationEmpty = async () => {
+    try {
+      const res = await api.get('/formation/list');
+      const main = res.data.formations?.find(f => f.slotIndex === 0);
+      if (!main || !main.gridData) return true;
+      const hasUnit = main.gridData.some(row => row.some(cell => cell && cell.unitId));
+      return !hasUnit;
+    } catch {
+      return false; // 에러 시 통과
+    }
+  };
+
+  // 전투 세션 DB 저장
+  const saveBattleSession = async (battleType, context) => {
+    try { await api.post('/battle/session/save', { battleType, context }); } catch {}
+  };
+  const clearBattleSession = async () => {
+    try { await api.post('/battle/session/clear'); } catch {}
+  };
+
+  // 전투 복귀 수락
+  const handleResumeAccept = () => {
+    const s = battleResumePrompt;
+    if (!s) return;
+    setBattleResumePrompt(null);
+    const ctx = s.context;
+    if (s.battleType === 'stage') {
+      savedEnemySetupRef.current = ctx.enemySetup || null;
+      savedRetreatFailedRef.current = ctx.retreatFailed || false;
+      setBattleLocation(ctx.dungeonKey);
+      setBattleStage(ctx.stage);
+      setBattleStageGroup(ctx.groupKey);
+      setBattleStageMonsters(ctx.monsters);
+      setSpecialBattleCtx(ctx.specialCtx || null);
+      setReturnSpecialType(ctx.specialCtx?.type || null);
+      setReturnStageGroupKey(ctx.specialCtx ? null : ctx.groupKey);
+      setReturnDungeonKey(ctx.specialCtx ? null : null);
+      setSrpgBattle(true);
+      setFighting(true);
+    } else if (s.battleType === 'srpg' || s.battleType === 'tower') {
+      savedRetreatFailedRef.current = ctx.retreatFailed || false;
+      setBattleLocation(ctx.dungeonKey);
+      setBattleStage(ctx.stage);
+      setBattleStageGroup(null);
+      setBattleStageMonsters(null);
+      setSpecialBattleCtx(ctx.specialCtx || null);
+      setReturnSpecialType(ctx.specialCtx?.type || null);
+      setReturnDungeonKey(ctx.specialCtx ? null : ctx.dungeonKey);
+      setSrpgBattle(true);
+      setFighting(true);
+    }
+  };
+
+  // 전투 복귀 포기 (패널티 적용)
+  const handleResumeDecline = async () => {
+    setBattleResumePrompt(null);
+    try {
+      const res = await api.post('/battle/session/penalty', { penaltyType: 'abandon' });
+      if (res.data.penalty) {
+        const p = res.data.penalty;
+        addLog(`전투 포기 패널티: HP -${p.hpLoss}, 골드 -${p.goldLoss}, 경험치 -${p.expLoss}`, 'damage');
+        // 즉시 반영
+        handleCharStateUpdate({
+          currentHp: p.newHp,
+          gold: p.newGold,
+          exp: p.newExp,
+        });
+      }
+    } catch {
+      await clearBattleSession();
+    }
+    addLog('이전 전투를 포기했습니다.', 'system');
+  };
+
   const handleStartBattle = async (dungeonKey, stage, specialCtx) => {
     if (fighting || srpgBattle) return;
+    if (await checkFormationEmpty()) {
+      setBattleBlockMsg('__FORMATION__');
+      return;
+    }
     if (charState.currentHp <= 0) {
       setBattleBlockMsg('HP가 0입니다!\n마을 여관에서 휴식 후 다시 도전하세요.');
       return;
     }
     const isTower = specialCtx?.type === 'tower';
     const isDungeon = !specialCtx && !stage?.groupKey; // 던전 전투인 경우
+    const isBossRaid = specialCtx?.type === 'boss_raid';
+    const isSpecialDungeon = !!specialCtx && !isTower;
+    // 콘텐츠별 행동력 소모: 일반던전=2, 스페셜던전=3, 보스토벌=4, 기본=1
+    const staminaCost = isBossRaid ? 4 : isSpecialDungeon ? 3 : isDungeon ? 2 : (stage?.isBoss ? 2 : 1);
     if (!isTower) {
-      if (charState.stamina <= 0) {
-        setBattleBlockMsg('행동력이 부족합니다!\n시간이 지나면 자동으로 회복됩니다.');
+      if (charState.stamina < staminaCost) {
+        setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
         return;
       }
       // 던전 전투 시 티켓 소모
@@ -179,7 +280,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         }
       }
       try {
-        const stRes = await api.post('/stage/spend-stamina');
+        const stRes = await api.post('/stage/spend-stamina', { cost: staminaCost });
         handleCharStateUpdate({ stamina: stRes.data.stamina, maxStamina: stRes.data.maxStamina, lastStaminaTime: stRes.data.last_stamina_time || new Date().toISOString() });
       } catch (err) {
         setBattleBlockMsg(err.response?.data?.message || '행동력 차감에 실패했습니다.');
@@ -201,25 +302,36 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     setBattleStageMonsters(null);
     setSrpgBattle(true);
     setFighting(true);
+    const bType = specialCtx?.type === 'tower' ? 'tower' : 'srpg';
+    saveBattleSession(bType, { dungeonKey, stage, specialCtx: specialCtx || null });
   };
 
   const handleStartStageBattle = async (groupKey, stage, monsters, specialCtx) => {
     if (fighting || srpgBattle) return;
+    if (await checkFormationEmpty()) {
+      setBattleBlockMsg('__FORMATION__');
+      return;
+    }
     if (charState.currentHp <= 0) {
       setBattleBlockMsg('HP가 0입니다!\n마을 여관에서 휴식 후 다시 도전하세요.');
       return;
     }
-    if (charState.stamina <= 0) {
-      setBattleBlockMsg('행동력이 부족합니다!\n시간이 지나면 자동으로 회복됩니다.');
+    // 스테이지 전투: 보스=2, 일반=1, 스페셜=3
+    const isSpecial = !!specialCtx;
+    const staminaCost = isSpecial ? 3 : (stage?.isBoss ? 2 : 1);
+    if (charState.stamina < staminaCost) {
+      setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
       return;
     }
     try {
-      const stRes = await api.post('/stage/spend-stamina');
+      const stRes = await api.post('/stage/spend-stamina', { cost: staminaCost });
       handleCharStateUpdate({ stamina: stRes.data.stamina, maxStamina: stRes.data.maxStamina, lastStaminaTime: stRes.data.last_stamina_time || new Date().toISOString() });
     } catch (err) {
       setBattleBlockMsg(err.response?.data?.message || '행동력 차감에 실패했습니다.');
       return;
     }
+    savedEnemySetupRef.current = null; // 새 전투는 적 구성 초기화
+    savedRetreatFailedRef.current = false;
     const dungeonKey = stage.dungeonKey || 'forest';
     setBattleLocation(dungeonKey);
     setBattleStage(stage);
@@ -238,9 +350,15 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     }
     setSrpgBattle(true);
     setFighting(true);
+    saveBattleSession('stage', { dungeonKey: stage.dungeonKey || 'forest', stage, monsters, groupKey, specialCtx: specialCtx || null });
   };
 
   const handleSrpgBattleEnd = async (result, expGained, goldGained) => {
+    // 전투 세션 삭제
+    clearBattleSession();
+    savedEnemySetupRef.current = null;
+    savedRetreatFailedRef.current = false;
+
     const stage = battleStage;
     const dungeonKey = battleLocation;
     const spCtx = specialBattleCtx;
@@ -301,14 +419,20 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
 
     if (result === 'retreat') {
       addLog('전투에서 후퇴했습니다.', 'system');
-      setReturnDungeonKey(null);
-      setReturnStageGroupKey(null);
       if (returnSpecialType) {
         setCurrentLocation('special');
+        setReturnSpecialType(null);
+        setReturnDungeonKey(null);
+        setReturnStageGroupKey(null);
+      } else if (returnStageGroupKey) {
+        setCurrentLocation('stage');
+      } else if (returnDungeonKey) {
+        setCurrentLocation('dungeon');
       } else {
         setCurrentLocation('village');
+        setReturnDungeonKey(null);
+        setReturnStageGroupKey(null);
       }
-      setReturnSpecialType(null);
     } else if (result !== 'victory') {
       addLog('SRPG 전투 패배... 마을에서 휴식하세요.', 'damage');
       setReturnDungeonKey(null);
@@ -341,6 +465,8 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           groupKey={battleStageGroup}
           onBattleEnd={handleSrpgBattleEnd}
           onLog={addLog}
+          savedEnemySetup={savedEnemySetupRef.current}
+          savedRetreatFailed={savedRetreatFailedRef.current}
         />
       </div>
     );
@@ -363,6 +489,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           onBattleEnd={handleSrpgBattleEnd}
           onLog={addLog}
           use2DMap={true}
+          savedRetreatFailed={savedRetreatFailedRef.current}
         />
       </div>
     );
@@ -384,13 +511,31 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           activeMercenaries={myMercenaries}
           onBattleEnd={handleSrpgBattleEnd}
           onLog={addLog}
+          savedRetreatFailed={savedRetreatFailedRef.current}
         />
       </div>
     );
   }
 
+  const handlePrologueClear = () => {
+    setPrologueCleared(true);
+    setCurrentLocation('home');
+    refreshCharState();
+  };
+
   const renderAreaContent = () => {
     switch (currentLocation) {
+      case 'prologue':
+        return (
+          <PrologueArea
+            character={character}
+            charState={charState}
+            learnedSkills={learnedSkills}
+            passiveBonuses={passiveBonuses}
+            onPrologueClear={handlePrologueClear}
+            onCharStateUpdate={handleCharStateUpdate}
+          />
+        );
       case 'home':
         return (
           <CharacterHome
@@ -409,6 +554,9 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
             onMercenariesChanged={loadMyMercenaries}
             myMercenaries={myMercenaries}
             onNavigateVillage={navigateToVillage}
+            initialTab={homeInitialTab}
+            onInitialTabConsumed={() => setHomeInitialTab(null)}
+            prologueCleared={prologueCleared}
           />
         );
       case 'village':
@@ -470,6 +618,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         onLocationChange={handleLocationChange}
         onLogout={onLogout}
         onGoToCharacterSelect={onGoToCharacterSelect}
+        prologueCleared={prologueCleared}
       />
 
       <main className="game-main-top">
@@ -482,16 +631,125 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
 
       <BattleLog logs={logs} />
 
+      {/* 전투 복귀 프롬프트 */}
+      {battleResumePrompt && (() => {
+        const ctx = battleResumePrompt.context;
+        const stageName = ctx.stage?.name || '전투';
+        const dungeonKey = ctx.dungeonKey || 'forest';
+        const stageNum = ctx.stage?.stageNumber;
+        return (
+          <div className="resume-overlay">
+            <div className="resume-popup">
+              {/* 배경 이미지 */}
+              <div className="resume-bg">
+                <img src="/ui/battle/resume_bg.png" alt="" />
+                <div className="resume-bg-overlay" />
+              </div>
+
+              {/* 불씨 파티클 */}
+              <div className="resume-particles">
+                <div className="resume-particle" />
+                <div className="resume-particle" />
+                <div className="resume-particle" />
+                <div className="resume-particle" />
+                <div className="resume-particle" />
+                <div className="resume-particle" />
+              </div>
+
+              <div className="resume-content">
+                {/* 교차 검 엠블럼 */}
+                <img src="/ui/battle/resume_swords.png" alt="" className="resume-emblem" />
+
+                {/* 배너 장식 */}
+                <div className="resume-banner-wrap">
+                  <img src="/ui/battle/resume_banner.png" alt="" />
+                </div>
+
+                {/* 타이틀 */}
+                <div className="resume-title">진행 중인 전투 발견</div>
+                <div className="resume-subtitle">전장에서 이탈한 기록이 감지되었습니다</div>
+
+                {/* 스테이지 정보 카드 */}
+                <div className="resume-stage-card">
+                  <img
+                    src={stageNum ? `/dungeons/levels/${dungeonKey}_${stageNum}.png` : `/dungeons/${dungeonKey}_icon.png`}
+                    alt=""
+                    className="resume-stage-icon"
+                    onError={(e) => { e.target.src = `/dungeons/${dungeonKey}_icon.png`; }}
+                  />
+                  <div className="resume-stage-info">
+                    <div className="resume-stage-name">{stageName}</div>
+                    <div className="resume-stage-desc">{battleResumePrompt.battleType === 'stage' ? '스테이지 전투' : battleResumePrompt.battleType === 'tower' ? '무한의 탑' : '던전 전투'}</div>
+                    <div className="resume-no-stamina">행동력 소모 없이 복귀 가능</div>
+                  </div>
+                </div>
+
+                {/* 패널티 경고 섹션 */}
+                <div className="resume-penalty-section">
+                  <div className="resume-penalty-header">
+                    <img src="/ui/battle/resume_penalty.png" alt="" className="resume-penalty-icon" />
+                    <span className="resume-penalty-label">포기 시 패널티</span>
+                  </div>
+                  <div className="resume-penalty-list">
+                    <div className="resume-penalty-chip">
+                      HP <span className="penalty-val">-30%</span>
+                    </div>
+                    <div className="resume-penalty-chip">
+                      골드 <span className="penalty-val">-30%</span>
+                    </div>
+                    <div className="resume-penalty-chip">
+                      경험치 <span className="penalty-val">-15%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 액션 버튼 */}
+                <div className="resume-actions">
+                  <button className="resume-btn resume-btn-return" onClick={handleResumeAccept}>
+                    <span className="resume-btn-emoji">&#x2694;&#xFE0F;</span>
+                    전투 복귀
+                  </button>
+                  <button className="resume-btn resume-btn-abandon" onClick={handleResumeDecline}>
+                    <span className="resume-btn-emoji">&#x1F6AB;</span>
+                    포기
+                  </button>
+                </div>
+
+                <div className="resume-glow-line" />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 전투 불가 팝업 */}
       {battleBlockMsg && (
         <div className="battle-block-overlay" onClick={() => setBattleBlockMsg(null)}>
           <div className="battle-block-popup" onClick={e => e.stopPropagation()}>
-            <div className="battle-block-icon">
-              {battleBlockMsg.includes('HP') ? '💔' : battleBlockMsg.includes('행동력') ? '⚡' : '⚠️'}
-            </div>
-            <div className="battle-block-title">전투 불가</div>
-            <div className="battle-block-msg">{battleBlockMsg}</div>
-            <button className="battle-block-btn" onClick={() => setBattleBlockMsg(null)}>확인</button>
+            {battleBlockMsg === '__FORMATION__' ? (
+              <>
+                <div className="battle-block-icon">🛡️</div>
+                <div className="battle-block-title">진영 편성 필요</div>
+                <div className="battle-block-msg">진영에 배치된 유닛이 없습니다!{'\n'}진영 편성에서 유닛을 배치한 후 전투를 시작하세요.</div>
+                <div className="battle-block-actions">
+                  <button className="battle-block-btn formation-go-btn" onClick={() => {
+                    setBattleBlockMsg(null);
+                    setHomeInitialTab('formation');
+                    setCurrentLocation('home');
+                  }}>진영 편성으로 이동</button>
+                  <button className="battle-block-btn" onClick={() => setBattleBlockMsg(null)}>닫기</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="battle-block-icon">
+                  {battleBlockMsg.includes('HP') ? '💔' : battleBlockMsg.includes('행동력') ? '⚡' : '⚠️'}
+                </div>
+                <div className="battle-block-title">전투 불가</div>
+                <div className="battle-block-msg">{battleBlockMsg}</div>
+                <button className="battle-block-btn" onClick={() => setBattleBlockMsg(null)}>확인</button>
+              </>
+            )}
           </div>
         </div>
       )}

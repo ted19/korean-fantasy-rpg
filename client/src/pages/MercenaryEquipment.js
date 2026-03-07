@@ -244,10 +244,7 @@ function MercenaryEquipment({ mercenary, onLog, onMercUpdate }) {
                         <div className="equip-slot-item">
                           <EquipImg itemId={item.item_id} fallback={TYPE_ICONS[item.type] || slot.icon} className="equip-slot-img" />
 
-                          <span className="equip-slot-name" style={item.grade && GRADE_COLORS[item.grade] ? { color: GRADE_COLORS[item.grade] } : undefined}>
-                            {item.name}{item.enhance_level > 0 ? ` +${item.enhance_level}` : ''}
-                            {item.type === 'weapon' && item.weapon_hand && <span className="weapon-hand-tag">{item.weapon_hand === '2h' ? '양손' : '한손'}</span>}
-                          </span>
+                          {item.type === 'weapon' && item.weapon_hand && <span className="weapon-hand-tag">{item.weapon_hand === '2h' ? '양손' : '한손'}</span>}
                         </div>
                       ) : (
                         <div className="equip-slot-empty">

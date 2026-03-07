@@ -16,8 +16,47 @@ function auth(req, res, next) {
   }
 }
 
-// 게시판 퀘스트 목록 (수락 가능한 것들)
-router.get('/available', auth, async (req, res) => {
+// 일일 퀘스트 리셋 체크
+function getLocalDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+async function checkDailyReset(charId, conn) {
+  const db = conn || pool;
+  const today = getLocalDateStr(new Date());
+  const [rows] = await db.query(
+    'SELECT last_reset FROM character_daily_reset WHERE character_id = ?',
+    [charId]
+  );
+  if (rows.length === 0) {
+    await db.query(
+      'INSERT INTO character_daily_reset (character_id, last_reset) VALUES (?, ?)',
+      [charId, today]
+    );
+    return;
+  }
+  const raw = rows[0].last_reset;
+  const lastReset = raw instanceof Date ? getLocalDateStr(raw) : String(raw).slice(0, 10);
+  if (lastReset < today) {
+    // 일일 퀘스트 리셋
+    await db.query(
+      `DELETE cq FROM character_quests cq
+       JOIN quests q ON cq.quest_id = q.id
+       WHERE cq.character_id = ? AND q.category = 'daily'`,
+      [charId]
+    );
+    await db.query(
+      'UPDATE character_daily_reset SET last_reset = ? WHERE character_id = ?',
+      [today, charId]
+    );
+  }
+}
+
+// 카테고리별 퀘스트 목록 + 내 진행상황
+router.get('/list', auth, async (req, res) => {
   try {
     const [chars] = await pool.query(
       req.selectedCharId
@@ -25,65 +64,85 @@ router.get('/available', auth, async (req, res) => {
         : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
       req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
     );
-    if (chars.length === 0) return res.json({ quests: [] });
+    if (chars.length === 0) return res.json({ quests: [], myQuests: [] });
     const char = chars[0];
 
-    // 이미 수락했거나 완료한 퀘스트 ID
-    const [taken] = await pool.query(
-      'SELECT quest_id FROM character_quests WHERE character_id = ?',
-      [char.id]
+    await checkDailyReset(char.id);
+
+    // 모든 퀘스트
+    const [allQuests] = await pool.query(
+      'SELECT * FROM quests ORDER BY category, chapter, sort_order, id'
     );
-    const takenIds = taken.map((r) => r.quest_id);
 
-    // 완료(보상수령)한 퀘스트 ID
-    const [rewarded] = await pool.query(
-      "SELECT quest_id FROM character_quests WHERE character_id = ? AND status = 'rewarded'",
-      [char.id]
-    );
-    const rewardedIds = rewarded.map((r) => r.quest_id);
-
-    const [allQuests] = await pool.query('SELECT * FROM quests ORDER BY required_level, id');
-
-    const available = allQuests.filter((q) => {
-      if (takenIds.includes(q.id)) return false;
-      if (char.level < q.required_level) return false;
-      if (q.prerequisite_quest_id && !rewardedIds.includes(q.prerequisite_quest_id)) return false;
-      return true;
-    });
-
-    res.json({ quests: available });
-  } catch (err) {
-    console.error('Available quests error:', err);
-    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
-  }
-});
-
-// 내 진행중/완료 퀘스트
-router.get('/my', auth, async (req, res) => {
-  try {
-    const [chars] = await pool.query(
-      req.selectedCharId
-        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
-        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
-      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
-    );
-    if (chars.length === 0) return res.json({ quests: [] });
-
-    const [rows] = await pool.query(
-      `SELECT cq.*, q.title, q.description, q.type, q.target, q.target_count,
+    // 내 퀘스트 상태
+    const [myQuests] = await pool.query(
+      `SELECT cq.*, q.title, q.description, q.category, q.type, q.target, q.target_count,
               q.reward_exp, q.reward_gold, q.reward_item_id, q.reward_item_qty,
+              q.chapter, q.sort_order, q.icon, q.required_level, q.prerequisite_quest_id,
               it.name as reward_item_name
        FROM character_quests cq
        JOIN quests q ON cq.quest_id = q.id
        LEFT JOIN items it ON q.reward_item_id = it.id
-       WHERE cq.character_id = ? AND cq.status IN ('active', 'completed')
-       ORDER BY cq.status DESC, cq.accepted_at`,
-      [chars[0].id]
+       WHERE cq.character_id = ?
+       ORDER BY q.category, q.chapter, q.sort_order`,
+      [char.id]
     );
 
-    res.json({ quests: rows });
+    // 완료(보상수령)한 퀘스트 ID
+    const rewardedIds = myQuests.filter(q => q.status === 'rewarded').map(q => q.quest_id);
+    const takenIds = myQuests.map(q => q.quest_id);
+
+    // 수락 가능 여부 판별
+    const questsWithStatus = allQuests.map(q => {
+      const myQ = myQuests.find(mq => mq.quest_id === q.id);
+      let status = 'available';
+      let progress = 0;
+      if (myQ) {
+        status = myQ.status;
+        progress = myQ.progress;
+      } else {
+        // 아직 수락 안 함 - 수락 가능 여부 체크
+        if (char.level < q.required_level) status = 'locked_level';
+        else if (q.prerequisite_quest_id && !rewardedIds.includes(q.prerequisite_quest_id)) status = 'locked_prereq';
+        else status = 'available';
+      }
+      return {
+        id: q.id,
+        title: q.title,
+        description: q.description,
+        category: q.category,
+        type: q.type,
+        target: q.target,
+        targetCount: q.target_count,
+        rewardExp: q.reward_exp,
+        rewardGold: q.reward_gold,
+        rewardItemId: q.reward_item_id,
+        rewardItemQty: q.reward_item_qty,
+        rewardItemName: myQ?.reward_item_name || null,
+        requiredLevel: q.required_level,
+        prerequisiteQuestId: q.prerequisite_quest_id,
+        chapter: q.chapter,
+        sortOrder: q.sort_order,
+        icon: q.icon,
+        status,
+        progress,
+      };
+    });
+
+    // 일일 퀘스트 리셋까지 남은 시간
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const dailyResetMs = tomorrow - now;
+
+    res.json({
+      quests: questsWithStatus,
+      dailyResetMs,
+      charLevel: char.level,
+    });
   } catch (err) {
-    console.error('My quests error:', err);
+    console.error('Quest list error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });
@@ -159,6 +218,69 @@ router.post('/accept', auth, async (req, res) => {
   }
 });
 
+// 여러 퀘스트 일괄 수락
+router.post('/accept-all', auth, async (req, res) => {
+  try {
+    const { questIds } = req.body;
+    if (!questIds || !questIds.length) return res.status(400).json({ message: '퀘스트 목록이 없습니다.' });
+
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
+    const char = chars[0];
+
+    let accepted = 0;
+    for (const qId of questIds) {
+      const [quests] = await pool.query('SELECT * FROM quests WHERE id = ?', [qId]);
+      if (quests.length === 0) continue;
+      const quest = quests[0];
+      if (char.level < quest.required_level) continue;
+
+      if (quest.prerequisite_quest_id) {
+        const [pre] = await pool.query(
+          "SELECT id FROM character_quests WHERE character_id = ? AND quest_id = ? AND status = 'rewarded'",
+          [char.id, quest.prerequisite_quest_id]
+        );
+        if (pre.length === 0) continue;
+      }
+
+      const [dup] = await pool.query(
+        'SELECT id FROM character_quests WHERE character_id = ? AND quest_id = ?',
+        [char.id, qId]
+      );
+      if (dup.length > 0) continue;
+
+      let progress = 0;
+      let status = 'active';
+      if (quest.type === 'level' && char.level >= parseInt(quest.target)) {
+        progress = 1;
+        status = 'completed';
+      }
+
+      await pool.query(
+        'INSERT INTO character_quests (character_id, quest_id, status, progress) VALUES (?, ?, ?, ?)',
+        [char.id, qId, status, progress]
+      );
+      if (status === 'completed') {
+        await pool.query(
+          "UPDATE character_quests SET completed_at = NOW() WHERE character_id = ? AND quest_id = ?",
+          [char.id, qId]
+        );
+      }
+      accepted++;
+    }
+
+    res.json({ message: `${accepted}개 퀘스트를 수락했습니다.`, accepted });
+  } catch (err) {
+    console.error('Accept all error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 보상 수령
 router.post('/reward', auth, async (req, res) => {
   const conn = await pool.getConnection();
@@ -175,7 +297,9 @@ router.post('/reward', auth, async (req, res) => {
     const char = chars[0];
 
     const [cqRows] = await conn.query(
-      "SELECT cq.*, q.title, q.reward_exp, q.reward_gold, q.reward_item_id, q.reward_item_qty FROM character_quests cq JOIN quests q ON cq.quest_id = q.id WHERE cq.character_id = ? AND cq.quest_id = ? AND cq.status = 'completed'",
+      `SELECT cq.*, q.title, q.reward_exp, q.reward_gold, q.reward_item_id, q.reward_item_qty
+       FROM character_quests cq JOIN quests q ON cq.quest_id = q.id
+       WHERE cq.character_id = ? AND cq.quest_id = ? AND cq.status = 'completed'`,
       [char.id, questId]
     );
     if (cqRows.length === 0) {
@@ -186,13 +310,11 @@ router.post('/reward', auth, async (req, res) => {
 
     await conn.beginTransaction();
 
-    // 보상 수령 상태로
     await conn.query(
       "UPDATE character_quests SET status = 'rewarded' WHERE character_id = ? AND quest_id = ?",
       [char.id, questId]
     );
 
-    // EXP / 골드 지급
     let newExp = (char.exp || 0) + cq.reward_exp;
     let newGold = (char.gold || 0) + cq.reward_gold;
     let newLevel = char.level;
@@ -201,15 +323,14 @@ router.post('/reward', auth, async (req, res) => {
     let newAtk = char.attack;
     let newDef = char.defense;
     let newPAtk = char.phys_attack, newPDef = char.phys_defense, newMAtk = char.mag_attack, newMDef = char.mag_defense, newCrit = char.crit_rate, newEvasion = char.evasion;
-    let leveledUp = false;
+    const levelBefore = newLevel;
 
-    // 성장률 테이블 참조 레벨업
     const [growthRowsQ] = await conn.query(
       'SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]
     );
     const gq = growthRowsQ[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
-    let expNeeded = newLevel * 100;
-    while (newExp >= expNeeded) {
+    let expNeeded = Math.floor(120 * newLevel + 3 * newLevel * newLevel);
+    while (newExp >= expNeeded && newLevel < 100) {
       newExp -= expNeeded;
       newLevel++;
       newMaxHp += Math.floor(gq.hp_per_level);
@@ -224,20 +345,25 @@ router.post('/reward', auth, async (req, res) => {
         newCrit += Math.floor(gq.crit_rate_per_10level);
         newEvasion += Math.floor(gq.evasion_per_10level);
       }
-      leveledUp = true;
-      expNeeded = newLevel * 100;
+      expNeeded = Math.floor(120 * newLevel + 3 * newLevel * newLevel);
     }
+    if (newLevel >= 100) { newLevel = 100; newExp = 0; }
+
+    const questLevelUps = newLevel - levelBefore;
 
     await conn.query(
-      'UPDATE characters SET exp = ?, gold = ?, level = ?, hp = ?, mp = ?, attack = ?, defense = ?, phys_attack = ?, phys_defense = ?, mag_attack = ?, mag_defense = ?, crit_rate = ?, evasion = ? WHERE id = ?',
-      [newExp, newGold, newLevel, newMaxHp, newMaxMp, newAtk, newDef, newPAtk, newPDef, newMAtk, newMDef, newCrit, newEvasion, char.id]
+      `UPDATE characters SET exp = ?, gold = ?, level = ?, hp = ?, mp = ?, attack = ?, defense = ?,
+       phys_attack = ?, phys_defense = ?, mag_attack = ?, mag_defense = ?, crit_rate = ?, evasion = ?,
+       skill_points = skill_points + ?, total_skill_points = total_skill_points + ?
+       WHERE id = ?`,
+      [newExp, newGold, newLevel, newMaxHp, newMaxMp, newAtk, newDef, newPAtk, newPDef, newMAtk, newMDef, newCrit, newEvasion,
+       questLevelUps, questLevelUps, char.id]
     );
 
-    if (leveledUp) {
+    if (questLevelUps > 0) {
       await conn.query('UPDATE characters SET current_hp = hp, current_mp = mp WHERE id = ?', [char.id]);
     }
 
-    // 아이템 보상
     let rewardItemName = null;
     if (cq.reward_item_id && cq.reward_item_qty > 0) {
       const [itemRows] = await conn.query('SELECT name FROM items WHERE id = ?', [cq.reward_item_id]);
@@ -250,8 +376,7 @@ router.post('/reward', auth, async (req, res) => {
       );
     }
 
-    // 레벨업으로 다른 레벨 퀘스트 완료 체크
-    if (leveledUp) {
+    if (questLevelUps > 0) {
       await conn.query(
         `UPDATE character_quests cq
          JOIN quests q ON cq.quest_id = q.id
@@ -268,7 +393,7 @@ router.post('/reward', auth, async (req, res) => {
 
     let msg = `[${cq.title}] 보상 수령! EXP +${cq.reward_exp}, Gold +${cq.reward_gold}`;
     if (rewardItemName) msg += `, ${rewardItemName} x${cq.reward_item_qty}`;
-    if (leveledUp) msg += ` (레벨 업! Lv.${newLevel})`;
+    if (questLevelUps > 0) msg += ` (레벨 업! Lv.${newLevel})`;
 
     res.json({
       message: msg,

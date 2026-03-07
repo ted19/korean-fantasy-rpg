@@ -264,7 +264,8 @@ router.post('/hunt', auth, async (req, res) => {
           ? (char.mag_attack + char.attack * 0.3)
           : (char.phys_attack + char.attack * 0.3);
         const skillAtkTotal = (skillAtk + atkBuff) * fortuneAtkMul;
-        dmg = Math.max(1, Math.floor(skillAtkTotal * skill.damage_multiplier) - Math.floor(monster.defense * 0.3) + Math.floor(Math.random() * 5) - 2);
+        const skillBase = Math.floor(skillAtkTotal * skill.damage_multiplier);
+        dmg = Math.max(1, Math.floor(skillBase * (100 / (100 + monster.defense * 1.2))) + Math.floor(Math.random() * 5) - 2);
         battleLog.push({
           text: `[${round}] ${char.name}의 [${skill.name}]! ${monster.name}에게 ${dmg} 데미지 (남은 HP: ${Math.max(0, monsterHp - dmg)})`,
           type: 'normal',
@@ -279,7 +280,7 @@ router.post('/hunt', auth, async (req, res) => {
           }
         }
       } else {
-        dmg = Math.max(1, Math.floor(totalAtk) - Math.floor(monster.defense * 0.3) + Math.floor(Math.random() * 5) - 2);
+        dmg = Math.max(1, Math.floor(Math.floor(totalAtk) * (100 / (100 + monster.defense * 1.2))) + Math.floor(Math.random() * 5) - 2);
         battleLog.push({
           text: `[${round}] ${char.name}의 공격! ${monster.name}에게 ${dmg} 데미지 (남은 HP: ${Math.max(0, monsterHp - dmg)})`,
           type: 'normal',
@@ -312,7 +313,7 @@ router.post('/hunt', auth, async (req, res) => {
 
         let sDmg;
         if (usedSkill) {
-          sDmg = Math.max(1, Math.floor(sm.attack * usedSkill.damage_multiplier) + Math.floor(Math.random() * 4) - 1);
+          sDmg = Math.max(1, Math.floor(Math.floor(sm.attack * usedSkill.damage_multiplier) * (100 / (100 + monster.defense * 1.2))) + Math.floor(Math.random() * 4) - 1);
           summonCooldowns[sm.id][usedSkill.id] = usedSkill.cooldown + 1;
           battleLog.push({
             text: `[${round}] ${sm.icon}${sm.name}의 [${usedSkill.name}]! ${monster.name}에게 ${sDmg} 데미지 (남은 HP: ${Math.max(0, monsterHp - sDmg)})`,
@@ -323,7 +324,7 @@ router.post('/hunt', auth, async (req, res) => {
             battleLog.push({ text: `  ${sm.name}이(가) 체력 ${usedSkill.heal_amount} 회복!`, type: 'heal' });
           }
         } else {
-          sDmg = Math.max(1, sm.attack + Math.floor(Math.random() * 4) - 1);
+          sDmg = Math.max(1, Math.floor(sm.attack * (100 / (100 + monster.defense * 1.2))) + Math.floor(Math.random() * 4) - 1);
           battleLog.push({
             text: `[${round}] ${sm.icon}${sm.name}의 공격! ${monster.name}에게 ${sDmg} 데미지 (남은 HP: ${Math.max(0, monsterHp - sDmg)})`,
             type: 'normal',
@@ -355,7 +356,7 @@ router.post('/hunt', auth, async (req, res) => {
       // 몬스터 공격 (방어력 스케일링 개선)
       const fortuneDefMul = 1 + fortuneDefBonus / 100;
       const totalDef = (char.defense + defBuff) * fortuneDefMul;
-      const mDmg = Math.max(1, monster.attack - Math.floor(totalDef * 0.7) + Math.floor(Math.random() * 4) - 1);
+      const mDmg = Math.max(1, Math.floor(monster.attack * (100 / (100 + totalDef * 1.2))) + Math.floor(Math.random() * 4) - 1);
       playerHp = Math.max(0, playerHp - mDmg);
       totalDmgTaken += mDmg;
       battleLog.push({
@@ -416,7 +417,7 @@ router.post('/hunt', auth, async (req, res) => {
         const summonExp = Math.floor(expGained * 0.7);
         for (const sm of activeSummons) {
           const newSmExp = (sm.exp || 0) + summonExp;
-          const expNeededSm = Math.floor(40 * sm.level + 0.25 * sm.level * sm.level);
+          const expNeededSm = Math.floor(60 * sm.level + 1.5 * sm.level * sm.level);
           if (newSmExp >= expNeededSm) {
             // 레벨업 (성장률 테이블 참조)
             const leftover = newSmExp - expNeededSm;
@@ -463,9 +464,9 @@ router.post('/hunt', auth, async (req, res) => {
         });
       }
 
-      // 레벨업 체크 (성장률 테이블 참조)
-      const expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
-      if (newExp >= expNeeded) {
+      // 레벨업 체크 (성장률 테이블 참조, 최대 Lv100)
+      const expNeeded = Math.floor(120 * newLevel + 3 * newLevel * newLevel);
+      if (newExp >= expNeeded && newLevel < 100) {
         newExp -= expNeeded;
         newLevel++;
         const [growthRows] = await conn.query(
@@ -598,6 +599,16 @@ router.post('/hunt', auth, async (req, res) => {
           [char.id, newLevel]
         );
       }
+    }
+
+    // 몬스터 도감 기록
+    if (victory && monster.id) {
+      await conn.query(
+        `INSERT INTO monster_bestiary (character_id, monster_id, kill_count)
+         VALUES (?, ?, 1)
+         ON DUPLICATE KEY UPDATE kill_count = kill_count + 1`,
+        [char.id, monster.id]
+      ).catch(() => {});
     }
 
     // 재료 드랍 처리
@@ -809,8 +820,8 @@ router.post('/srpg-result', auth, async (req, res) => {
         'SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]
       );
       const g2 = growthRows2[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
-      let expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
-      while (newExp >= expNeeded) {
+      let expNeeded = Math.floor(120 * newLevel + 3 * newLevel * newLevel);
+      while (newExp >= expNeeded && newLevel < 100) {
         newExp -= expNeeded;
         newLevel++;
         newMaxHp += Math.floor(g2.hp_per_level);
@@ -828,8 +839,9 @@ router.post('/srpg-result', auth, async (req, res) => {
         // 레벨업 시 HP/MP 최대치로 회복
         playerHp = newMaxHp;
         playerMp = newMaxMp;
-        expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
+        expNeeded = Math.floor(120 * newLevel + 3 * newLevel * newLevel);
       }
+      if (newLevel >= 100) { newLevel = 100; newExp = 0; }
 
       // 소환수 경험치 분배 (기여도 기반)
       if (activeSummonIds && activeSummonIds.length > 0) {
@@ -839,7 +851,7 @@ router.post('/srpg-result', auth, async (req, res) => {
           const sm = smRows[0];
           const summonExp = (summonExpMap && summonExpMap[smId]) ? summonExpMap[smId] : Math.floor(expGained * 0.7);
           let newSmExp = (sm.exp || 0) + summonExp;
-          const expNeededSm = Math.floor(40 * sm.level + 0.25 * sm.level * sm.level);
+          const expNeededSm = Math.floor(60 * sm.level + 1.5 * sm.level * sm.level);
           if (newSmExp >= expNeededSm) {
             const leftover = newSmExp - expNeededSm;
             const newSmLevel = sm.level + 1;
@@ -881,7 +893,7 @@ router.post('/srpg-result', auth, async (req, res) => {
           const merc = mRows[0];
           const mercExp = (mercExpMap && mercExpMap[mId]) ? mercExpMap[mId] : Math.floor(expGained * 0.5);
           let newMercExp = (merc.exp || 0) + mercExp;
-          const expNeededMerc = Math.floor(40 * merc.level + 0.25 * merc.level * merc.level);
+          const expNeededMerc = Math.floor(60 * merc.level + 1.5 * merc.level * merc.level);
           if (newMercExp >= expNeededMerc) {
             const leftover = newMercExp - expNeededMerc;
             const newMercLevel = merc.level + 1;
@@ -913,15 +925,16 @@ router.post('/srpg-result', auth, async (req, res) => {
           }
         }
       }
-      // 용병 피로도 차감 (전투 참여 시 1 소모)
-      if (activeMercenaryIds && activeMercenaryIds.length > 0) {
-        await conn.query(
-          `UPDATE character_mercenaries SET fatigue = GREATEST(0, fatigue - 1) WHERE id IN (?) AND character_id = ?`,
-          [activeMercenaryIds, char.id]
-        );
-      }
     } else {
       playerHp = 0;
+    }
+
+    // 용병 피로도 차감 (전투 참여 시 1 소모, 승패 무관)
+    if (activeMercenaryIds && activeMercenaryIds.length > 0) {
+      await conn.query(
+        `UPDATE character_mercenaries SET fatigue = GREATEST(0, fatigue - 1) WHERE id IN (?) AND character_id = ?`,
+        [activeMercenaryIds, char.id]
+      );
     }
 
     // 레벨업 횟수만큼 스킬포인트 지급
@@ -1065,7 +1078,7 @@ router.post('/srpg-result', auth, async (req, res) => {
         exp: s.exp,
         icon: s.icon,
         type: s.type,
-        expNeeded: Math.floor(40 * s.level + 0.25 * s.level * s.level),
+        expNeeded: Math.floor(60 * s.level + 1.5 * s.level * s.level),
       }));
     }
 
@@ -1091,7 +1104,7 @@ router.post('/srpg-result', auth, async (req, res) => {
       );
       mercenaryResults = mercList.map(m => ({
         id: m.id, templateId: m.template_id, name: m.name, level: m.level, exp: m.exp,
-        icon: m.icon, classType: m.class_type, expNeeded: Math.floor(40 * m.level + 0.25 * m.level * m.level),
+        icon: m.icon, classType: m.class_type, expNeeded: Math.floor(60 * m.level + 1.5 * m.level * m.level),
       }));
     }
 
@@ -1153,6 +1166,175 @@ router.post('/monster-drops', auth, async (req, res) => {
     res.json({ drops });
   } catch (err) {
     console.error('Monster drops error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// ========== 전투 세션 (새로고침/이탈 시 복귀) ==========
+
+// 전투 세션 저장
+router.post('/session/save', auth, async (req, res) => {
+  try {
+    const { battleType, context } = req.body;
+    const charId = req.selectedCharId || req.user.id;
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
+    const cid = chars[0].id;
+
+    await pool.query(
+      `INSERT INTO battle_sessions (character_id, battle_type, context_json)
+       VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE battle_type = VALUES(battle_type), context_json = VALUES(context_json), created_at = NOW()`,
+      [cid, battleType, JSON.stringify(context)]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Battle session save error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// 전투 세션 조회
+router.get('/session/check', auth, async (req, res) => {
+  try {
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.json({ session: null });
+    const cid = chars[0].id;
+
+    const [rows] = await pool.query(
+      'SELECT * FROM battle_sessions WHERE character_id = ?', [cid]
+    );
+    if (rows.length === 0) return res.json({ session: null });
+
+    // 24시간 초과 세션은 자동 삭제
+    const created = new Date(rows[0].created_at);
+    if (Date.now() - created.getTime() > 24 * 60 * 60 * 1000) {
+      await pool.query('DELETE FROM battle_sessions WHERE character_id = ?', [cid]);
+      return res.json({ session: null });
+    }
+
+    res.json({
+      session: {
+        battleType: rows[0].battle_type,
+        context: JSON.parse(rows[0].context_json),
+      },
+    });
+  } catch (err) {
+    console.error('Battle session check error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// 전투 세션 삭제
+router.post('/session/clear', auth, async (req, res) => {
+  try {
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length > 0) {
+      await pool.query('DELETE FROM battle_sessions WHERE character_id = ?', [chars[0].id]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Battle session clear error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// 전투 포기/패배/후퇴 패널티 적용
+router.post('/session/penalty', auth, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { penaltyType } = req.body; // 'abandon' | 'defeat' | 'retreat'
+    const [chars] = await conn.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) { conn.release(); return res.status(404).json({ message: '캐릭터 없음' }); }
+    const char = chars[0];
+
+    let goldLoss = 0, expLoss = 0, hpLoss = 0;
+    const currentGold = char.gold || 0;
+    const currentExp = char.exp || 0;
+    const currentHp = char.current_hp ?? char.hp;
+    const maxHp = char.hp;
+
+    if (penaltyType === 'abandon') {
+      // 전투 포기: HP 30% 감소, 골드 30% 차감, 경험치 15% 차감
+      goldLoss = Math.floor(currentGold * 0.3);
+      expLoss = Math.floor(currentExp * 0.15);
+      hpLoss = Math.floor(maxHp * 0.3);
+    } else if (penaltyType === 'defeat') {
+      // 패배: 골드 30% 차감, 경험치 10% 차감, HP 0
+      goldLoss = Math.floor(currentGold * 0.3);
+      expLoss = Math.floor(currentExp * 0.1);
+      hpLoss = currentHp; // HP 0
+    } else if (penaltyType === 'retreat') {
+      // 후퇴: 골드 10% 차감, 경험치 5% 차감
+      goldLoss = Math.floor(currentGold * 0.1);
+      expLoss = Math.floor(currentExp * 0.05);
+    }
+
+    const newGold = Math.max(0, currentGold - goldLoss);
+    const newExp = Math.max(0, currentExp - expLoss);
+    const newHp = penaltyType === 'defeat' ? 0 : Math.max(1, currentHp - hpLoss);
+
+    await conn.query(
+      'UPDATE characters SET gold = ?, exp = ?, current_hp = ? WHERE id = ?',
+      [newGold, newExp, newHp, char.id]
+    );
+
+    // 전투 세션도 삭제
+    await conn.query('DELETE FROM battle_sessions WHERE character_id = ?', [char.id]);
+
+    conn.release();
+    res.json({
+      success: true,
+      penalty: { goldLoss, expLoss, hpLoss, newGold, newExp, newHp },
+    });
+  } catch (err) {
+    conn.release();
+    console.error('Battle penalty error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// 후퇴 실패 기록 저장
+router.post('/session/retreat-failed', auth, async (req, res) => {
+  try {
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터 없음' });
+    const cid = chars[0].id;
+
+    // 기존 세션의 context_json에 retreatFailed: true 추가
+    const [rows] = await pool.query('SELECT * FROM battle_sessions WHERE character_id = ?', [cid]);
+    if (rows.length > 0) {
+      const ctx = JSON.parse(rows[0].context_json);
+      ctx.retreatFailed = true;
+      await pool.query('UPDATE battle_sessions SET context_json = ? WHERE character_id = ?', [JSON.stringify(ctx), cid]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Retreat failed save error:', err);
     res.status(500).json({ message: '서버 오류' });
   }
 });

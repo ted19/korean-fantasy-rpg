@@ -230,6 +230,7 @@
   justify-content: center;
   gap: 12px;
   padding: 12px 10px;
+  overflow: hidden;
   min-height: 340px;
 }
 
@@ -313,6 +314,35 @@
   50% { transform: scale(1.1); filter: drop-shadow(0 0 16px rgba(233,69,96,0.6)); }
 }
 
+/* 프롤로그 입장 연출 */
+.cb-side-player.entering {
+  animation: cbSlideFromLeft 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.cb-side-enemy.entering {
+  animation: cbSlideFromRight 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.cb-vs.entering {
+  opacity: 0;
+  animation: cbVsAppear 0.6s ease forwards 1.0s;
+}
+@keyframes cbSlideFromLeft {
+  0% { transform: translateX(-120%); opacity: 0; }
+  60% { opacity: 1; }
+  85% { transform: translateX(4%); }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes cbSlideFromRight {
+  0% { transform: translateX(120%); opacity: 0; }
+  60% { opacity: 1; }
+  85% { transform: translateX(-4%); }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes cbVsAppear {
+  0% { opacity: 0; transform: scale(2.5); }
+  60% { opacity: 1; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 /* ===== Unit Card (세로 직사각형) ===== */
 .cb-card {
   position: relative;
@@ -357,6 +387,41 @@
 }
 
 .cb-card.animating { animation: cardAttackShake 0.4s; }
+
+/* 정예 몬스터 카드 */
+.cb-card.elite {
+  overflow: visible;
+  border-color: var(--elite-color, #ef4444) !important;
+  box-shadow: 0 0 12px var(--elite-color, #ef4444), inset 0 0 8px rgba(0, 0, 0, 0.3);
+}
+.cb-card.elite::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--elite-color, #ef4444);
+  animation: eliteCardGlow 1.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes eliteCardGlow {
+  0%, 100% { box-shadow: 0 0 8px var(--elite-color, #ef4444); opacity: 0.6; }
+  50% { box-shadow: 0 0 20px var(--elite-color, #ef4444); opacity: 1; }
+}
+.cb-elite-badge {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 8px;
+  border-radius: 0 0 6px 6px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: #fff;
+  z-index: 5;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
 
 .cb-card.guarding {
   border-color: rgba(46, 213, 115, 0.5) !important;

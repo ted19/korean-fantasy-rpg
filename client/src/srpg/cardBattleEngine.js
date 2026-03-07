@@ -8,7 +8,7 @@
 
 // ========== 유닛 생성 ==========
 
-const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk' };
+const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
 
 export function createCardPlayerUnit(char, skills, passiveBonuses) {
   const classInfo = getClassInfo(char.class_type);
@@ -225,6 +225,7 @@ function getClassInfo(classType) {
     case '풍수사': return { defaultRow: 'back', rangeType: 'magic', icon: '🧙' };
     case '무당':  return { defaultRow: 'back', rangeType: 'magic', icon: '🔮' };
     case '승려':  return { defaultRow: 'front', rangeType: 'melee', icon: '📿' };
+    case '저승사자': return { defaultRow: 'front', rangeType: 'melee', icon: '💀' };
     default:      return { defaultRow: 'front', rangeType: 'melee', icon: '⚔️' };
   }
 }
@@ -269,29 +270,26 @@ export function getValidTargets(attacker, defenders, attackType) {
     return alive; // 원거리/마법: 모두 타겟 가능
   }
 
-  // 근거리: gridCol 기반 전열 판정
+  // 근거리: 행(gridRow)별로 가장 앞에 있는 유닛을 타겟 가능
   // 아군(player): gridCol 큰 쪽이 전열 (col2=전, col1=중, col0=후)
   // 적군(enemy):  gridCol 작은 쪽이 전열 (col0=전, col1=중, col2=후)
   const defTeam = alive[0]?.team;
   const isPlayerTeam = defTeam === 'player';
 
-  // 같은 gridRow에 있는 적 유닛들
-  const sameRow = alive.filter(u => u.gridRow === attacker.gridRow);
-
-  if (sameRow.length > 0) {
-    // 같은 행에서 가장 전열에 있는 col 찾기
-    const frontCol = isPlayerTeam
-      ? Math.max(...sameRow.map(u => u.gridCol))   // player: col 큰 쪽이 전열
-      : Math.min(...sameRow.map(u => u.gridCol));   // enemy: col 작은 쪽이 전열
-    const frontUnits = sameRow.filter(u => u.gridCol === frontCol);
-    return frontUnits;
+  // 각 행(gridRow)에서 가장 전열에 있는 유닛만 타겟 가능
+  const rowMap = {};
+  for (const u of alive) {
+    const r = u.gridRow;
+    if (!(r in rowMap)) {
+      rowMap[r] = u;
+    } else {
+      const cur = rowMap[r];
+      if (isPlayerTeam ? u.gridCol > cur.gridCol : u.gridCol < cur.gridCol) {
+        rowMap[r] = u;
+      }
+    }
   }
-
-  // 같은 행에 적이 없으면 → 전체에서 가장 전열 유닛만 타겟
-  const frontCol = isPlayerTeam
-    ? Math.max(...alive.map(u => u.gridCol))
-    : Math.min(...alive.map(u => u.gridCol));
-  return alive.filter(u => u.gridCol === frontCol);
+  return Object.values(rowMap);
 }
 
 export function getHealTargets(healer, allies) {
@@ -608,63 +606,158 @@ export function decideAIAction(unit, allUnits) {
   const attackType = (unit.rangeType === 'ranged' || unit.rangeType === 'magic') ? unit.rangeType : 'melee';
   const validTargets = getValidTargets(unit, enemies, attackType);
 
+  // 스킬 사거리에 맞는 타겟 반환
+  const getSkillTargets = (skill) => {
+    const range = (skill.range_val || skill.range || 1);
+    const skillType = range >= 2 ? 'ranged' : attackType;
+    return getValidTargets(unit, enemies, skillType);
+  };
+
   // 사용 가능한 스킬
   const usableSkills = unit.skills.filter(s =>
     s.currentCooldown <= 0 && (s.mp_cost || 0) <= unit.mp
   );
 
-  // 지원형: 치유 우선
-  if (unit.aiType === 'support') {
-    const healSkill = usableSkills.find(s => s.type === 'heal');
-    const hurtAlly = allies.find(u => u.hp < u.maxHp * 0.6);
-    if (healSkill && hurtAlly) {
-      return { action: 'skill', skill: healSkill, target: hurtAlly };
-    }
-  }
-
-  // 방어형: 가끔 수호
-  if (unit.aiType === 'defensive' && Math.random() < 0.3) {
-    const weakAlly = allies.find(u => u.hp < u.maxHp * 0.4 && u.id !== unit.id && u.row === 'front');
-    if (weakAlly) {
-      return { action: 'guard', target: weakAlly };
-    }
-  }
-
-  // 보스: 스킬 우선
-  if (unit.aiType === 'boss' && usableSkills.length > 0) {
-    const aoeSkill = usableSkills.find(s => s.type === 'aoe');
-    if (aoeSkill && enemies.length >= 2) {
-      return { action: 'skill', skill: aoeSkill, target: enemies[0] };
-    }
-    const atkSkill = usableSkills.find(s => s.type === 'attack');
-    if (atkSkill && validTargets.length > 0) {
-      const target = validTargets.reduce((a, b) => a.hp < b.hp ? a : b);
-      return { action: 'skill', skill: atkSkill, target };
-    }
-  }
-
-  // 겁쟁이: HP 낮으면 수호/치유
-  if (unit.aiType === 'coward' && unit.hp < unit.maxHp * 0.3) {
+  // --- 긴급 치유 (모든 AI 타입 공통: 자신 HP < 25%일 때) ---
+  if (unit.hp < unit.maxHp * 0.25) {
     const healSkill = usableSkills.find(s => s.type === 'heal');
     if (healSkill) return { action: 'skill', skill: healSkill, target: unit };
   }
 
-  // 공격형/원거리: 스킬 공격 또는 기본 공격
-  if (usableSkills.length > 0 && Math.random() < 0.5) {
-    const atkSkills = usableSkills.filter(s => s.type === 'attack' || s.type === 'aoe');
-    if (atkSkills.length > 0) {
-      const skill = atkSkills[Math.floor(Math.random() * atkSkills.length)];
-      if (skill.type === 'aoe') {
-        return { action: 'skill', skill, target: enemies[0] };
-      }
-      const target = validTargets[Math.floor(Math.random() * validTargets.length)];
-      return { action: 'skill', skill, target };
+  // --- 지원형 AI ---
+  if (unit.aiType === 'support') {
+    // 1) 치유 우선 (아군 HP < 50%)
+    const healSkill = usableSkills.find(s => s.type === 'heal');
+    const hurtAlly = allies.sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp)).find(u => u.hp < u.maxHp * 0.5);
+    if (healSkill && hurtAlly) {
+      return { action: 'skill', skill: healSkill, target: hurtAlly };
+    }
+    // 2) 버프 (아군에게)
+    const buffSkill = usableSkills.find(s => s.type === 'buff');
+    if (buffSkill) {
+      const buffTarget = allies.find(u => u.id !== unit.id && !u.buffs.some(b => b.stat === buffSkill.buff_stat)) || allies[0];
+      if (buffTarget) return { action: 'skill', skill: buffSkill, target: buffTarget };
+    }
+    // 3) 디버프 (가장 강한 적에게)
+    const debuffSkill = usableSkills.find(s => s.type === 'debuff');
+    if (debuffSkill) {
+      const debuffTarget = enemies.sort((a, b) => b.attack - a.attack).find(u => !u.debuffs.some(d => d.stat === debuffSkill.buff_stat));
+      if (debuffTarget) return { action: 'skill', skill: debuffSkill, target: debuffTarget };
     }
   }
 
-  // 기본 공격
+  // --- 방어형 AI: 수호 (HP < 50% 아군 보호) ---
+  if (unit.aiType === 'defensive') {
+    const weakAlly = allies.find(u => u.hp < u.maxHp * 0.5 && u.id !== unit.id);
+    if (weakAlly && Math.random() < 0.6) {
+      return { action: 'guard', target: weakAlly };
+    }
+    // 방어형도 버프 사용 가능
+    const buffSkill = usableSkills.find(s => s.type === 'buff');
+    if (buffSkill && Math.random() < 0.3) {
+      const buffTarget = weakAlly || allies.find(u => u.id !== unit.id) || unit;
+      return { action: 'skill', skill: buffSkill, target: buffTarget };
+    }
+  }
+
+  // --- 보스 AI: HP 비율에 따른 전략 ---
+  if (unit.aiType === 'boss') {
+    const hpRatio = unit.hp / unit.maxHp;
+    // HP < 30%: 힐 시도 (있으면)
+    if (hpRatio < 0.3) {
+      const healSkill = usableSkills.find(s => s.type === 'heal');
+      if (healSkill) return { action: 'skill', skill: healSkill, target: unit };
+    }
+    // HP < 50%: 버프 시도 (40% 확률)
+    if (hpRatio < 0.5 && Math.random() < 0.4) {
+      const buffSkill = usableSkills.find(s => s.type === 'buff');
+      if (buffSkill) return { action: 'skill', skill: buffSkill, target: unit };
+    }
+    // AOE 우선 (적 2명 이상)
+    const aoeSkill = usableSkills.find(s => s.type === 'aoe');
+    if (aoeSkill && enemies.length >= 2) {
+      return { action: 'skill', skill: aoeSkill, target: enemies[0] };
+    }
+    // 디버프 (가장 강한 적, 30% 확률)
+    const debuffSkill = usableSkills.find(s => s.type === 'debuff');
+    if (debuffSkill && Math.random() < 0.3) {
+      const debuffTarget = enemies.sort((a, b) => b.attack - a.attack)[0];
+      if (debuffTarget) return { action: 'skill', skill: debuffSkill, target: debuffTarget };
+    }
+    // 공격 스킬 (가장 강한 스킬 선택)
+    const atkSkills = usableSkills.filter(s => s.type === 'attack');
+    if (atkSkills.length > 0 && validTargets.length > 0) {
+      const bestSkill = atkSkills.sort((a, b) => (b.damage_multiplier || 1) - (a.damage_multiplier || 1))[0];
+      const sTargets = getSkillTargets(bestSkill);
+      const target = (sTargets.length > 0 ? sTargets : validTargets).reduce((a, b) => a.hp < b.hp ? a : b);
+      return { action: 'skill', skill: bestSkill, target };
+    }
+  }
+
+  // --- 겁쟁이 AI: HP 낮으면 치유/방어, 높으면 공격 ---
+  if (unit.aiType === 'coward') {
+    if (unit.hp < unit.maxHp * 0.4) {
+      const healSkill = usableSkills.find(s => s.type === 'heal');
+      if (healSkill) return { action: 'skill', skill: healSkill, target: unit };
+      // 힐 없으면 가장 약한 적 공격
+      if (validTargets.length > 0) {
+        const weakest = validTargets.reduce((a, b) => a.hp < b.hp ? a : b);
+        return { action: 'attack', target: weakest };
+      }
+    }
+  }
+
+  // --- 원거리 AI: 후열 우선 타겟 + 스킬 적극 사용 ---
+  if (unit.aiType === 'ranged' && usableSkills.length > 0) {
+    // AOE 우선
+    const aoeSkill = usableSkills.find(s => s.type === 'aoe');
+    if (aoeSkill && enemies.length >= 3) {
+      return { action: 'skill', skill: aoeSkill, target: enemies[0] };
+    }
+    // 공격 스킬 (HP 낮은 적 우선)
+    const atkSkills = usableSkills.filter(s => s.type === 'attack');
+    if (atkSkills.length > 0) {
+      const skill = atkSkills.sort((a, b) => (b.damage_multiplier || 1) - (a.damage_multiplier || 1))[0];
+      const sTargets = getSkillTargets(skill);
+      if (sTargets.length > 0) {
+        const target = sTargets.reduce((a, b) => a.hp < b.hp ? a : b);
+        return { action: 'skill', skill, target };
+      }
+    }
+  }
+
+  // --- 공통: 디버프/버프 사용 (30% 확률) ---
+  if (usableSkills.length > 0 && Math.random() < 0.3) {
+    const debuffSkill = usableSkills.find(s => s.type === 'debuff');
+    if (debuffSkill) {
+      const debuffTarget = enemies.find(u => !u.debuffs.some(d => d.stat === debuffSkill.buff_stat));
+      if (debuffTarget) return { action: 'skill', skill: debuffSkill, target: debuffTarget };
+    }
+    const buffSkill = usableSkills.find(s => s.type === 'buff');
+    if (buffSkill) {
+      const buffTarget = allies.find(u => !u.buffs.some(b => b.stat === buffSkill.buff_stat)) || unit;
+      return { action: 'skill', skill: buffSkill, target: buffTarget };
+    }
+  }
+
+  // --- 공통: 스킬 공격 (50% 확률) ---
+  if (usableSkills.length > 0 && Math.random() < 0.5) {
+    const atkSkills = usableSkills.filter(s => s.type === 'attack' || s.type === 'aoe');
+    if (atkSkills.length > 0) {
+      const skill = atkSkills.sort((a, b) => (b.damage_multiplier || 1) - (a.damage_multiplier || 1))[0];
+      if (skill.type === 'aoe') {
+        return { action: 'skill', skill, target: enemies[0] };
+      }
+      const sTargets = getSkillTargets(skill);
+      if (sTargets.length > 0) {
+        const target = sTargets.reduce((a, b) => a.hp < b.hp ? a : b);
+        return { action: 'skill', skill, target };
+      }
+    }
+  }
+
+  // --- 기본 공격 ---
   if (validTargets.length > 0) {
-    // 가장 HP 낮은 대상 우선
     const target = unit.aiType === 'aggressive'
       ? validTargets.reduce((a, b) => a.hp < b.hp ? a : b)
       : validTargets[Math.floor(Math.random() * validTargets.length)];
