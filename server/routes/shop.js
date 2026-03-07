@@ -26,47 +26,55 @@ function auth(req, res, next) {
       character_id INT NOT NULL,
       item_id INT NOT NULL,
       refresh_at DATETIME NOT NULL,
+      sold TINYINT(1) NOT NULL DEFAULT 0,
       INDEX idx_char_refresh (character_id, refresh_at)
     )
   `).catch(() => {});
   // character_id 컬럼이 없을 수 있으므로 추가 시도
   await pool.query(`ALTER TABLE shop_stock ADD COLUMN character_id INT NOT NULL DEFAULT 0 AFTER id`).catch(() => {});
   await pool.query(`ALTER TABLE shop_stock ADD INDEX idx_char_refresh (character_id, refresh_at)`).catch(() => {});
+  await pool.query(`ALTER TABLE shop_stock ADD COLUMN sold TINYINT(1) NOT NULL DEFAULT 0`).catch(() => {});
 })();
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 60 * 1000; // 5시간
-const SHOP_ITEM_COUNT = 5;
+const SHOP_ITEM_COUNT = 8;
 
 async function refreshShopStock(conn, characterId, classType) {
   const now = Date.now();
   const epoch = new Date('2025-01-01T00:00:00Z').getTime();
   const windowStart = epoch + Math.floor((now - epoch) / REFRESH_INTERVAL_MS) * REFRESH_INTERVAL_MS;
   const refreshAt = new Date(windowStart + REFRESH_INTERVAL_MS);
+  const refreshAtStr = refreshAt.toISOString().slice(0, 19).replace('T', ' ');
 
   // 이미 현재 윈도우 재고가 있는지 확인 (캐릭터별)
   const [existing] = await conn.query(
     'SELECT id FROM shop_stock WHERE character_id = ? AND refresh_at = ? LIMIT 1',
-    [characterId, refreshAt]
+    [characterId, refreshAtStr]
   );
   if (existing.length > 0) return refreshAt;
 
   // 해당 캐릭터의 기존 재고 삭제
   await conn.query('DELETE FROM shop_stock WHERE character_id = ?', [characterId]);
 
-  // 직업에 맞는 장비 + 물약 풀에서 랜덤 5개 선택
-  // class_restriction이 NULL이거나 캐릭터 직업과 일치하는 아이템만
+  // 캐릭터 레벨에 맞는 장비 + 물약에서 랜덤 선택
+  // 현재 레벨 +10 범위까지의 아이템만 표시 (너무 높은 장비 제외)
+  const [charRow] = await conn.query('SELECT level FROM characters WHERE id = ?', [characterId]);
+  const charLevel = charRow.length > 0 ? charRow[0].level : 1;
+  const maxItemLevel = Math.min(100, charLevel + 10);
+
   const [candidates] = await conn.query(
     `SELECT id FROM items
      WHERE (class_restriction IS NULL OR class_restriction = ?)
        AND type != 'cosmetic'
+       AND required_level <= ?
+       AND IFNULL(grade, '일반') IN ('일반', '고급')
      ORDER BY RAND()
      LIMIT ?`,
-    [classType, SHOP_ITEM_COUNT]
+    [classType, maxItemLevel, SHOP_ITEM_COUNT]
   );
 
   if (candidates.length > 0) {
-    const ts = refreshAt.toISOString().slice(0, 19).replace('T', ' ');
-    const values = candidates.map(r => `(${characterId}, ${r.id}, '${ts}')`).join(',');
+    const values = candidates.map(r => `(${characterId}, ${r.id}, '${refreshAtStr}')`).join(',');
     await conn.query(`INSERT INTO shop_stock (character_id, item_id, refresh_at) VALUES ${values}`);
   }
 
@@ -90,7 +98,7 @@ router.get('/items', auth, async (req, res) => {
     const [items] = await pool.query(
       `SELECT i.* FROM items i
        JOIN shop_stock ss ON i.id = ss.item_id
-       WHERE ss.character_id = ?
+       WHERE ss.character_id = ? AND ss.sold = 0
        ORDER BY i.type, i.required_level, i.price`,
       [char.id]
     );
@@ -192,9 +200,9 @@ router.post('/buy', auth, async (req, res) => {
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
-    // 상점 재고에 있는 아이템인지 확인
+    // 상점 재고에 있는 아이템인지 확인 (sold=0인 것만)
     const [stockCheck] = await conn.query(
-      'SELECT id FROM shop_stock WHERE character_id = ? AND item_id = ?',
+      'SELECT id FROM shop_stock WHERE character_id = ? AND item_id = ? AND sold = 0',
       [char.id, itemId]
     );
     if (stockCheck.length === 0) return res.status(400).json({ message: '상점에 해당 아이템이 없습니다.' });
@@ -248,9 +256,9 @@ router.post('/buy', auth, async (req, res) => {
       }
     }
 
-    // 상점 재고에서 해당 아이템 제거 (구매 후 사라짐)
+    // 상점 재고에서 판매 완료 처리
     await conn.query(
-      'DELETE FROM shop_stock WHERE character_id = ? AND item_id = ? LIMIT 1',
+      'UPDATE shop_stock SET sold = 1 WHERE character_id = ? AND item_id = ? AND sold = 0 LIMIT 1',
       [char.id, item.id]
     );
 
@@ -300,33 +308,47 @@ router.post('/sell', auth, async (req, res) => {
 
     const inv = invRows[0];
 
-    // 장착 중 확인 (equipment 테이블)
+    // 같은 item_id의 장착 개수 합산
+    let equippedCount = 0;
+
     const [equipCheck] = await conn.query(
-      'SELECT id FROM equipment WHERE character_id = ? AND item_id = ?',
+      'SELECT COUNT(*) as cnt FROM equipment WHERE character_id = ? AND item_id = ?',
       [char.id, inv.item_id]
     );
-    if (equipCheck.length > 0) {
-      return res.status(400).json({ message: '장착 중인 아이템은 해제 후 판매하세요.' });
-    }
+    equippedCount += equipCheck[0].cnt;
 
-    // 소환수 장착 중 확인
     const [summonEquip] = await conn.query(
-      `SELECT se.id FROM summon_equipment se
+      `SELECT COUNT(*) as cnt FROM summon_equipment se
        JOIN character_summons cs ON se.summon_id = cs.id
        WHERE cs.character_id = ? AND se.item_id = ?`,
       [char.id, inv.item_id]
     );
-    if (summonEquip.length > 0) {
-      return res.status(400).json({ message: '소환수가 장착 중인 아이템은 해제 후 판매하세요.' });
-    }
+    equippedCount += summonEquip[0].cnt;
 
-    // 코스메틱 장착 중 확인
-    const [cosmeticEquip] = await conn.query(
-      'SELECT id FROM equipped_cosmetics WHERE character_id = ? AND item_id = ?',
+    const [mercEquip] = await conn.query(
+      `SELECT COUNT(*) as cnt FROM mercenary_equipment me
+       JOIN character_mercenaries cm ON me.mercenary_id = cm.id
+       WHERE cm.character_id = ? AND me.item_id = ?`,
       [char.id, inv.item_id]
     );
-    if (cosmeticEquip.length > 0) {
-      return res.status(400).json({ message: '장착 중인 코스메틱은 해제 후 판매하세요.' });
+    equippedCount += mercEquip[0].cnt;
+
+    const [cosmeticEquip] = await conn.query(
+      'SELECT COUNT(*) as cnt FROM equipped_cosmetics WHERE character_id = ? AND item_id = ?',
+      [char.id, inv.item_id]
+    );
+    equippedCount += cosmeticEquip[0].cnt;
+
+    // 같은 item_id의 인벤토리 총 보유 수 확인
+    const [totalInv] = await conn.query(
+      'SELECT COUNT(*) as cnt FROM inventory WHERE character_id = ? AND item_id = ?',
+      [char.id, inv.item_id]
+    );
+    const totalOwned = totalInv[0].cnt;
+
+    // 판매 후 장착 수보다 보유 수가 적어지면 차단
+    if (totalOwned <= equippedCount) {
+      return res.status(400).json({ message: '장착 중인 아이템은 해제 후 판매하세요.' });
     }
 
     await conn.beginTransaction();

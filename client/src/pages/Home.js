@@ -49,6 +49,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [returnStageGroupKey, setReturnStageGroupKey] = useState(null);
   const [battleStageGroup, setBattleStageGroup] = useState(null);
   const [battleStageMonsters, setBattleStageMonsters] = useState(null);
+  const [battleStageCleared, setBattleStageCleared] = useState(false);
   const [battleBlockMsg, setBattleBlockMsg] = useState(null);
   const [specialBattleCtx, setSpecialBattleCtx] = useState(null);
   const [returnSpecialType, setReturnSpecialType] = useState(null);
@@ -58,6 +59,14 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [battleResumePrompt, setBattleResumePrompt] = useState(null); // 전투 복귀 프롬프트
   const savedEnemySetupRef = React.useRef(null); // 정예 리롤 방지용 적 구성
   const savedRetreatFailedRef = React.useRef(false); // 후퇴 실패 기록
+  const [contentCharges, setContentCharges] = useState({}); // { stage_gojoseon: {charges,maxCharges,cooldown}, dungeon_cave: {...}, ... }
+
+  const loadContentCharges = async () => {
+    try {
+      const res = await api.get('/stage/charges');
+      setContentCharges(res.data);
+    } catch {}
+  };
 
   const loadMySummons = async () => {
     try {
@@ -82,6 +91,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   useEffect(() => {
     loadMySummons();
     loadMyMercenaries();
+    loadContentCharges();
     // 전투 세션 복구 체크
     const checkBattleSession = async () => {
       try {
@@ -93,6 +103,14 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     };
     if (character.prologue_cleared === 1) checkBattleSession();
   }, []); // eslint-disable-line
+
+  // 입장 횟수 쿨타임 자동 갱신 (60초마다)
+  useEffect(() => {
+    const hasCooldown = Object.values(contentCharges).some(c => c.charges === 0);
+    if (!hasCooldown || fighting || srpgBattle) return;
+    const interval = setInterval(loadContentCharges, 60000);
+    return () => clearInterval(interval);
+  }, [contentCharges, fighting, srpgBattle]); // eslint-disable-line
 
   // 캐릭터 상태 전체 갱신
   const refreshCharState = async () => {
@@ -270,12 +288,19 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
         return;
       }
-      // 던전 전투 시 티켓 소모
+      // 던전 전투: 티켓 소모 → 입장 횟수 소모 (티켓 먼저 체크)
       if (isDungeon && dungeonKey) {
         try {
           await api.post('/dungeon/use-ticket', { dungeonKey });
         } catch (err) {
           setBattleBlockMsg(err.response?.data?.message || '던전 티켓이 부족합니다!');
+          return;
+        }
+        try {
+          await api.post('/stage/use-charge', { contentType: `dungeon_${dungeonKey}_${stage?.stageNumber || 1}` });
+          loadContentCharges();
+        } catch (err) {
+          setBattleBlockMsg(err.response?.data?.message || '던전 입장 횟수를 모두 소진했습니다!');
           return;
         }
       }
@@ -306,7 +331,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     saveBattleSession(bType, { dungeonKey, stage, specialCtx: specialCtx || null });
   };
 
-  const handleStartStageBattle = async (groupKey, stage, monsters, specialCtx) => {
+  const handleStartStageBattle = async (groupKey, stage, monsters, specialCtx, isCleared) => {
     if (fighting || srpgBattle) return;
     if (await checkFormationEmpty()) {
       setBattleBlockMsg('__FORMATION__');
@@ -323,6 +348,16 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
       return;
     }
+    // 스테이지 입장 횟수 소모
+    if (!isSpecial) {
+      try {
+        await api.post('/stage/use-charge', { contentType: `stage_${groupKey}_${stage.stageNumber}` });
+        loadContentCharges();
+      } catch (err) {
+        setBattleBlockMsg(err.response?.data?.message || '스테이지 입장 횟수를 모두 소진했습니다!');
+        return;
+      }
+    }
     try {
       const stRes = await api.post('/stage/spend-stamina', { cost: staminaCost });
       handleCharStateUpdate({ stamina: stRes.data.stamina, maxStamina: stRes.data.maxStamina, lastStaminaTime: stRes.data.last_stamina_time || new Date().toISOString() });
@@ -337,6 +372,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     setBattleStage(stage);
     setBattleStageGroup(groupKey);
     setBattleStageMonsters(monsters);
+    setBattleStageCleared(!!isCleared);
     if (specialCtx) {
       setSpecialBattleCtx(specialCtx);
       setReturnSpecialType(specialCtx.type);
@@ -416,6 +452,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     await refreshCharState();
     await loadMySummons();
     await loadMyMercenaries();
+    await loadContentCharges();
 
     if (result === 'retreat') {
       addLog('전투에서 후퇴했습니다.', 'system');
@@ -467,6 +504,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           onLog={addLog}
           savedEnemySetup={savedEnemySetupRef.current}
           savedRetreatFailed={savedRetreatFailedRef.current}
+          isStageCleared={battleStageCleared}
         />
       </div>
     );
@@ -495,7 +533,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     );
   }
 
-  // SRPG 전투 모드 (던전)
+  // SRPG 전투 모드 (던전 - 2D 픽셀아트 맵)
   if (srpgBattle && battleLocation) {
     const activeSummonData = mySummons.filter(s => activeSummonIds.includes(s.id));
     return (
@@ -511,6 +549,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           activeMercenaries={myMercenaries}
           onBattleEnd={handleSrpgBattleEnd}
           onLog={addLog}
+          use2DMap={true}
           savedRetreatFailed={savedRetreatFailedRef.current}
         />
       </div>
@@ -580,6 +619,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
             onStartStageBattle={handleStartStageBattle}
             returnGroupKey={returnStageGroupKey}
             onReturnHandled={() => setReturnStageGroupKey(null)}
+            contentCharges={contentCharges}
           />
         );
       case 'dungeon':
@@ -592,6 +632,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
             onStartBattle={handleStartBattle}
             returnDungeonKey={returnDungeonKey}
             onReturnHandled={() => setReturnDungeonKey(null)}
+            contentCharges={contentCharges}
           />
         );
       case 'special':
@@ -725,19 +766,36 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       {/* 전투 불가 팝업 */}
       {battleBlockMsg && (
         <div className="battle-block-overlay" onClick={() => setBattleBlockMsg(null)}>
-          <div className="battle-block-popup" onClick={e => e.stopPropagation()}>
+          <div className={`battle-block-popup ${battleBlockMsg === '__FORMATION__' ? 'formation-popup' : ''}`} onClick={e => e.stopPropagation()}>
             {battleBlockMsg === '__FORMATION__' ? (
               <>
-                <div className="battle-block-icon">🛡️</div>
-                <div className="battle-block-title">진영 편성 필요</div>
-                <div className="battle-block-msg">진영에 배치된 유닛이 없습니다!{'\n'}진영 편성에서 유닛을 배치한 후 전투를 시작하세요.</div>
-                <div className="battle-block-actions">
-                  <button className="battle-block-btn formation-go-btn" onClick={() => {
-                    setBattleBlockMsg(null);
-                    setHomeInitialTab('formation');
-                    setCurrentLocation('home');
-                  }}>진영 편성으로 이동</button>
-                  <button className="battle-block-btn" onClick={() => setBattleBlockMsg(null)}>닫기</button>
+                <div className="formation-popup-bg">
+                  <img src="/ui/formation_required_bg.png" alt="" />
+                  <div className="formation-popup-bg-overlay" />
+                </div>
+                <div className="formation-popup-content">
+                  <div className="formation-popup-icon-wrap">
+                    <div className="formation-popup-icon-glow" />
+                    <img src="/ui/tab_formation_icon.png" alt="" className="formation-popup-icon" onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }} />
+                    <span className="formation-popup-icon-fallback" style={{display:'none'}}>&#x2694;</span>
+                  </div>
+                  <div className="formation-popup-title">진영 편성 필요</div>
+                  <div className="formation-popup-divider"><span /></div>
+                  <div className="formation-popup-desc">전투에 출전할 진영이 구성되지 않았습니다.<br/>유닛을 배치하여 전략적 진형을 완성하세요.</div>
+                  <div className="formation-popup-grid-preview">
+                    {[...Array(9)].map((_, i) => <div key={i} className={`formation-preview-cell ${i === 4 ? 'center' : ''}`}><span className="formation-cell-pulse" /></div>)}
+                  </div>
+                  <div className="battle-block-actions">
+                    <button className="formation-popup-go-btn" onClick={() => {
+                      setBattleBlockMsg(null);
+                      setHomeInitialTab('formation');
+                      setCurrentLocation('home');
+                    }}>
+                      <span className="formation-go-icon">&#x2694;</span>
+                      진영 편성하기
+                    </button>
+                    <button className="formation-popup-close-btn" onClick={() => setBattleBlockMsg(null)}>닫기</button>
+                  </div>
                 </div>
               </>
             ) : (

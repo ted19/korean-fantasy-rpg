@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 
 const ELEMENT_INFO = {
@@ -28,9 +28,16 @@ const CLASS_INFO = {
     icon: '☸️',
     image: '/characters/monk_full.png',
   },
+  '저승사자': {
+    description: '이승과 저승의 경계에 선 사신. 높은 공격력과 치명타로 적을 베지만 방어가 약하다.',
+    stats: { hp: 90, mp: 90, phys_attack: 12, mag_attack: 12, phys_defense: 2, mag_defense: 4, crit_rate: 12, evasion: 10 },
+    icon: '💀',
+    image: '/characters/reaper_full.png',
+    forceElement: 'neutral',
+  },
 };
 
-const statMax = { hp: 120, mp: 120, phys_attack: 12, mag_attack: 12, phys_defense: 11, mag_defense: 5, crit_rate: 10, evasion: 8 };
+const statMax = { hp: 120, mp: 120, phys_attack: 12, mag_attack: 12, phys_defense: 11, mag_defense: 6, crit_rate: 12, evasion: 10 };
 const statLabels = { hp: 'HP', mp: 'MP', phys_attack: '물공', mag_attack: '마공', phys_defense: '물방', mag_defense: '마방', crit_rate: '치명', evasion: '회피' };
 const statColors = { hp: '#4ade80', mp: '#60a5fa', phys_attack: '#f87171', mag_attack: '#818cf8', phys_defense: '#fbbf24', mag_defense: '#94a3b8', crit_rate: '#fb923c', evasion: '#2dd4bf' };
 
@@ -38,6 +45,19 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
   const [name, setName] = useState('');
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
+
+  const bottomRef = useRef(null);
+
+  const handleClassSelect = (className) => {
+    setSelectedClass(className);
+    if (CLASS_INFO[className]?.forceElement) {
+      setSelectedElement(CLASS_INFO[className].forceElement);
+    }
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+  const isElementLocked = selectedClass && CLASS_INFO[selectedClass]?.forceElement;
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [bgLoaded, setBgLoaded] = useState(false);
@@ -113,7 +133,7 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
             <div
               key={className}
               className={`create-class-card ${selectedClass === className ? 'selected' : ''}`}
-              onClick={() => setSelectedClass(className)}
+              onClick={() => handleClassSelect(className)}
             >
               <div className="create-class-portrait">
                 <img
@@ -149,16 +169,21 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
         </div>
 
         {/* 속성 선택 */}
-        <div className="create-section-label">속성 선택</div>
+        <div className="create-section-label">
+          속성 선택
+          {isElementLocked && <span style={{ fontSize: 12, color: '#ef4444', marginLeft: 8 }}>(저승사자는 중립 속성 고정)</span>}
+        </div>
         <div className="create-element-grid">
           {Object.entries(ELEMENT_INFO).map(([key, el]) => (
             <div
               key={key}
-              className={`create-element-card ${selectedElement === key ? 'selected' : ''}`}
-              onClick={() => setSelectedElement(key)}
+              className={`create-element-card ${selectedElement === key ? 'selected' : ''} ${isElementLocked && key !== selectedElement ? 'locked' : ''}`}
+              onClick={() => !isElementLocked && setSelectedElement(key)}
               style={{
                 borderColor: selectedElement === key ? el.color : undefined,
                 boxShadow: selectedElement === key ? `0 0 20px ${el.color}20, inset 0 0 20px ${el.color}08` : undefined,
+                opacity: isElementLocked && key !== selectedElement ? 0.3 : undefined,
+                pointerEvents: isElementLocked && key !== selectedElement ? 'none' : undefined,
               }}
             >
               <div className="create-element-icon">{el.icon}</div>
@@ -200,6 +225,7 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
             )}
           </button>
         </form>
+        <div ref={bottomRef} />
       </div>
     </div>
   );

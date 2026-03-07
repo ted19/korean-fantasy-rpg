@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Nav, Row, Col, Card, Badge, ProgressBar, Button } from 'react-bootstrap';
 import api from '../api';
 import Equipment from './Equipment';
@@ -17,6 +17,7 @@ const CLASS_IMAGES = {
   '풍수사': '/characters/pungsu_full.png',
   '무당': '/characters/mudang_full.png',
   '승려': '/characters/monk_full.png',
+  '저승사자': '/characters/reaper_full.png',
 };
 
 const SKILL_TYPE_ICONS = { attack: '⚔️', heal: '💚', buff: '🔺', debuff: '🔻' };
@@ -50,7 +51,8 @@ const ELEMENT_INFO = {
 const CLASS_RANGE_TYPE = {
   '풍수사': { type: '마법형', icon: '🔮', color: '#a78bfa' },
   '무당': { type: '마법형', icon: '🔮', color: '#a78bfa' },
-  '승려': { type: '근거리', icon: '👊', color: '#f97316' },
+  '승려': { type: '근거리', icon: '👊', color: '#fb923c' },
+  '저승사자': { type: '근거리', icon: '💀', color: '#c084fc' },
 };
 
 function SummonImg({ src, fallback, className }) {
@@ -66,7 +68,7 @@ function SkillIcon({ src, fallback, className }) {
 }
 
 const RANGE_TYPE_INFO = {
-  melee: { type: '근거리', icon: '👊', color: '#f97316' },
+  melee: { type: '근거리', icon: '👊', color: '#fb923c' },
   ranged: { type: '원거리', icon: '🏹', color: '#22d3ee' },
   magic: { type: '마법형', icon: '🔮', color: '#a78bfa' },
 };
@@ -150,25 +152,38 @@ function CosmeticSection({ character, mercenaries, onLog }) {
 function ContentGuide({ onNavigateVillage }) {
   const [guide, setGuide] = useState(null);
   const [collapsed, setCollapsed] = useState(true);
+  const [msgIdx, setMsgIdx] = useState(0);
 
   useEffect(() => {
     api.get('/characters/daily-guide').then(r => setGuide(r.data)).catch(() => {});
   }, []);
 
-  if (!guide) return null;
+  const items = useMemo(() => {
+    if (!guide) return [];
+    const list = [];
+    if (guide.pendingRewards > 0) list.push({ key: 'reward', icon: '🎁', label: '보상 수령', status: 'urgent', msg: <>보상을 받지 않은 퀘스트가 {guide.pendingRewards}개! <span className="guide-link" onClick={(e) => { e.stopPropagation(); onNavigateVillage && onNavigateVillage('quest'); }}>길드</span>에서 보상을 받으세요.</> });
+    if (guide.dailyQuestsTotal > 0 && guide.dailyQuestsCompleted < guide.dailyQuestsTotal) list.push({ key: 'daily', icon: '📋', label: '일일 퀘스트', status: 'pending', msg: `오늘의 일일 퀘스트를 완료하지 않았어요. (${guide.dailyQuestsCompleted}/${guide.dailyQuestsTotal})` });
+    if (!guide.fortuneDone) list.push({ key: 'fortune', icon: '🔮', label: '오늘의 운세', status: 'pending', msg: <>오늘의 운세를 확인해보세요. <span className="guide-link" onClick={(e) => { e.stopPropagation(); onNavigateVillage && onNavigateVillage('fortune'); }}>운명술사의 집</span> 방문!</> });
+    if (!guide.tarotDone) list.push({ key: 'tarot', icon: '🃏', label: '타로 카드', status: 'pending', msg: '타로 카드를 뽑을 수 있어요!' });
+    if (guide.stageBattlesDone === 0) list.push({ key: 'stage', icon: '⚔️', label: '스테이지', status: 'pending', msg: '오늘 스테이지 전투를 아직 하지 않았어요.' });
+    if (guide.dungeonBattlesDone === 0) list.push({ key: 'dungeon', icon: '🏰', label: '던전', status: 'pending', msg: '던전 탐험을 아직 하지 않았어요.' });
+    return list;
+  }, [guide, onNavigateVillage]);
 
-  const items = [];
-  if (guide.pendingRewards > 0) items.push({ key: 'reward', icon: '🎁', label: '보상 수령', status: 'urgent', msg: <>보상을 받지 않은 퀘스트가 {guide.pendingRewards}개! <span className="guide-link" onClick={(e) => { e.stopPropagation(); onNavigateVillage && onNavigateVillage('quest'); }}>길드</span>에서 보상을 받으세요.</> });
-  if (guide.dailyQuestsTotal > 0 && guide.dailyQuestsCompleted < guide.dailyQuestsTotal) items.push({ key: 'daily', icon: '📋', label: '일일 퀘스트', status: 'pending', msg: `오늘의 일일 퀘스트를 완료하지 않았어요. (${guide.dailyQuestsCompleted}/${guide.dailyQuestsTotal})` });
-  if (!guide.fortuneDone) items.push({ key: 'fortune', icon: '🔮', label: '오늘의 운세', status: 'pending', msg: <>오늘의 운세를 확인해보세요. <span className="guide-link" onClick={(e) => { e.stopPropagation(); onNavigateVillage && onNavigateVillage('fortune'); }}>운명술사의 집</span> 방문!</> });
-  if (!guide.tarotDone) items.push({ key: 'tarot', icon: '🃏', label: '타로 카드', status: 'pending', msg: '타로 카드를 뽑을 수 있어요!' });
-  if (guide.stageBattlesDone === 0) items.push({ key: 'stage', icon: '⚔️', label: '스테이지', status: 'pending', msg: '오늘 스테이지 전투를 아직 하지 않았어요.' });
-  if (guide.dungeonBattlesDone === 0) items.push({ key: 'dungeon', icon: '🏰', label: '던전', status: 'pending', msg: '던전 탐험을 아직 하지 않았어요.' });
+  useEffect(() => {
+    if (items.length <= 1) { setMsgIdx(0); return; }
+    const timer = setInterval(() => {
+      setMsgIdx(prev => (prev + 1) % items.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [items.length]);
+
+  if (!guide) return null;
 
   const allDone = items.length === 0;
   const topMsg = allDone
     ? '오늘 할 일을 모두 마쳤어요! 대단해요! ✨'
-    : items[0].msg;
+    : items[msgIdx % items.length].msg;
 
   // mark done items
   const allCards = [
@@ -211,8 +226,15 @@ function ContentGuide({ onNavigateVillage }) {
   );
 }
 
-function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkillsUpdate, onSummonsChanged, onMercenariesChanged, myMercenaries, onNavigateVillage }) {
-  const [tab, setTab] = useState('character');
+function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkillsUpdate, onSummonsChanged, onMercenariesChanged, myMercenaries, onNavigateVillage, initialTab, onInitialTabConsumed, prologueCleared }) {
+  const [tab, setTab] = useState(initialTab || 'character');
+
+  useEffect(() => {
+    if (initialTab) {
+      setTab(initialTab);
+      if (onInitialTabConsumed) onInitialTabConsumed();
+    }
+  }, [initialTab, onInitialTabConsumed]);
   const [mySummons, setMySummons] = useState([]);
   const [selectedSummon, setSelectedSummon] = useState(null);
   const [showEquipment, setShowEquipment] = useState(false);
@@ -471,18 +493,22 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
             인벤토리
           </Nav.Link>
         </Nav.Item>
+        {prologueCleared !== false && (
         <Nav.Item>
           <Nav.Link active={tab === 'summons'} onClick={() => { setTab('summons'); if (mySummons.length > 0 && !selectedSummon) setSelectedSummon(mySummons[0]); }} className="char-tab-link">
             <img src="/ui/tab_summon_icon.png" alt="" className="char-tab-icon" onError={(e) => { e.target.style.display='none'; }} />
             소환수 <Badge bg="secondary" className="ms-1">{mySummons.length}</Badge>
           </Nav.Link>
         </Nav.Item>
+        )}
+        {prologueCleared !== false && (
         <Nav.Item>
           <Nav.Link active={tab === 'mercenary'} onClick={() => setTab('mercenary')} className="char-tab-link">
             <img src="/ui/tab_mercenary_icon.png" alt="" className="char-tab-icon" onError={(e) => { e.target.style.display='none'; }} />
             용병 <Badge bg="secondary" className="ms-1">{(myMercenaries || []).length}</Badge>
           </Nav.Link>
         </Nav.Item>
+        )}
         <Nav.Item>
           <Nav.Link active={tab === 'formation'} onClick={() => setTab('formation')} className="char-tab-link">
             <img src="/ui/tab_formation_icon.png" alt="" className="char-tab-icon" onError={(e) => { e.target.style.display='none'; }} />
@@ -578,9 +604,9 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                   <div>
                     <div className="d-flex justify-content-between align-items-center" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
                       <span className="char-bar-label"><img src="/ui/exp_icon.png" alt="" className="char-bar-icon" />EXP</span>
-                      <span>{charState.exp}/{Math.floor(80 * charState.level + 0.5 * charState.level * charState.level)}</span>
+                      <span>{charState.exp}/{Math.floor(120 * charState.level + 3 * charState.level * charState.level)}</span>
                     </div>
-                    <ProgressBar now={Math.min(100, (charState.exp / Math.floor(80 * charState.level + 0.5 * charState.level * charState.level)) * 100)} variant="warning" style={{ height: 8 }} />
+                    <ProgressBar now={Math.min(100, (charState.exp / Math.floor(120 * charState.level + 3 * charState.level * charState.level)) * 100)} variant="warning" style={{ height: 8 }} />
                   </div>
                 </div>
 
@@ -649,7 +675,7 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                 {selectedMerc ? (() => {
                   const el = ELEMENT_INFO[selectedMerc.element] || { icon: '⚪', name: '중립', color: '#9ca3af' };
                   const ri = RANGE_TYPE_INFO[selectedMerc.range_type] || RANGE_TYPE_INFO.melee;
-                  const expNeeded = Math.floor(40 * selectedMerc.level + 0.25 * selectedMerc.level * selectedMerc.level);
+                  const expNeeded = Math.floor(60 * selectedMerc.level + 1.5 * selectedMerc.level * selectedMerc.level);
                   return (
                     <>
                       <div className="text-center mb-3">
@@ -918,9 +944,9 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                       </div>
                       <div>
                         <div className="d-flex justify-content-between" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-                          <span className="char-bar-label">EXP</span><span>{selectedSummon.exp}/{Math.floor(40 * selectedSummon.level + 0.25 * selectedSummon.level * selectedSummon.level)}</span>
+                          <span className="char-bar-label">EXP</span><span>{selectedSummon.exp}/{Math.floor(60 * selectedSummon.level + 1.5 * selectedSummon.level * selectedSummon.level)}</span>
                         </div>
-                        <ProgressBar now={(selectedSummon.exp / Math.floor(40 * selectedSummon.level + 0.25 * selectedSummon.level * selectedSummon.level)) * 100} variant="warning" style={{ height: 8 }} />
+                        <ProgressBar now={(selectedSummon.exp / Math.floor(60 * selectedSummon.level + 1.5 * selectedSummon.level * selectedSummon.level)) * 100} variant="warning" style={{ height: 8 }} />
                       </div>
                     </div>
 

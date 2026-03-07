@@ -13,6 +13,19 @@ function App() {
   const [character, setCharacter] = useState(null);
   const [showSelect, setShowSelect] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(null); // { code }
+
+  useEffect(() => {
+    const onSessionExpired = (e) => setSessionExpired(e.detail);
+    window.addEventListener('session-expired', onSessionExpired);
+    return () => window.removeEventListener('session-expired', onSessionExpired);
+  }, []);
+
+  const handleSessionExpiredClose = () => {
+    setSessionExpired(null);
+    window._duplicateLoginHandled = false;
+    window.location.href = '/login';
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -131,6 +144,28 @@ function App() {
             }
           />
         </Routes>
+        {sessionExpired && (
+          <div className="session-expired-overlay">
+            <div className="session-expired-popup">
+              <img src="/ui/session_expired_bg.png" alt="" className="session-expired-bg" />
+              <div className="session-expired-content">
+                <div className="session-expired-icon">
+                  <div className="session-expired-seal" />
+                </div>
+                <h2 className="session-expired-title">세션 종료</h2>
+                <p className="session-expired-msg">
+                  {sessionExpired.code === 'SESSION_EXPIRED_DUPLICATE'
+                    ? '다른 기기에서 로그인되어\n현재 세션이 종료되었습니다.'
+                    : '세션이 만료되었습니다.\n다시 로그인해주세요.'}
+                </p>
+                <div className="session-expired-divider" />
+                <button className="session-expired-btn" onClick={handleSessionExpiredClose}>
+                  로그인 화면으로
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Router>
   );

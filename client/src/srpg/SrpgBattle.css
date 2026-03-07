@@ -542,8 +542,8 @@
   animation: srpgLvGlow 2s ease-in-out infinite;
 }
 @keyframes srpgLvGlow {
-  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(0.9); }
-  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%); }
+  50% { opacity: 1; transform: translate(-50%, -50%); }
 }
 .srpg-result-char-lv {
   font-size: 1.3rem;

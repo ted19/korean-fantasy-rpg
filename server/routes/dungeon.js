@@ -137,13 +137,13 @@ router.get('/:key', auth, async (req, res) => {
       'SELECT * FROM dungeon_stages WHERE dungeon_id = ? ORDER BY stage_number', [dungeon.id]
     );
 
-    // 진행도
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
+    // 진행도 (선택된 캐릭터 기준)
+    const char = await getSelectedChar(req, pool);
     let clearedStage = 0;
-    if (chars.length > 0) {
+    if (char) {
       const [prog] = await pool.query(
         'SELECT stage_number FROM character_stage_progress WHERE character_id = ? AND dungeon_id = ?',
-        [chars[0].id, dungeon.id]
+        [char.id, dungeon.id]
       );
       if (prog.length > 0) clearedStage = prog[0].stage_number;
     }
@@ -153,7 +153,18 @@ router.get('/:key', auth, async (req, res) => {
     const playerSpawns = safeParse(dungeon.player_spawns);
     const monsterSpawns = safeParse(dungeon.monster_spawns);
 
+    // 운세 버프 로드 (클라이언트 전투 표시용)
+    let fortuneBuffs = [];
+    if (char) {
+      const [fBuffs] = await pool.query(
+        'SELECT buff_type, buff_value, remaining_battles, fortune_grade, icon FROM character_fortunes WHERE character_id = ? AND remaining_battles > 0',
+        [char.id]
+      );
+      fortuneBuffs = fBuffs;
+    }
+
     res.json({
+      fortuneBuffs,
       dungeon: {
         id: dungeon.id,
         key: dungeon.key_name,
@@ -276,9 +287,9 @@ router.post('/use-ticket', auth, async (req, res) => {
 router.post('/clear-stage', auth, async (req, res) => {
   try {
     const { dungeonKey, stageNumber } = req.body;
-    const [chars] = await pool.query('SELECT id FROM characters WHERE user_id = ?', [req.user.id]);
-    if (chars.length === 0) return res.status(400).json({ message: '캐릭터가 없습니다.' });
-    const charId = chars[0].id;
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.status(400).json({ message: '캐릭터가 없습니다.' });
+    const charId = char.id;
 
     const [dungeons] = await pool.query('SELECT id FROM dungeons WHERE key_name = ?', [dungeonKey]);
     if (dungeons.length === 0) return res.status(404).json({ message: '던전을 찾을 수 없습니다.' });

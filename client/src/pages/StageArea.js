@@ -40,7 +40,7 @@ const AI_TYPE_INFO = {
 
 const SKILL_TYPE_COLORS = { attack: '#ef4444', heal: '#22c55e', buff: '#f59e0b', debuff: '#a855f7', aoe: '#f97316' };
 
-function StageArea({ charState, onStartStageBattle, returnGroupKey, onReturnHandled }) {
+function StageArea({ charState, onStartStageBattle, returnGroupKey, onReturnHandled, contentCharges }) {
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupDetail, setGroupDetail] = useState(null);
@@ -105,8 +105,10 @@ function StageArea({ charState, onStartStageBattle, returnGroupKey, onReturnHand
 
   const handleStartBattle = () => {
     if (!stagePopup || !groupDetail) return;
+    const clearedStage = groupDetail.clearedStage || 0;
+    const isCleared = stagePopup.stageNumber <= clearedStage;
     setStagePopup(null);
-    onStartStageBattle(selectedGroup.key, stagePopup, groupDetail.monsters);
+    onStartStageBattle(selectedGroup.key, stagePopup, groupDetail.monsters, null, isCleared);
   };
 
   const handleBack = () => {
@@ -306,9 +308,28 @@ function StageArea({ charState, onStartStageBattle, returnGroupKey, onReturnHand
                     <span className="stage-popup-info-value">{{ grass: '초원', stone: '바위', dirt: '흙', water: '물', dark: '암흑' }[stagePopup.baseTileType] || stagePopup.baseTileType}</span>
                   </div>
                 </div>
-                <button className="stage-popup-start-btn" onClick={handleStartBattle}>
-                  ⚔️ 전투 시작
-                </button>
+                {contentCharges && selectedGroup && stagePopup && (() => {
+                  const ck = contentCharges[`stage_${selectedGroup.key}_${stagePopup.stageNumber}`] || { charges: 3, maxCharges: 3, cooldown: 0 };
+                  return (
+                  <div className="stage-popup-charges">
+                    입장 횟수: {[...Array(ck.maxCharges || 3)].map((_, i) => (
+                      <span key={i} className={`charge-pip ${i < (ck.charges ?? 3) ? 'active' : 'empty'}`} />
+                    ))}
+                    <span className="charge-count">{ck.charges ?? 3}/{ck.maxCharges || 3}</span>
+                    {ck.charges === 0 && ck.cooldown > 0 && (
+                      <span className="charge-cooldown">충전까지 {Math.floor(ck.cooldown / 3600000)}시간 {Math.floor((ck.cooldown % 3600000) / 60000)}분</span>
+                    )}
+                  </div>
+                  );
+                })()}
+                {(() => {
+                  const ck = (selectedGroup && stagePopup) ? (contentCharges?.[`stage_${selectedGroup.key}_${stagePopup.stageNumber}`] || { charges: 3 }) : { charges: 3 };
+                  return (
+                    <button className="stage-popup-start-btn" onClick={handleStartBattle} disabled={ck.charges === 0}>
+                      {ck.charges === 0 ? '입장 횟수 부족' : `⚔️ 전투 시작 (행동력 ${stagePopup?.isBoss ? 2 : 1} 소모)`}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>

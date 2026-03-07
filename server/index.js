@@ -16,6 +16,7 @@ const blacksmithRoutes = require('./routes/blacksmith');
 const mercenaryRoutes = require('./routes/mercenary');
 const fortuneRoutes = require('./routes/fortune');
 const specialDungeonRoutes = require('./routes/special-dungeon');
+const gachaRoutes = require('./routes/gacha');
 const db = require('./db');
 
 const app = express();
@@ -28,6 +29,47 @@ app.use(express.json());
 app.use((req, res, next) => {
   const charId = req.headers['x-char-id'];
   if (charId) req.selectedCharId = parseInt(charId, 10);
+  next();
+});
+
+// 중복 로그인 방지: auth 이외 API에서 세션 토큰 검증
+const jwt = require('jsonwebtoken');
+const SESSION_SECRET = 'game-secret-key-change-in-production';
+app.use('/api', async (req, res, next) => {
+  // auth 라우트는 검증 제외 (로그인/회원가입/me)
+  if (req.path.startsWith('/auth')) return next();
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return next();
+  console.log(`[SESSION] Checking ${req.method} ${req.path}`);
+
+  try {
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, SESSION_SECRET);
+    const [rows] = await db.pool.query(
+      'SELECT session_token FROM users WHERE id = ?', [decoded.id]
+    );
+    if (rows.length > 0) {
+      const dbToken = rows[0].session_token;
+      if (dbToken && (!decoded.sessionToken || dbToken !== decoded.sessionToken)) {
+        console.log(`[SESSION] BLOCKED user=${decoded.id} jwt=${decoded.sessionToken?.slice(0,8)} db=${dbToken.slice(0,8)} path=${req.path}`);
+        return res.status(409).json({
+          message: '다른 기기에서 로그인되어 현재 세션이 종료되었습니다.',
+          code: 'SESSION_EXPIRED_DUPLICATE',
+        });
+      }
+      if (!dbToken && !decoded.sessionToken) {
+        return res.status(401).json({
+          message: '세션이 만료되었습니다. 다시 로그인해주세요.',
+          code: 'SESSION_REQUIRED',
+        });
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'JsonWebTokenError' && err.name !== 'TokenExpiredError') {
+      console.error('Session middleware error:', err.message);
+    }
+  }
   next();
 });
 
@@ -47,6 +89,7 @@ app.use('/api/blacksmith', blacksmithRoutes);
 app.use('/api/mercenary', mercenaryRoutes);
 app.use('/api/fortune', fortuneRoutes);
 app.use('/api/special-dungeon', specialDungeonRoutes);
+app.use('/api/gacha', gachaRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

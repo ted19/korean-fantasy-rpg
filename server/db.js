@@ -32,6 +32,9 @@ async function initialize() {
     )
   `);
 
+  // 세션 토큰 컬럼 (중복 로그인 방지)
+  await pool.query("ALTER TABLE users ADD COLUMN session_token VARCHAR(64) DEFAULT NULL").catch(() => {});
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS characters (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -685,9 +688,10 @@ async function initialize() {
   await pool.query("ALTER TABLE monsters ADD COLUMN country VARCHAR(20) DEFAULT 'korea'").catch(() => {});
 
   const [existingDungeons] = await pool.query('SELECT COUNT(*) as cnt FROM dungeons');
-  if (existingDungeons[0].cnt === 0) {
+  const [existingMonsters] = await pool.query('SELECT COUNT(*) as cnt FROM monsters');
+  if (existingDungeons[0].cnt === 0 || existingMonsters[0].cnt < 135) {
     // 어둠의 숲
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'forest', '어둠의 숲', '어둠이 드리운 위험한 숲. 약한 몬스터들이 서식한다.', '🌲', 1, 10, 10, 'grass',
       JSON.stringify([
         {coords:[[2,2],[2,3],[3,2],[3,3]],height:1,type:'grass'},
@@ -701,7 +705,7 @@ async function initialize() {
     ]);
 
     // 지하 동굴
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'cave', '지하 동굴', '깊은 지하에 자리한 동굴. 강력한 몬스터들이 도사린다.', '🕳️', 2, 10, 10, 'stone',
       JSON.stringify([
         {coords:[[0,4],[0,5],[1,4],[1,5]],height:3,type:'stone'},
@@ -715,7 +719,7 @@ async function initialize() {
     ]);
 
     // 폐허 사원
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'temple', '폐허 사원', '저주받은 고대 사원. 가장 강력한 적들이 기다린다.', '🏚️', 4, 10, 10, 'dark',
       JSON.stringify([
         {coords:[[4,4],[4,5],[5,4],[5,5]],height:2,type:'stone'},
@@ -761,7 +765,7 @@ async function initialize() {
 
     // ========== 추가 던전 ==========
     // 독안개 늪
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'swamp', '독안개 늪', '독기가 가득한 늪지대. 벌레와 식물 몬스터가 서식한다.', '🌿', 2, 10, 10, 'grass',
       JSON.stringify([
         {coords:[[2,2],[3,2],[4,2],[2,3],[3,3],[4,3],[2,4],[3,4]],height:0,type:'water'},
@@ -774,7 +778,7 @@ async function initialize() {
     ]);
 
     // 영혼의 산
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'mountain', '영혼의 산', '영혼들이 떠도는 높은 산. 귀신과 요괴가 출몰한다.', '⛰️', 3, 10, 10, 'stone',
       JSON.stringify([
         {coords:[[4,4],[5,4],[4,5],[5,5]],height:4,type:'stone'},
@@ -788,7 +792,7 @@ async function initialize() {
     ]);
 
     // 마계 균열
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'demon', '마계 균열', '마계와 이어진 차원의 균열. 악마와 마족이 쏟아져 나온다.', '🌋', 5, 10, 10, 'dark',
       JSON.stringify([
         {coords:[[4,4],[5,4],[4,5],[5,5]],height:0,type:'water'},
@@ -801,7 +805,7 @@ async function initialize() {
     ]);
 
     // 용의 둥지
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'dragon', '용의 둥지', '고대 용이 잠든 화산 동굴. 최강의 적들이 기다린다.', '🐉', 7, 12, 12, 'stone',
       JSON.stringify([
         {coords:[[5,5],[6,5],[5,6],[6,6]],height:3,type:'stone'},
@@ -815,7 +819,7 @@ async function initialize() {
     ]);
 
     // 해저 유적
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'ocean', '해저 유적', '바다 밑에 가라앉은 고대 유적. 수생 몬스터의 영역.', '🌊', 4, 10, 10, 'stone',
       JSON.stringify([
         {coords:[[0,0],[1,0],[0,1],[9,0],[9,1],[8,0],[0,9],[1,9],[0,8],[9,9],[8,9],[9,8]],height:0,type:'water'},
@@ -827,7 +831,7 @@ async function initialize() {
     ]);
 
     // 도깨비 마을
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'goblin', '도깨비 마을', '도깨비들이 모여 사는 마을. 장난기 넘치지만 위험하다.', '👺', 3, 10, 10, 'grass',
       JSON.stringify([
         {coords:[[2,2],[3,2],[2,3]],height:2,type:'stone'},
@@ -841,7 +845,7 @@ async function initialize() {
     ]);
 
     // 정령의 숲
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'spirit_forest', '정령의 숲', '원소 정령들이 깃든 신비로운 숲.', '✨', 4, 10, 10, 'grass',
       JSON.stringify([
         {coords:[[2,4],[2,5],[3,4],[3,5]],height:0,type:'water'},
@@ -855,7 +859,7 @@ async function initialize() {
     ]);
 
     // 슬라임 동굴
-    await pool.query(`INSERT INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT IGNORE INTO dungeons (key_name, name, description, icon, required_level, map_width, map_height, base_tile_type, tile_overrides, player_spawns, monster_spawns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       'slime_cave', '슬라임 동굴', '끈적끈적한 슬라임들로 가득한 동굴.', '🫧', 1, 10, 10, 'stone',
       JSON.stringify([
         {coords:[[3,3],[4,3],[5,3],[3,4],[5,4],[3,5],[4,5],[5,5]],height:0,type:'water'},
@@ -1820,6 +1824,13 @@ async function initialize() {
   await pool.query("ALTER TABLE monsters MODIFY COLUMN range_type ENUM('melee','ranged','magic') DEFAULT 'melee'").catch(() => {});
   // 속성 컬럼 추가
   await pool.query("ALTER TABLE monsters ADD COLUMN element ENUM('fire','water','earth','wind','neutral') DEFAULT 'neutral'").catch(() => {});
+  // 전투 스탯 컬럼 추가
+  await pool.query("ALTER TABLE monsters ADD COLUMN phys_attack INT DEFAULT 5").catch(() => {});
+  await pool.query("ALTER TABLE monsters ADD COLUMN phys_defense INT DEFAULT 3").catch(() => {});
+  await pool.query("ALTER TABLE monsters ADD COLUMN mag_attack INT DEFAULT 3").catch(() => {});
+  await pool.query("ALTER TABLE monsters ADD COLUMN mag_defense INT DEFAULT 2").catch(() => {});
+  await pool.query("ALTER TABLE monsters ADD COLUMN crit_rate INT DEFAULT 5").catch(() => {});
+  await pool.query("ALTER TABLE monsters ADD COLUMN evasion INT DEFAULT 3").catch(() => {});
 
   // 몬스터 스킬 테이블
   await pool.query(`
@@ -1963,9 +1974,52 @@ async function initialize() {
     "UPDATE monsters SET mp=GREATEST(mp, 35) WHERE range_type='magic' AND tier <= 3",
     "UPDATE monsters SET mp=GREATEST(mp, 50) WHERE range_type='magic' AND tier BETWEEN 4 AND 5",
     "UPDATE monsters SET mp=GREATEST(mp, 70) WHERE range_type='magic' AND tier >= 6 AND ai_type != 'boss'",
+    // (밸런스 패치는 아래에서 플래그 기반으로 1회만 적용)
   ];
   for (const sql of aiTypeUpdates) {
     await pool.query(sql).catch(() => {});
+  }
+
+  // ========== 몬스터 밸런스 패치 v3 (1회만 실행) ==========
+  // 플래그 테이블로 중복 적용 방지
+  await pool.query(`CREATE TABLE IF NOT EXISTS db_flags (flag_name VARCHAR(50) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`).catch(() => {});
+  const [balFlags] = await pool.query("SELECT * FROM db_flags WHERE flag_name = 'monster_balance_v4'");
+  if (balFlags.length === 0) {
+    // 이전 패치 제거 후 재적용
+    await pool.query("DELETE FROM db_flags WHERE flag_name LIKE 'monster_balance%'").catch(() => {});
+    console.log('Applying monster balance patch v4...');
+    // 캐릭터 기준: Lv15 HP372, atk79, patk59, pdef52, mdef38, def72
+    // SRPG공식: dmg = base * (100/(100+def*1.2))
+    // Card공식: dmg = (patk + atk*0.5) - (pdef + def*0.3)*0.75
+    // 캐릭→T2 Card: baseDmg = 59+79*0.5=98.5, 목표 totalDef=~40 → dmg=68 → HP 300이면 5대
+    // T2몬→캐릭 Card: 목표 baseDmg=~100 → totalDef=52+72*0.3=73.6 → dmg=100-55=45 → 8대
+    const balanceQueries = [
+      // HP: T1=130~200, T2=200~300, T3=280~400
+      "UPDATE monsters SET hp = FLOOR(hp * 3.5 + tier * 30)",
+      // attack: 카드배틀 baseDmg에 *0.5 기여
+      "UPDATE monsters SET attack = FLOOR(attack * 3 + tier * 6)",
+      // defense: 카드배틀 totalDef에 *0.3 기여
+      "UPDATE monsters SET defense = FLOOR(defense * 2.5 + tier * 4)",
+      // phys_attack: 목표 T1=38, T2=48, T3=58
+      "UPDATE monsters SET phys_attack = tier * 12 + 25 + FLOOR(attack * 0.05) WHERE range_type IN ('melee','ranged')",
+      "UPDATE monsters SET phys_attack = tier * 7 + 15 + FLOOR(attack * 0.03) WHERE range_type = 'magic'",
+      // mag_attack
+      "UPDATE monsters SET mag_attack = tier * 12 + 25 + FLOOR(attack * 0.05) WHERE range_type = 'magic'",
+      "UPDATE monsters SET mag_attack = tier * 7 + 15 + FLOOR(attack * 0.03) WHERE range_type IN ('melee','ranged')",
+      // phys_defense: 목표 T1=16, T2=21, T3=26
+      "UPDATE monsters SET phys_defense = tier * 5 + 10 + FLOOR(defense * 0.06)",
+      // mag_defense
+      "UPDATE monsters SET mag_defense = tier * 4 + 8 + FLOOR(defense * 0.05)",
+      // crit/evasion/mp
+      "UPDATE monsters SET crit_rate = GREATEST(crit_rate, tier * 2 + 3)",
+      "UPDATE monsters SET evasion = GREATEST(evasion, tier + 2)",
+      "UPDATE monsters SET mp = GREATEST(mp, tier * 10 + 25)",
+    ];
+    for (const sql of balanceQueries) {
+      await pool.query(sql).catch(e => console.error('Balance query failed:', sql, e.message));
+    }
+    await pool.query("INSERT INTO db_flags (flag_name) VALUES ('monster_balance_v4')").catch(() => {});
+    console.log('Monster balance patch v4 applied');
   }
 
   // 몬스터-스킬 연결 (INSERT IGNORE로 중복 안전)
@@ -4820,8 +4874,10 @@ async function initialize() {
   {
     const [msCheck] = await pool.query('SELECT MAX(required_level) as mx FROM mercenary_skills');
     if (msCheck[0].mx <= 5) {
-      await pool.query("UPDATE mercenary_skills SET required_level = required_level * 10").catch(() => {});
+      await pool.query("UPDATE mercenary_skills SET required_level = CASE WHEN required_level = 1 THEN 1 ELSE required_level * 10 END").catch(() => {});
     }
+    // 첫번째 스킬(원래 required_level=1)이 10으로 잘못 변경된 경우 → 1로 복구
+    await pool.query("UPDATE mercenary_skills SET required_level = 1 WHERE required_level = 10").catch(() => {});
   }
 
   // 기존 용병들에게 레벨에 맞는 스킬 자동 부여 (마이그레이션)
@@ -5863,6 +5919,22 @@ async function initialize() {
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
     )
   `);
+
+  // 콘텐츠 입장 횟수 (스테이지/던전 각각 3회, 5시간 쿨타임) - 개별 키별 관리
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_charges (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL,
+      content_type VARCHAR(50) NOT NULL,
+      charges INT DEFAULT 3,
+      max_charges INT DEFAULT 3,
+      last_recharged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_char_content (character_id, content_type)
+    )
+  `);
+  // content_type ENUM → VARCHAR 마이그레이션
+  await pool.query("ALTER TABLE content_charges MODIFY content_type VARCHAR(50) NOT NULL").catch(() => {});
 
   console.log('Database initialized (balance v4 applied)');
 }

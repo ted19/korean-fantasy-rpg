@@ -8,6 +8,7 @@ const CLASS_IMAGES = {
   '풍수사': '/characters/pungsu_full.png',
   '무당': '/characters/mudang_full.png',
   '승려': '/characters/monk_full.png',
+  '저승사자': '/characters/reaper_full.png',
 };
 
 const ELEMENT_INFO = {
@@ -35,7 +36,7 @@ function CharacterDetail({ character, charState, onCharStateUpdate, onLog, onSki
     }
   };
 
-  const expNeeded = Math.floor(80 * charState.level + 0.5 * charState.level * charState.level);
+  const expNeeded = Math.floor(120 * charState.level + 3 * charState.level * charState.level);
 
   return (
     <Modal show onHide={onClose} centered size="lg" scrollable>

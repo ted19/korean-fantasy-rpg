@@ -351,7 +351,7 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged }) 
               <div className="facility-empty">고용한 용병이 없습니다.</div>
             ) : myMercs.map(m => {
               const el = ELEMENT_INFO[m.element] || ELEMENT_INFO.neutral;
-              const expNeeded = Math.floor(40 * m.level + 0.25 * m.level * m.level);
+              const expNeeded = Math.floor(60 * m.level + 1.5 * m.level * m.level);
               return (
                 <div
                   key={m.id}
@@ -524,18 +524,25 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged }) 
                   <div style={{ fontSize: 12, color: '#aaa' }}>{restPopup.merc.class_type} · Lv.{restPopup.merc.level}</div>
                 </div>
               </div>
-              <div className="inn-fire-confirm-warn">
-                정말 해고하시겠습니까?<br/>
-                <span style={{ color: '#ef4444' }}>해고된 용병은 복구할 수 없으며 골드도 반환되지 않습니다.</span>
-              </div>
+              {restPopup.merc.equipped_count > 0 ? (
+                <div className="inn-fire-confirm-warn" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px' }}>
+                  <span style={{ color: '#ef4444', fontWeight: 700 }}>⚠ 장비가 {restPopup.merc.equipped_count}개 장착되어 있습니다.</span><br/>
+                  <span style={{ color: '#aaa' }}>장비를 먼저 해제한 후 해고가 가능합니다.</span>
+                </div>
+              ) : (
+                <div className="inn-fire-confirm-warn">
+                  정말 해고하시겠습니까?<br/>
+                  <span style={{ color: '#ef4444' }}>해고된 용병은 복구할 수 없으며 골드도 반환되지 않습니다.</span>
+                </div>
+              )}
               <div className="inn-fire-confirm-btns">
                 <button className="inn-fire-confirm-cancel" onClick={() => setRestPopup(null)}>취소</button>
                 <button
                   className="inn-fire-confirm-ok"
-                  disabled={loading}
+                  disabled={loading || restPopup.merc.equipped_count > 0}
                   onClick={() => { setRestPopup(null); handleFire(restPopup.merc.id); }}
                 >
-                  {loading ? '해고 중...' : '해고'}
+                  {restPopup.merc.equipped_count > 0 ? '장비 해제 필요' : loading ? '해고 중...' : '해고'}
                 </button>
               </div>
             </div>

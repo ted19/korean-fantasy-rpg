@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import IsometricMap from './IsometricMap';
 import PixelMap2D from './PixelMap2D';
 import { buildMapFromDungeon } from './mapData';
 import { generateTowerMap } from './towerMapGenerator';
@@ -1233,8 +1232,7 @@ export default function SrpgBattle({
         </div>
       )}
       <div className="srpg-map">
-        {use2DMap ? (
-          <PixelMap2D
+        <PixelMap2D
             mapData={mapData}
             units={units}
             activeUnit={activeUnit}
@@ -1251,23 +1249,6 @@ export default function SrpgBattle({
             location={location}
             movingUnit={movingUnit}
           />
-        ) : (
-          <IsometricMap
-            mapData={mapData}
-            units={units}
-            activeUnit={activeUnit}
-            movableRange={movableRange}
-            attackRange={attackRange}
-            selectedTile={null}
-            onTileClick={handleTileClick}
-            damagePopups={damagePopups}
-            menuState={ctxMenu}
-            onMenuAction={handleMenuAction}
-            onCanvasMiss={() => { if (ctxMenu.show) setCtxMenu({ show: false, mode: 'main' }); }}
-            skillEffects={skillEffects}
-            potions={potions}
-          />
-        )}
       </div>
 
       <div className="srpg-hud">

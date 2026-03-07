@@ -36,6 +36,18 @@ function getWeeklyResetDate() {
   return monday.toISOString().split('T')[0];
 }
 
+// 헬퍼: DB DATE를 문자열로 변환 (로컬 시간 기준)
+function dateToStr(d) {
+  if (!d) return '';
+  if (d instanceof Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return String(d);
+}
+
 // 헬퍼: 오늘 날짜 문자열
 function getTodayStr() {
   return new Date().toISOString().split('T')[0];
@@ -90,7 +102,7 @@ router.get('/list', auth, async (req, res) => {
       if (t.key_name === 'tower') {
         // 주간 리셋 체크
         let currentFloor = prog.progress_value || 0;
-        if (prog.reset_date && prog.reset_date < weeklyReset) {
+        if (dateToStr(prog.reset_date) && dateToStr(prog.reset_date) < weeklyReset) {
           currentFloor = 0; // 리셋됨
         }
         progressInfo = {
@@ -101,7 +113,7 @@ router.get('/list', auth, async (req, res) => {
       } else if (t.key_name === 'elemental') {
         // 일일 리셋 체크
         let clearedTier = prog.progress_value || 0;
-        if (prog.reset_date && prog.reset_date < today) {
+        if (dateToStr(prog.reset_date) && dateToStr(prog.reset_date) < today) {
           clearedTier = 0;
         }
         progressInfo = {
@@ -159,11 +171,12 @@ router.get('/tower/info', auth, async (req, res) => {
       const p = prog[0];
       bestRecord = p.best_record || 0;
       totalClears = p.total_clears || 0;
-      if (p.reset_date && p.reset_date >= weeklyReset) {
+      const resetStr = dateToStr(p.reset_date);
+      if (resetStr && resetStr >= weeklyReset) {
         currentFloor = p.progress_value || 0;
       }
       // 리셋 필요시 DB 업데이트
-      if (!p.reset_date || p.reset_date < weeklyReset) {
+      if (!resetStr || resetStr < weeklyReset) {
         await pool.query(
           "UPDATE special_dungeon_progress SET progress_value = 0, reset_date = ? WHERE character_id = ? AND dungeon_type = 'tower'",
           [weeklyReset, char.id]
@@ -255,7 +268,8 @@ router.post('/tower/clear', auth, async (req, res) => {
     );
 
     if (prog.length > 0) {
-      const currentFloor = (prog[0].reset_date && prog[0].reset_date >= weeklyReset)
+      const resetStr = dateToStr(prog[0].reset_date);
+      const currentFloor = (resetStr && resetStr >= weeklyReset)
         ? prog[0].progress_value : 0;
       const newFloor = Math.max(currentFloor, floor);
       const newBest = Math.max(prog[0].best_record || 0, floor);
@@ -303,7 +317,7 @@ router.get('/elemental/info', auth, async (req, res) => {
 
     if (prog.length > 0) {
       bestRecord = prog[0].best_record || 0;
-      if (prog[0].reset_date && prog[0].reset_date >= today) {
+      if (dateToStr(prog[0].reset_date) >= today) {
         clearedTier = prog[0].progress_value || 0;
       } else {
         // 일일 리셋
@@ -452,7 +466,7 @@ router.post('/elemental/clear', auth, async (req, res) => {
       [char.id]
     );
 
-    const currentTier = (prog.length > 0 && prog[0].reset_date >= today) ? (prog[0].progress_value || 0) : 0;
+    const currentTier = (prog.length > 0 && dateToStr(prog[0].reset_date) >= today) ? (prog[0].progress_value || 0) : 0;
     const newTier = Math.max(currentTier, tier);
     const newBest = Math.max(prog.length > 0 ? (prog[0].best_record || 0) : 0, tier);
 

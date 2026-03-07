@@ -1224,8 +1224,55 @@
   transition: all 0.2s;
   box-shadow: 0 4px 15px rgba(233,69,96,0.3);
 }
-.stage-popup-start-btn:hover {
+.stage-popup-start-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(233,69,96,0.5);
   background: linear-gradient(135deg, #ff5a7a, #e74c3c);
+}
+.stage-popup-start-btn:disabled {
+  background: linear-gradient(135deg, #555, #444);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+/* 입장 횟수 표시 */
+.stage-popup-charges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #ccc;
+}
+.charge-pip {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.2);
+  transition: all 0.3s;
+}
+.charge-pip.active {
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  border-color: #4ade80;
+  box-shadow: 0 0 6px rgba(74,222,128,0.5);
+}
+.charge-pip.empty {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+}
+.charge-count {
+  font-weight: 700;
+  color: #4ade80;
+  margin-left: 4px;
+}
+.charge-cooldown {
+  font-size: 11px;
+  color: #f59e0b;
+  margin-left: auto;
+  font-weight: 600;
 }

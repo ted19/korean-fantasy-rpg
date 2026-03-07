@@ -71,7 +71,7 @@ function DungeonImg({ src, fallback, className, alt }) {
   return <img src={src} alt={alt || ''} className={className} onError={() => setErr(true)} />;
 }
 
-function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, onStartBattle, returnDungeonKey, onReturnHandled }) {
+function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, onStartBattle, returnDungeonKey, onReturnHandled, contentCharges }) {
   const [dungeons, setDungeons] = useState([]);
   const [selectedDungeon, setSelectedDungeon] = useState(null);
   const [dungeonDetail, setDungeonDetail] = useState(null);
@@ -342,13 +342,32 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
                     {selectedDungeon?.ticketIcon || '🎫'} {selectedDungeon?.ticketCount || 0}장 보유
                   </span>
                 </div>
-                <button
-                  className={`dg-popup-start-btn ${(selectedDungeon?.ticketCount || 0) <= 0 ? 'disabled' : ''}`}
-                  onClick={handleStartBattle}
-                  disabled={(selectedDungeon?.ticketCount || 0) <= 0}
-                >
-                  {(selectedDungeon?.ticketCount || 0) > 0 ? '⚔️ 전투 시작 (입장권 1장 소모)' : '🎫 입장권이 부족합니다'}
-                </button>
+                {contentCharges && selectedDungeon && stagePopup && (() => {
+                  const ck = contentCharges[`dungeon_${selectedDungeon.key_name}_${stagePopup.stageNumber}`] || { charges: 3, maxCharges: 3, cooldown: 0 };
+                  return (
+                  <div className="stage-popup-charges" style={{marginBottom:'8px'}}>
+                    입장 횟수: {[...Array(ck.maxCharges || 3)].map((_, i) => (
+                      <span key={i} className={`charge-pip ${i < (ck.charges ?? 3) ? 'active' : 'empty'}`} />
+                    ))}
+                    <span className="charge-count">{ck.charges ?? 3}/{ck.maxCharges || 3}</span>
+                    {ck.charges === 0 && ck.cooldown > 0 && (
+                      <span className="charge-cooldown">충전까지 {Math.floor(ck.cooldown / 3600000)}시간 {Math.floor((ck.cooldown % 3600000) / 60000)}분</span>
+                    )}
+                  </div>
+                  );
+                })()}
+                {(() => {
+                  const ck = (selectedDungeon && stagePopup) ? (contentCharges?.[`dungeon_${selectedDungeon.key_name}_${stagePopup.stageNumber}`] || { charges: 3 }) : { charges: 3 };
+                  return (
+                  <button
+                    className={`dg-popup-start-btn ${((selectedDungeon?.ticketCount || 0) <= 0 || ck.charges === 0) ? 'disabled' : ''}`}
+                    onClick={handleStartBattle}
+                    disabled={(selectedDungeon?.ticketCount || 0) <= 0 || ck.charges === 0}
+                  >
+                    {ck.charges === 0 ? '입장 횟수 부족' : (selectedDungeon?.ticketCount || 0) > 0 ? `⚔️ 전투 시작 (입장권 1장 + 행동력 2 소모)` : '🎫 입장권이 부족합니다'}
+                  </button>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -545,6 +564,25 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
         <div className="dg-title">던전 탐험</div>
       </div>
       <div className="dg-subtitle">어둠의 심연에 도전하라 ({totalCleared}/{dungeons.length})</div>
+
+      {/* 보유 입장권 요약 */}
+      {dungeons.some(d => (d.ticketCount || 0) > 0) && (
+        <div className="dg-ticket-summary">
+          <div className="dg-ticket-summary-label">🎫 보유 입장권</div>
+          <div className="dg-ticket-summary-list">
+            {dungeons.filter(d => (d.ticketCount || 0) > 0).map(d => {
+              const theme = DUNGEON_THEMES[d.key_name] || DUNGEON_THEMES.forest;
+              return (
+                <div key={d.id} className="dg-ticket-chip" style={{ borderColor: theme.accent }} onClick={() => !d.unlocked ? null : selectDungeon(d)}>
+                  <span className="dg-ticket-chip-icon">{d.ticketIcon || '🎫'}</span>
+                  <span className="dg-ticket-chip-name">{d.name}</span>
+                  <span className="dg-ticket-chip-count" style={{ color: theme.accent }}>{d.ticketCount}장</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="dg-list-roadmap">
         <div className="dg-list-path" style={{

@@ -6,6 +6,7 @@ const CLASS_IMAGES = {
   '풍수사': '/characters/pungsu_icon.png',
   '무당': '/characters/mudang_icon.png',
   '승려': '/characters/monk_icon.png',
+  '저승사자': '/characters/reaper_icon.png',
 };
 
 const SLOT_NAMES = ['메인 진영', '진영 2', '진영 3', '진영 4'];
@@ -14,6 +15,7 @@ const CLASS_RANGE_TYPE = {
   '풍수사': 'magic',
   '무당': 'magic',
   '승려': 'melee',
+  '저승사자': 'melee',
 };
 
 function UnitIcon({ src, fallback, className }) {

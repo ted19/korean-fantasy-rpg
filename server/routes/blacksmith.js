@@ -204,7 +204,7 @@ router.get('/enhance-list', auth, async (req, res) => {
               i.class_restriction
        FROM inventory inv
        JOIN items i ON inv.item_id = i.id
-       WHERE inv.character_id = ? AND i.type != 'potion' AND i.max_enhance > 0
+       WHERE inv.character_id = ? AND i.type NOT IN ('potion','cosmetic') AND i.max_enhance > 0
        ORDER BY i.grade DESC, inv.enhance_level DESC, i.name`,
       [chars[0].id]
     );

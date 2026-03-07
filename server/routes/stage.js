@@ -224,6 +224,16 @@ router.get('/group/:key', auth, async (req, res) => {
       }
     }
 
+    // 운세 버프 로드 (클라이언트 전투에서 표시용)
+    let fortuneBuffs = [];
+    if (chars.length > 0) {
+      const [fBuffs] = await pool.query(
+        'SELECT buff_type, buff_value, remaining_battles, fortune_grade, icon FROM character_fortunes WHERE character_id = ? AND remaining_battles > 0',
+        [chars[0].id]
+      );
+      fortuneBuffs = fBuffs;
+    }
+
     res.json({
       group: {
         id: group.id,
@@ -235,6 +245,7 @@ router.get('/group/:key', auth, async (req, res) => {
         requiredLevel: group.required_level,
         bgColor: group.bg_color,
       },
+      fortuneBuffs,
       stages: stages.map(s => {
         const parse = (v) => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return null; } };
         return {
@@ -314,7 +325,136 @@ router.post('/clear', auth, async (req, res) => {
   }
 });
 
+// ========== 콘텐츠 입장 횟수 시스템 (3회 → 5시간 쿨타임) ==========
+const CHARGE_COOLDOWN_MS = 5 * 60 * 60 * 1000; // 5시간
+const MAX_CHARGES = 3;
+
+async function getOrCreateCharges(charId, contentType, connOrPool) {
+  const db = connOrPool || pool;
+  const [rows] = await db.query(
+    'SELECT * FROM content_charges WHERE character_id = ? AND content_type = ?',
+    [charId, contentType]
+  );
+  if (rows.length === 0) {
+    await db.query(
+      'INSERT INTO content_charges (character_id, content_type, charges, max_charges, last_recharged_at) VALUES (?, ?, ?, ?, NOW())',
+      [charId, contentType, MAX_CHARGES, MAX_CHARGES]
+    );
+    return { charges: MAX_CHARGES, max_charges: MAX_CHARGES, last_recharged_at: new Date() };
+  }
+  const row = rows[0];
+  // 쿨타임 경과 시 자동 충전
+  if (row.charges < row.max_charges) {
+    const elapsed = Date.now() - new Date(row.last_recharged_at).getTime();
+    if (elapsed >= CHARGE_COOLDOWN_MS) {
+      await db.query(
+        'UPDATE content_charges SET charges = max_charges, last_recharged_at = NOW() WHERE character_id = ? AND content_type = ?',
+        [charId, contentType]
+      );
+      row.charges = row.max_charges;
+      row.last_recharged_at = new Date();
+    }
+  }
+  return row;
+}
+
+// 입장 횟수 조회 (개별 키별)
+router.get('/charges', auth, async (req, res) => {
+  try {
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    const [rows] = await pool.query(
+      'SELECT * FROM content_charges WHERE character_id = ?',
+      [char.id]
+    );
+
+    const calcCooldown = (row) => {
+      if (row.charges > 0) return 0;
+      const elapsed = Date.now() - new Date(row.last_recharged_at).getTime();
+      return Math.max(0, CHARGE_COOLDOWN_MS - elapsed);
+    };
+
+    // 자동 충전 체크 및 결과 맵 생성
+    const charges = {};
+    for (const row of rows) {
+      if (row.charges < row.max_charges) {
+        const elapsed = Date.now() - new Date(row.last_recharged_at).getTime();
+        if (elapsed >= CHARGE_COOLDOWN_MS) {
+          await pool.query(
+            'UPDATE content_charges SET charges = max_charges, last_recharged_at = NOW() WHERE character_id = ? AND content_type = ?',
+            [char.id, row.content_type]
+          );
+          row.charges = row.max_charges;
+          row.last_recharged_at = new Date();
+        }
+      }
+      charges[row.content_type] = {
+        charges: row.charges,
+        maxCharges: row.max_charges,
+        cooldown: calcCooldown(row),
+      };
+    }
+
+    res.json(charges);
+  } catch (err) {
+    console.error('Get charges error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 입장 횟수 소모 (개별 키별: stage_gojoseon, dungeon_cave 등)
+router.post('/use-charge', auth, async (req, res) => {
+  try {
+    const { contentType } = req.body; // 'stage_gojoseon', 'dungeon_cave' 등
+    if (!contentType || typeof contentType !== 'string') {
+      return res.status(400).json({ message: '잘못된 콘텐츠 타입입니다.' });
+    }
+
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    const row = await getOrCreateCharges(char.id, contentType, pool);
+
+    if (row.charges <= 0) {
+      const elapsed = Date.now() - new Date(row.last_recharged_at).getTime();
+      const remaining = Math.max(0, CHARGE_COOLDOWN_MS - elapsed);
+      const hours = Math.floor(remaining / 3600000);
+      const minutes = Math.floor((remaining % 3600000) / 60000);
+      return res.status(400).json({
+        message: `입장 횟수를 모두 소진했습니다!\n${hours}시간 ${minutes}분 후 충전됩니다.`,
+        cooldown: remaining,
+      });
+    }
+
+    const newCharges = row.charges - 1;
+    if (newCharges === 0) {
+      await pool.query(
+        'UPDATE content_charges SET charges = 0, last_recharged_at = NOW() WHERE character_id = ? AND content_type = ?',
+        [char.id, contentType]
+      );
+    } else {
+      await pool.query(
+        'UPDATE content_charges SET charges = ? WHERE character_id = ? AND content_type = ?',
+        [newCharges, char.id, contentType]
+      );
+    }
+
+    const cooldown = newCharges === 0 ? CHARGE_COOLDOWN_MS : 0;
+    res.json({
+      charges: newCharges,
+      maxCharges: MAX_CHARGES,
+      cooldown,
+    });
+  } catch (err) {
+    console.error('Use charge error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 전투 시작 시 행동력 차감 (스테이지 & 던전 공용)
+// 콘텐츠별 행동력 소모량
+// normal_stage=1, boss_stage=2, dungeon=2, special_dungeon=3, boss_raid=4
 router.post('/spend-stamina', auth, async (req, res) => {
   try {
     const char = await getSelectedChar(req, pool);
@@ -322,21 +462,26 @@ router.post('/spend-stamina', auth, async (req, res) => {
 
     await refreshStamina(char, pool);
 
-    if (char.stamina <= 0) {
-      return res.status(400).json({ message: '행동력이 부족합니다!', stamina: 0, maxStamina: char.max_stamina });
+    const cost = Math.max(1, Math.min(10, parseInt(req.body.cost) || 1));
+
+    if (char.stamina < cost) {
+      return res.status(400).json({ message: `행동력이 부족합니다! (필요: ${cost}, 현재: ${char.stamina})`, stamina: char.stamina, maxStamina: char.max_stamina });
     }
 
-    await pool.query(
-      'UPDATE characters SET stamina = stamina - 1, last_stamina_time = IFNULL(last_stamina_time, NOW()) WHERE id = ?',
-      [char.id]
-    );
-
-    const newStamina = char.stamina - 1;
     // 행동력이 만땅에서 처음 소비되면 last_stamina_time을 현재로 설정
     if (char.stamina >= char.max_stamina) {
-      await pool.query('UPDATE characters SET last_stamina_time = NOW() WHERE id = ?', [char.id]);
+      await pool.query(
+        'UPDATE characters SET stamina = stamina - ?, last_stamina_time = NOW() WHERE id = ?',
+        [cost, char.id]
+      );
+    } else {
+      await pool.query(
+        'UPDATE characters SET stamina = stamina - ?, last_stamina_time = IFNULL(last_stamina_time, NOW()) WHERE id = ?',
+        [cost, char.id]
+      );
     }
 
+    const newStamina = char.stamina - cost;
     const [updatedChar] = await pool.query('SELECT last_stamina_time FROM characters WHERE id = ?', [char.id]);
     res.json({ stamina: newStamina, maxStamina: char.max_stamina, last_stamina_time: updatedChar[0]?.last_stamina_time });
   } catch (err) {
@@ -385,8 +530,8 @@ router.post('/battle-result', auth, async (req, res) => {
       // 레벨업 체크 (성장률 참조)
       const [gRows] = await conn.query('SELECT * FROM class_growth_rates WHERE class_type = ?', [char.class_type]);
       const g = gRows[0] || { hp_per_level: 10, mp_per_level: 5, attack_per_level: 2, defense_per_level: 1, phys_attack_per_level: 2, phys_defense_per_level: 1, mag_attack_per_level: 1, mag_defense_per_level: 1, crit_rate_per_10level: 1, evasion_per_10level: 1 };
-      let expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
-      while (newExp >= expNeeded) {
+      let expNeeded = Math.floor(120 * newLevel + 3 * newLevel * newLevel);
+      while (newExp >= expNeeded && newLevel < 100) {
         newExp -= expNeeded;
         newLevel++;
         newMaxHp += Math.floor(g.hp_per_level);
@@ -404,8 +549,9 @@ router.post('/battle-result', auth, async (req, res) => {
         // 레벨업 시 HP/MP 최대치로 회복
         finalHp = newMaxHp;
         finalMp = newMaxMp;
-        expNeeded = Math.floor(80 * newLevel + 0.5 * newLevel * newLevel);
+        expNeeded = Math.floor(120 * newLevel + 3 * newLevel * newLevel);
       }
+      if (newLevel >= 100) { newLevel = 100; newExp = 0; }
 
       // 소환수 경험치 분배 (기여도 기반)
       if (activeSummonIds && activeSummonIds.length > 0) {
@@ -415,7 +561,7 @@ router.post('/battle-result', auth, async (req, res) => {
           const sm = smRows[0];
           const summonExp = (summonExpMap && summonExpMap[smId]) ? summonExpMap[smId] : Math.floor((expGained || 0) * 0.7);
           let newSmExp = (sm.exp || 0) + summonExp;
-          const expNeededSm = Math.floor(40 * sm.level + 0.25 * sm.level * sm.level);
+          const expNeededSm = Math.floor(60 * sm.level + 1.5 * sm.level * sm.level);
           if (newSmExp >= expNeededSm) {
             const leftover = newSmExp - expNeededSm;
             const newSmLevel = sm.level + 1;
@@ -452,7 +598,7 @@ router.post('/battle-result', auth, async (req, res) => {
           const merc = mRows[0];
           const mercExp = (mercExpMap && mercExpMap[mId]) ? mercExpMap[mId] : Math.floor((expGained || 0) * 0.5);
           let newMercExp = (merc.exp || 0) + mercExp;
-          const expNeededMerc = Math.floor(40 * merc.level + 0.25 * merc.level * merc.level);
+          const expNeededMerc = Math.floor(60 * merc.level + 1.5 * merc.level * merc.level);
           if (newMercExp >= expNeededMerc) {
             const leftover = newMercExp - expNeededMerc;
             const newMercLevel = merc.level + 1;
@@ -484,15 +630,16 @@ router.post('/battle-result', auth, async (req, res) => {
           }
         }
       }
-      // 용병 피로도 차감 (전투 참여 시 1 소모)
-      if (activeMercenaryIds && activeMercenaryIds.length > 0) {
-        await conn.query(
-          `UPDATE character_mercenaries SET fatigue = GREATEST(0, fatigue - 1) WHERE id IN (?) AND character_id = ?`,
-          [activeMercenaryIds, char.id]
-        );
-      }
     } else {
       finalHp = 0;
+    }
+
+    // 용병 피로도 차감 (전투 참여 시 1 소모, 승패 무관)
+    if (activeMercenaryIds && activeMercenaryIds.length > 0) {
+      await conn.query(
+        `UPDATE character_mercenaries SET fatigue = GREATEST(0, fatigue - 1) WHERE id IN (?) AND character_id = ?`,
+        [activeMercenaryIds, char.id]
+      );
     }
 
     // 레벨업 스킬포인트
@@ -654,7 +801,7 @@ router.post('/battle-result', auth, async (req, res) => {
       );
       summonResults = smList.map(s => ({
         id: s.id, templateId: s.template_id, name: s.name, level: s.level, exp: s.exp,
-        icon: s.icon, type: s.type, expNeeded: Math.floor(40 * s.level + 0.25 * s.level * s.level),
+        icon: s.icon, type: s.type, expNeeded: Math.floor(60 * s.level + 1.5 * s.level * s.level),
       }));
     }
 
@@ -670,17 +817,13 @@ router.post('/battle-result', auth, async (req, res) => {
       );
       mercenaryResults = mercList.map(m => ({
         id: m.id, templateId: m.template_id, name: m.name, level: m.level, exp: m.exp,
-        icon: m.icon, classType: m.class_type, expNeeded: Math.floor(40 * m.level + 0.25 * m.level * m.level),
+        icon: m.icon, classType: m.class_type, expNeeded: Math.floor(60 * m.level + 1.5 * m.level * m.level),
       }));
     }
 
-    // 운세 버프 remaining_battles 차감 (스테이지 전투)
+    // 운세 버프 remaining_battles 차감 (소진되어도 삭제하지 않음 - 쿨타임 추적용)
     await conn.query(
-      'UPDATE character_fortunes SET remaining_battles = remaining_battles - 1 WHERE character_id = ? AND remaining_battles > 0',
-      [char.id]
-    );
-    await conn.query(
-      'DELETE FROM character_fortunes WHERE character_id = ? AND remaining_battles <= 0',
+      'UPDATE character_fortunes SET remaining_battles = GREATEST(0, remaining_battles - 1) WHERE character_id = ? AND remaining_battles > 0',
       [char.id]
     );
 

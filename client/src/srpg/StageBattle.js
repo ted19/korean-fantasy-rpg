@@ -20,7 +20,7 @@ const CLASS_ELEMENT_MAP = {
   '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark',
 };
 
-function StageBattle({ stage, character, charState, learnedSkills, passiveBonuses, activeSummons, activeMercenaries, monsters, groupKey, onBattleEnd, onLog, savedEnemySetup, savedRetreatFailed }) {
+function StageBattle({ stage, character, charState, learnedSkills, passiveBonuses, activeSummons, activeMercenaries, monsters, groupKey, onBattleEnd, onLog, savedEnemySetup, savedRetreatFailed, isStageCleared }) {
   const [units, setUnits] = useState([]);
   const [turnOrder, setTurnOrder] = useState([]);
   const [currentTurnIdx, setCurrentTurnIdx] = useState(0);
@@ -362,9 +362,57 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       }
     };
 
+    // === 구간 레벨 + 부분 스케일링 시스템 ===
+    // zoneLv: 스테이지 기준 레벨, playerLv: 플레이어 레벨
+    // s=0.5: 플레이어가 구간보다 높아도 몬스터는 50%만 따라감
+    // → 노가다하면 세지지만 완전 무쌍은 안 되는 구조
+    const SCALE_RATIO = 0.5;
+    const calcEffectiveLevel = (zoneLvMin, zoneLvMax, playerLv) => {
+      if (isPrologue) return 1;
+      const zoneMid = (zoneLvMin + zoneLvMax) / 2;
+      const maxGap = (zoneLvMax - zoneLvMin) + 5;
+      const gap = Math.max(0, playerLv - zoneMid);
+      const scaledGap = Math.min(gap, maxGap) * SCALE_RATIO;
+      return Math.max(zoneLvMin, Math.floor(zoneMid + scaledGap));
+    };
+
+    const scaleMonsterStats = (template, effectiveLv) => {
+      if (isPrologue) {
+        return {
+          ...template, level: 1,
+          hp: Math.max(5, Math.floor(template.hp * 0.05)),
+          attack: Math.max(1, Math.floor(template.attack * 0.05)),
+          defense: Math.floor((template.defense || 0) * 0.05),
+          phys_attack: Math.max(1, Math.floor((template.phys_attack || 0) * 0.05)),
+          mag_attack: Math.max(1, Math.floor((template.mag_attack || 0) * 0.05)),
+          phys_defense: 0, mag_defense: 0,
+          crit_rate: 0, evasion: 0, skills: [],
+        };
+      }
+      const lv = effectiveLv - 1;
+      // HP: 레벨당 +10% (플레이어보다 약간 느리게)
+      // 공격: 레벨당 +8% (긴장감 유지)
+      // 방어: 레벨당 +4% (플레이어 공격이 무의미해지지 않도록 낮게)
+      return {
+        ...template,
+        level: effectiveLv,
+        hp: Math.max(10, Math.floor(template.hp * (1 + lv * 0.10))),
+        attack: Math.max(2, Math.floor(template.attack * (1 + lv * 0.08))),
+        defense: Math.floor((template.defense || 0) * (1 + lv * 0.04)),
+        phys_attack: Math.max(2, Math.floor((template.phys_attack || 0) * (1 + lv * 0.08))),
+        mag_attack: Math.max(1, Math.floor((template.mag_attack || 0) * (1 + lv * 0.08))),
+        phys_defense: Math.floor((template.phys_defense || 0) * (1 + lv * 0.04)),
+        mag_defense: Math.floor((template.mag_defense || 0) * (1 + lv * 0.04)),
+      };
+    };
+
     const buildEnemyTeam = () => {
       const monsterCount = Math.min(stage.monsterCount || 3, 9);
       const availableMonsters = monsters || [];
+      const playerLv = character?.level || 1;
+      const zoneLvMin = stage.monsterLevelMin || 1;
+      const zoneLvMax = stage.monsterLevelMax || 3;
+      const effectiveLv = calcEffectiveLevel(zoneLvMin, zoneLvMax, playerLv);
 
       // 저장된 적 구성이 있으면 그대로 복원 (정예 리롤 방지)
       if (savedEnemySetup && savedEnemySetup.length > 0) {
@@ -374,16 +422,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
           const setup = savedEnemySetup[i];
           const template = availableMonsters.find(m => m.id === setup.templateId);
           if (!template) continue;
-          const statScale = isPrologue ? 0.3 : 1;
-          let scaled = {
-            ...template,
-            level: setup.level,
-            hp: Math.floor(template.hp * (1 + (setup.level - 1) * 0.12) * statScale),
-            attack: Math.floor(template.attack * (1 + (setup.level - 1) * 0.08) * statScale),
-            defense: Math.floor((template.defense || 0) * (1 + (setup.level - 1) * 0.08) * statScale),
-            phys_attack: Math.floor((template.phys_attack || 0) * (1 + (setup.level - 1) * 0.08) * statScale),
-            mag_attack: Math.floor((template.mag_attack || 0) * (1 + (setup.level - 1) * 0.08) * statScale),
-          };
+          let scaled = scaleMonsterStats(template, setup.level);
           if (setup.eliteTier) {
             scaled = applyEliteStats(scaled, setup.eliteTier);
             eliteInfo = { name: scaled.name, icon: scaled.icon, monsterId: scaled.id, tier: setup.eliteTier };
@@ -393,27 +432,19 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         return { enemyTeam, eliteInfo };
       }
 
-      // 프롤로그에서는 정예 등장 안 함
-      const eliteTier = isPrologue ? null : rollEliteTier();
+      // 프롤로그 및 미클리어 스테이지에서는 정예 등장 안 함
+      const eliteTier = (isPrologue || !isStageCleared) ? null : rollEliteTier();
       const eliteIdx = eliteTier ? Math.floor(Math.random() * monsterCount) : -1;
 
       let eliteInfo = null;
       const enemyTeam = [];
-      const enemySetup = []; // 적 구성 저장용
+      const enemySetup = [];
       for (let i = 0; i < monsterCount && availableMonsters.length > 0; i++) {
         const template = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
-        const levelBonus = (stage.monsterLevelMin || 1) + Math.floor(Math.random() * ((stage.monsterLevelMax || 3) - (stage.monsterLevelMin || 1) + 1));
-        // 프롤로그: 몬스터 스탯 대폭 약화 (30%)
-        const statScale = isPrologue ? 0.3 : 1;
-        let scaled = {
-          ...template,
-          level: levelBonus,
-          hp: Math.floor(template.hp * (1 + (levelBonus - 1) * 0.12) * statScale),
-          attack: Math.floor(template.attack * (1 + (levelBonus - 1) * 0.08) * statScale),
-          defense: Math.floor((template.defense || 0) * (1 + (levelBonus - 1) * 0.08) * statScale),
-          phys_attack: Math.floor((template.phys_attack || 0) * (1 + (levelBonus - 1) * 0.08) * statScale),
-          mag_attack: Math.floor((template.mag_attack || 0) * (1 + (levelBonus - 1) * 0.08) * statScale),
-        };
+        // 개별 몬스터 레벨에 약간의 랜덤 편차 (±1)
+        const lvVariance = Math.floor(Math.random() * 3) - 1;
+        const monLv = Math.max(1, effectiveLv + lvVariance);
+        let scaled = scaleMonsterStats(template, monLv);
 
         const isElite = (i === eliteIdx && eliteTier);
         if (isElite) {
@@ -421,7 +452,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
           eliteInfo = { name: scaled.name, icon: scaled.icon, monsterId: scaled.id, tier: eliteTier };
         }
 
-        enemySetup.push({ templateId: template.id, level: levelBonus, eliteTier: isElite ? eliteTier : null });
+        enemySetup.push({ templateId: template.id, level: monLv, eliteTier: isElite ? eliteTier : null });
         enemyTeam.push(createCardMonsterUnit(scaled, i));
       }
 
@@ -1119,7 +1150,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
 
       {/* 전투 배경 이미지 */}
       <div className="cb-bg-layer">
-        <img src={isPrologue ? '/dungeons/swamp_bg.png' : '/ui/battle/battle_bg.png'} alt="" className="cb-bg-img" onError={(e) => { e.target.style.display='none'; }} />
+        <img src={isPrologue ? '/dungeons/swamp_bg.png' : `/stages/levels/${groupKey}_${stage.stageNumber}.png`} alt="" className="cb-bg-img" onError={(e) => { e.target.src = '/ui/battle/battle_bg.png'; e.target.onerror = () => { e.target.style.display='none'; }; }} />
         <div className="cb-bg-overlay" />
       </div>
 

@@ -5,12 +5,14 @@ const CLASS_ICONS = {
   '풍수사': '✨',
   '무당': '🌙',
   '승려': '☸️',
+  '저승사자': '💀',
 };
 
 const CLASS_IMAGES = {
   '풍수사': '/characters/pungsu_icon.png',
   '무당': '/characters/mudang_icon.png',
   '승려': '/characters/monk_icon.png',
+  '저승사자': '/characters/reaper_icon.png',
 };
 
 const MENU_ITEMS = [

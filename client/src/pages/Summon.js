@@ -153,7 +153,7 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
       await loadMySummons();
       if (selectedSummon?.id === summonId) setSelectedSummon(null);
     } catch (err) {
-      onLog(err.response?.data?.message || '해고 실패', 'damage');
+      onLog(err.response?.data?.message || '소환해제 실패', 'damage');
     }
     setLoading(false);
   };
@@ -443,7 +443,7 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
               const el = ELEMENT_INFO[s.element] || ELEMENT_INFO.neutral;
               const rt = detectSummonRangeType(s);
               const ri = RANGE_INFO[rt] || RANGE_INFO.melee;
-              const expNeeded = Math.floor(40 * s.level + 0.25 * s.level * s.level);
+              const expNeeded = Math.floor(60 * s.level + 1.5 * s.level * s.level);
               return (
                 <div
                   key={s.id}
@@ -538,7 +538,7 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
                   disabled={loading}
                   onClick={() => setFireConfirm(selectedSummon)}
                 >
-                  해고
+                  소환해제
                 </button>
               </div>
             );
@@ -548,12 +548,12 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
     </div>
     )}
 
-    {/* 소환수 해고 확인 팝업 */}
+    {/* 소환수 소환해제 확인 팝업 */}
     {fireConfirm && (
       <div className="aura-popup-overlay" onClick={() => setFireConfirm(null)}>
         <div className="inn-rest-popup" onClick={e => e.stopPropagation()}>
           <div className="inn-rest-popup-header" style={{ borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-            <span>소환수 해고 확인</span>
+            <span>소환해제 확인</span>
             <button className="aura-popup-close" onClick={() => setFireConfirm(null)}>&times;</button>
           </div>
           <div className="inn-rest-popup-body">
@@ -564,18 +564,25 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
                 <div style={{ fontSize: 12, color: '#aaa' }}>{fireConfirm.type} · Lv.{fireConfirm.level}</div>
               </div>
             </div>
-            <div className="inn-fire-confirm-warn">
-              정말 해고하시겠습니까?<br/>
-              <span style={{ color: '#ef4444' }}>해고된 소환수는 복구할 수 없습니다.</span>
-            </div>
+            {fireConfirm.equipped_count > 0 ? (
+              <div className="inn-fire-confirm-warn" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px' }}>
+                <span style={{ color: '#ef4444', fontWeight: 700 }}>⚠ 장비가 {fireConfirm.equipped_count}개 장착되어 있습니다.</span><br/>
+                <span style={{ color: '#aaa' }}>장비를 먼저 해제한 후 소환해제가 가능합니다.</span>
+              </div>
+            ) : (
+              <div className="inn-fire-confirm-warn">
+                정말 소환을 해제하시겠습니까?<br/>
+                <span style={{ color: '#ef4444' }}>소환해제된 소환수는 복구할 수 없습니다.</span>
+              </div>
+            )}
             <div className="inn-fire-confirm-btns">
               <button className="inn-fire-confirm-cancel" onClick={() => setFireConfirm(null)}>취소</button>
               <button
                 className="inn-fire-confirm-ok"
-                disabled={loading}
+                disabled={loading || fireConfirm.equipped_count > 0}
                 onClick={() => handleSell(fireConfirm.id)}
               >
-                {loading ? '해고 중...' : '해고'}
+                {fireConfirm.equipped_count > 0 ? '장비 해제 필요' : loading ? '해제 중...' : '소환해제'}
               </button>
             </div>
           </div>

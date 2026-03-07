@@ -6,18 +6,21 @@ const CLASS_IMAGES = {
   '풍수사': '/characters/pungsu_icon.png',
   '무당': '/characters/mudang_icon.png',
   '승려': '/characters/monk_icon.png',
+  '저승사자': '/characters/reaper_icon.png',
 };
 
 const CLASS_FULL_IMAGES = {
   '풍수사': '/characters/pungsu_full.png',
   '무당': '/characters/mudang_full.png',
   '승려': '/characters/monk_full.png',
+  '저승사자': '/characters/reaper_full.png',
 };
 
 const CLASS_ICONS = {
   '풍수사': '⬥',
   '무당': '◈',
   '승려': '◆',
+  '저승사자': '☠',
 };
 
 const ELEMENT_INFO = {
@@ -28,18 +31,25 @@ const ELEMENT_INFO = {
   neutral: { name: '무(無)', color: '#8a7a60' },
 };
 
-const MENU_ITEMS = [
+const MENU_ITEMS_ALL = [
+  { id: 'prologue', name: '프롤로그', icon: '/ui/nav_prologue.png', fallback: '📜', prologueOnly: true },
   { id: 'home', name: '홈', icon: '/ui/nav_home.png' },
-  { id: 'village', name: '마을', icon: '/ui/nav_village.png' },
-  { id: 'stage', name: '스테이지', icon: '/ui/nav_stage.png' },
-  { id: 'dungeon', name: '던전', icon: '/ui/nav_dungeon.png' },
-  { id: 'special', name: '스페셜', icon: '/ui/nav_special.png' },
-  { id: 'bestiary', name: '도감', icon: '/ui/nav_bestiary.png' },
+  { id: 'village', name: '마을', icon: '/ui/nav_village.png', requirePrologue: true },
+  { id: 'stage', name: '스테이지', icon: '/ui/nav_stage.png', requirePrologue: true },
+  { id: 'dungeon', name: '던전', icon: '/ui/nav_dungeon.png', requirePrologue: true, minLevel: 3 },
+  { id: 'special', name: '스페셜', icon: '/ui/nav_special.png', requirePrologue: true, minLevel: 5 },
+  { id: 'bestiary', name: '도감', icon: '/ui/nav_bestiary.png', requirePrologue: true },
 ];
 
 const ELEMENT_AURA = {
   fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy',
   light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
+};
+
+const BUFF_TYPE_LABELS = {
+  attack: '공격력', defense: '방어력', gold: '골드 보너스',
+  crit: '치명타율', regen: '재생력', all: '전체 능력',
+  exp: '경험치', evasion: '회피율',
 };
 
 const STAMINA_INTERVAL = 5 * 60; // 5분 = 300초
@@ -112,7 +122,7 @@ function StaminaDisplay({ stamina, maxStamina, lastStaminaTime }) {
   );
 }
 
-function TopNav({ character, charState, currentLocation, onLocationChange, onLogout, onGoToCharacterSelect }) {
+function TopNav({ character, charState, currentLocation, onLocationChange, onLogout, onGoToCharacterSelect, prologueCleared }) {
   const [imgError, setImgError] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showCharPopup, setShowCharPopup] = useState(false);
@@ -120,9 +130,20 @@ function TopNav({ character, charState, currentLocation, onLocationChange, onLog
   const [charList, setCharList] = useState([]);
   const [charListLoading, setCharListLoading] = useState(false);
   const [equippedCosmetics, setEquippedCosmetics] = useState({});
+  const [fortuneBuffs, setFortuneBuffs] = useState([]);
+  const [showBuffPopup, setShowBuffPopup] = useState(false);
 
   useEffect(() => {
     api.get('/shop/cosmetics/equipped').then(r => setEquippedCosmetics(r.data.cosmetics || {})).catch(() => {});
+    api.get('/fortune/buffs').then(r => setFortuneBuffs(r.data.buffs || [])).catch(() => {});
+  }, [character?.id]);
+
+  // 60초마다 버프 갱신
+  useEffect(() => {
+    const timer = setInterval(() => {
+      api.get('/fortune/buffs').then(r => setFortuneBuffs(r.data.buffs || [])).catch(() => {});
+    }, 60000);
+    return () => clearInterval(timer);
   }, [character?.id]);
 
   const playerAura = equippedCosmetics['player']?.effect || ELEMENT_AURA[character?.element] || 'aura_gold';
@@ -289,7 +310,29 @@ function TopNav({ character, charState, currentLocation, onLocationChange, onLog
         </div>
       </div>
     )}
-    <nav className="top-nav-v2">
+    {showBuffPopup && fortuneBuffs.length > 0 && (
+      <div className="fortune-popup-overlay" onClick={() => setShowBuffPopup(false)}>
+        <div className="fortune-popup" onClick={e => e.stopPropagation()}>
+          <div className="fortune-popup-header">
+            <span>🔮 활성 버프</span>
+            <button className="fortune-popup-close" onClick={() => setShowBuffPopup(false)}>&times;</button>
+          </div>
+          <div className="fortune-popup-list">
+            {fortuneBuffs.map((b, i) => (
+              <div key={i} className="fortune-popup-item">
+                <span className="fortune-popup-icon">{b.icon || '✨'}</span>
+                <div className="fortune-popup-info">
+                  <span className="fortune-popup-type">{BUFF_TYPE_LABELS[b.buff_type] || b.buff_type}</span>
+                  <span className="fortune-popup-val">+{b.buff_value}</span>
+                </div>
+                <span className="fortune-popup-remain">{b.remaining_battles}전투</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+    <nav className="top-nav-v2" style={currentLocation === 'prologue' ? { display: 'none' } : undefined}>
       {/* 배경 장식 */}
       <div className="top-nav-v2-bg" style={{ backgroundImage: 'url(/ui/nav_bg.png)', backgroundSize: 'cover', backgroundPosition: 'center' }} />
 
@@ -326,6 +369,16 @@ function TopNav({ character, charState, currentLocation, onLocationChange, onLog
                   maxStamina={charState.maxStamina}
                   lastStaminaTime={charState.lastStaminaTime}
                 />
+                {fortuneBuffs.length > 0 && (
+                  <span
+                    className="top-nav-v2-stat fortune-tag"
+                    onClick={() => setShowBuffPopup(v => !v)}
+                    title="운명술사 버프"
+                  >
+                    <span className="fortune-tag-icon">🔮</span>
+                    <span className="fortune-tag-count">{fortuneBuffs.length}</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -338,14 +391,26 @@ function TopNav({ character, charState, currentLocation, onLocationChange, onLog
 
         {/* 오른쪽: 메뉴 */}
         <div className={`top-nav-v2-menu${menuOpen ? ' open' : ''}`}>
-          {MENU_ITEMS.map((item) => (
+          {MENU_ITEMS_ALL
+            .filter(item => {
+              // 프롤로그 미완료: 홈+프롤로그만 표시
+              if (!prologueCleared) {
+                return item.id === 'home' || item.id === 'prologue';
+              }
+              // 프롤로그 완료: 프롤로그 메뉴 숨김
+              if (item.prologueOnly) return false;
+              // 레벨 조건
+              if (item.minLevel && charState.level < item.minLevel) return false;
+              return true;
+            })
+            .map((item) => (
             <button
               key={item.id}
               className={`top-nav-v2-btn${currentLocation === item.id ? ' active' : ''}`}
               onClick={() => { onLocationChange(item.id); setMenuOpen(false); }}
             >
               <div className="top-nav-v2-btn-icon-wrap">
-                <NavIcon src={item.icon} fallback="?" className="top-nav-v2-btn-icon" />
+                <NavIcon src={item.icon} fallback={item.fallback || '?'} className="top-nav-v2-btn-icon" />
                 {currentLocation === item.id && <div className="top-nav-v2-btn-glow" />}
               </div>
               <span className="top-nav-v2-btn-name">{item.name}</span>

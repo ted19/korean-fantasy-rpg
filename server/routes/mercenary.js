@@ -82,7 +82,7 @@ router.get('/my', auth, async (req, res) => {
       [charId]
     );
 
-    // 각 용병의 학습된 스킬 로드
+    // 각 용병의 학습된 스킬 + 장착 장비 수 로드
     for (const merc of mercenaries) {
       const [skills] = await pool.query(
         `SELECT ms.* FROM mercenary_skills ms
@@ -92,6 +92,11 @@ router.get('/my', auth, async (req, res) => {
         [merc.id]
       );
       merc.learned_skills = skills;
+      const [[{ cnt }]] = await pool.query(
+        'SELECT COUNT(*) as cnt FROM mercenary_equipment WHERE mercenary_id = ?',
+        [merc.id]
+      );
+      merc.equipped_count = cnt;
     }
 
     // 고용 슬롯 정보
@@ -175,11 +180,11 @@ router.post('/hire', auth, async (req, res) => {
     const [inserted] = await conn.query('SELECT LAST_INSERT_ID() as mercId');
     const newMercId = inserted[0].mercId;
 
-    // 기본 스킬 자동 학습 (공통 스킬 + 해당 class_type Lv10 이하 스킬)
+    // 기본 스킬 자동 학습 (레벨 1 이하 스킬만)
     const [defaultSkills] = await conn.query(
       `SELECT id FROM mercenary_skills
-       WHERE (is_common = 1 AND required_level <= 10)
-          OR (class_type = ? AND required_level <= 10)`,
+       WHERE (is_common = 1 AND required_level <= 1)
+          OR (class_type = ? AND required_level <= 1)`,
       [tpl.class_type]
     );
     for (const sk of defaultSkills) {

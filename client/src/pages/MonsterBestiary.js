@@ -5,11 +5,11 @@ import { ELITE_TIERS } from '../srpg/battleEngine';
 import './MonsterBestiary.css';
 
 const ELEMENT_INFO = {
-  fire:    { name: '불', icon: '🔥', color: '#ff6b35' },
-  water:   { name: '물', icon: '💧', color: '#4da6ff' },
-  earth:   { name: '땅', icon: '🪨', color: '#8bc34a' },
-  wind:    { name: '바람', icon: '🌀', color: '#b388ff' },
-  neutral: { name: '중립', icon: '⚪', color: '#9ca3af' },
+  fire:    { name: '불', icon: '🔥', color: '#ff6b35', aura: 'flame' },
+  water:   { name: '물', icon: '💧', color: '#4da6ff', aura: 'ice' },
+  earth:   { name: '땅', icon: '🪨', color: '#8bc34a', aura: 'aura_gold' },
+  wind:    { name: '바람', icon: '🌀', color: '#b388ff', aura: 'wind' },
+  neutral: { name: '중립', icon: '⚪', color: '#9ca3af', aura: '' },
 };
 
 const ELEMENT_TABLE = {
@@ -41,11 +41,32 @@ const GRADE_COLORS = {
 const TYPE_LABELS = {
   weapon: '무기', chest: '갑옷', helmet: '투구', boots: '장화',
   ring: '반지', necklace: '목걸이', shield: '방패', armor: '방어구',
+  cosmetic: '오라',
 };
 
 const TYPE_ICONS = {
   weapon: '⚔️', chest: '🛡️', helmet: '🪖', boots: '👢',
   ring: '💍', necklace: '📿', shield: '🛡️', armor: '🛡️',
+  cosmetic: '✨',
+};
+
+const COSMETIC_AURA_MAP = {
+  aura_gold: { name: '황금 기운', aura: 'aura_gold', color: '#ffa502' },
+  flame: { name: '불꽃 오라', aura: 'flame', color: '#ff4500' },
+  ice: { name: '빙결 오라', aura: 'ice', color: '#87cefa' },
+  lightning: { name: '번개 오라', aura: 'lightning', color: '#ffd700' },
+  shadow: { name: '암흑 오라', aura: 'shadow', color: '#9b59b6' },
+  holy: { name: '신성 오라', aura: 'holy', color: '#fff3bf' },
+  poison: { name: '독기 오라', aura: 'poison', color: '#2ed573' },
+  wind: { name: '바람 오라', aura: 'wind', color: '#96dcff' },
+  blood: { name: '혈기 오라', aura: 'blood', color: '#b40000' },
+  spirit: { name: '영혼 오라', aura: 'spirit', color: '#b482ff' },
+  dragon_breath: { name: '용의 숨결', aura: 'dragon_breath', color: '#ff8c00' },
+  celestial: { name: '천상의 빛', aura: 'celestial', color: '#e0c0ff' },
+  abyssal_flame: { name: '심연의 화염', aura: 'abyssal_flame', color: '#8b00c8' },
+  starlight: { name: '별빛 오라', aura: 'starlight', color: '#aab8ff' },
+  phoenix: { name: '봉황의 기운', aura: 'phoenix', color: '#ff6600' },
+  chaos_vortex: { name: '혼돈의 소용돌이', aura: 'chaos_vortex', color: '#c850ff' },
 };
 
 function ImgWithFallback({ src, fallback, className, onLoad }) {
@@ -65,6 +86,12 @@ const COUNTRY_FILTERS = [
   { key: 'etc', label: '기타', icon: '📦' },
 ];
 
+const DISCOVER_FILTERS = [
+  { key: 'all', label: '전체' },
+  { key: 'discovered', label: '발견됨' },
+  { key: 'undiscovered', label: '미발견' },
+];
+
 function MonsterTab() {
   const [categories, setCategories] = useState([]);
   const [monsters, setMonsters] = useState([]);
@@ -72,12 +99,16 @@ function MonsterTab() {
   const [selectedCat, setSelectedCat] = useState(null);
   const [selectedTier, setSelectedTier] = useState(null);
   const [searchText, setSearchText] = useState('');
+  const [discoverFilter, setDiscoverFilter] = useState('all');
   const [selectedMonster, setSelectedMonster] = useState(null);
   const [monsterSkills, setMonsterSkills] = useState([]);
   const [monsterDrops, setMonsterDrops] = useState([]);
+  const [bestiaryInfo, setBestiaryInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [imageLoading, setImageLoading] = useState({});
   const [detailImgLoaded, setDetailImgLoaded] = useState(false);
+  const [totalMonsters, setTotalMonsters] = useState(0);
+  const [discoveredCount, setDiscoveredCount] = useState(0);
 
   useEffect(() => {
     api.get('/monsters/categories').then(r => setCategories(r.data.categories)).catch(() => {});
@@ -92,26 +123,36 @@ function MonsterTab() {
       if (selectedTier) params.tier = selectedTier;
       if (searchText) params.search = searchText;
       const res = await api.get('/monsters/encyclopedia', { params });
-      setMonsters(res.data.monsters);
+      let list = res.data.monsters;
+      if (discoverFilter === 'discovered') list = list.filter(m => m.discovered);
+      else if (discoverFilter === 'undiscovered') list = list.filter(m => !m.discovered);
+      setMonsters(list);
+      setTotalMonsters(res.data.totalMonsters || 0);
+      setDiscoveredCount(res.data.discoveredCount || 0);
     } catch { setMonsters([]); }
     setLoading(false);
-  }, [selectedCountry, selectedCat, selectedTier, searchText]);
+  }, [selectedCountry, selectedCat, selectedTier, searchText, discoverFilter]);
 
   useEffect(() => { loadMonsters(); }, [loadMonsters]);
 
   const openDetail = async (m) => {
+    if (!m.discovered) return; // 미발견 몬스터는 상세보기 불가
     setSelectedMonster(m);
     setDetailImgLoaded(false);
     setMonsterSkills([]);
     setMonsterDrops([]);
+    setBestiaryInfo(null);
     try {
       const res = await api.get(`/monsters/${m.id}`);
       const detail = res.data.monster;
       detail.image_url = `/monsters/${detail.id}_full.png`;
       detail.icon_url = `/monsters/${detail.id}_icon.png`;
+      detail.discovered = m.discovered;
+      detail.killCount = m.killCount;
       setSelectedMonster(detail);
       setMonsterSkills(res.data.skills || []);
       setMonsterDrops(res.data.drops || []);
+      setBestiaryInfo(res.data.bestiary || null);
     } catch (err) {
       console.error('Monster detail load error:', err);
     }
@@ -143,9 +184,20 @@ function MonsterTab() {
 
   const sm = selectedMonster;
 
+  const discoverPct = totalMonsters > 0 ? Math.round((discoveredCount / totalMonsters) * 100) : 0;
+
   return (
     <>
-      <div className="bestiary-subtitle">{monsters.length}종 발견</div>
+      <div className="bestiary-discover-bar">
+        <div className="bestiary-discover-header">
+          <span className="bestiary-discover-label">도감 달성률</span>
+          <span className="bestiary-discover-count">{discoveredCount} / {totalMonsters}</span>
+          <span className="bestiary-discover-pct">{discoverPct}%</span>
+        </div>
+        <div className="bestiary-discover-track">
+          <div className="bestiary-discover-fill" style={{ width: `${discoverPct}%` }} />
+        </div>
+      </div>
 
       <div className="bestiary-filters">
         <div className="bestiary-filter-row">
@@ -154,6 +206,16 @@ function MonsterTab() {
               <button key={cf.key || 'all'} className={`bestiary-pill bestiary-country-pill ${selectedCountry === cf.key ? 'active' : ''}`}
                 onClick={() => setSelectedCountry(cf.key)}>
                 {cf.icon} {cf.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="bestiary-filter-row">
+          <div className="bestiary-cat-pills">
+            {DISCOVER_FILTERS.map(df => (
+              <button key={df.key} className={`bestiary-pill bestiary-discover-pill ${discoverFilter === df.key ? 'active' : ''}`}
+                onClick={() => setDiscoverFilter(df.key)}>
+                {df.key === 'discovered' ? '\u2611 ' : df.key === 'undiscovered' ? '\u2610 ' : ''}{df.label}
               </button>
             ))}
           </div>
@@ -188,28 +250,48 @@ function MonsterTab() {
         <Row className="bestiary-grid g-2">
           {monsters.map(m => (
             <Col xs={6} sm={4} md={3} lg={2} key={m.id}>
-              <div className="bestiary-card" onClick={() => openDetail(m)} style={{ borderColor: tierColor(m.tier) }}>
+              <div className={`bestiary-card ${!m.discovered ? 'bestiary-card-locked' : ''}`}
+                onClick={() => openDetail(m)}
+                style={{ borderColor: m.discovered ? tierColor(m.tier) : '#333' }}>
                 <div className="bestiary-card-img">
-                  {imageLoading[m.id] !== 'loaded' && (
-                    <div className="bestiary-img-placeholder"><span className="bestiary-icon-large">{m.icon}</span></div>
+                  {m.discovered ? (
+                    <>
+                      {imageLoading[m.id] !== 'loaded' && (
+                        <div className="bestiary-img-placeholder"><span className="bestiary-icon-large">{m.icon}</span></div>
+                      )}
+                      <img src={m.icon_url} alt={m.name}
+                        onLoad={() => setImageLoading(prev => ({ ...prev, [m.id]: 'loaded' }))}
+                        onError={() => setImageLoading(prev => ({ ...prev, [m.id]: 'error' }))}
+                        style={imageLoading[m.id] === 'loaded' ? {} : { display: 'none' }}
+                      />
+                      {m.element && ELEMENT_INFO[m.element]?.aura && (
+                        <div className={`bestiary-card-aura bd-aura-${ELEMENT_INFO[m.element].aura}`} />
+                      )}
+                    </>
+                  ) : (
+                    <div className="bestiary-img-placeholder bestiary-img-unknown">
+                      <span className="bestiary-icon-large">?</span>
+                    </div>
                   )}
-                  <img src={m.icon_url} alt={m.name}
-                    onLoad={() => setImageLoading(prev => ({ ...prev, [m.id]: 'loaded' }))}
-                    onError={() => setImageLoading(prev => ({ ...prev, [m.id]: 'error' }))}
-                    style={imageLoading[m.id] === 'loaded' ? {} : { display: 'none' }}
-                  />
                 </div>
                 <div className="bestiary-card-info">
-                  <div className="bestiary-card-name">{m.name}</div>
+                  <div className="bestiary-card-name">{m.discovered ? m.name : '???'}</div>
                   <div className="bestiary-card-tier">{tierStars(m.tier)}</div>
-                  <div className="bestiary-card-cat">
-                    {m.category_icon} {m.category_name || ''}
-                    {m.element && ELEMENT_INFO[m.element] && (
-                      <span className="bestiary-card-element" style={{ color: ELEMENT_INFO[m.element].color }}>
-                        {ELEMENT_INFO[m.element].icon}
-                      </span>
-                    )}
-                  </div>
+                  {m.discovered ? (
+                    <div className="bestiary-card-cat">
+                      {m.category_icon} {m.category_name || ''}
+                      {m.element && ELEMENT_INFO[m.element] && (
+                        <span className="bestiary-card-element" style={{ color: ELEMENT_INFO[m.element].color }}>
+                          {ELEMENT_INFO[m.element].icon}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bestiary-card-cat" style={{ color: '#555' }}>미발견</div>
+                  )}
+                  {m.discovered && m.killCount > 0 && (
+                    <div className="bestiary-card-kills">{m.killCount}회 처치</div>
+                  )}
                 </div>
               </div>
             </Col>
@@ -232,6 +314,9 @@ function MonsterTab() {
                   {!detailImgLoaded && <div className="bd-portrait-placeholder">{sm.icon}</div>}
                   <img src={sm.image_url} alt={sm.name} onLoad={() => setDetailImgLoaded(true)}
                     onError={(e) => { e.target.style.display='none'; }} style={detailImgLoaded ? {} : { display: 'none' }} />
+                  {sm.element && ELEMENT_INFO[sm.element]?.aura && (
+                    <div className={`bd-portrait-aura bd-aura-${ELEMENT_INFO[sm.element].aura}`} />
+                  )}
                 </div>
                 <div className="bd-header-info">
                   <div className="bd-name-row">
@@ -261,6 +346,32 @@ function MonsterTab() {
             </div>
 
             <div className="bd-body">
+              {/* 도감 정보 */}
+              {bestiaryInfo && (
+                <div className="bd-section bd-bestiary-section">
+                  <h3 className="bd-section-title">도감 기록</h3>
+                  <div className="bd-bestiary-stats">
+                    <div className="bd-bestiary-stat">
+                      <span className="bd-bestiary-stat-icon">&#9876;</span>
+                      <span className="bd-bestiary-stat-label">총 처치</span>
+                      <span className="bd-bestiary-stat-value">{bestiaryInfo.kill_count.toLocaleString()}회</span>
+                    </div>
+                    <div className="bd-bestiary-stat">
+                      <span className="bd-bestiary-stat-icon">&#128270;</span>
+                      <span className="bd-bestiary-stat-label">최초 발견</span>
+                      <span className="bd-bestiary-stat-value">{new Date(bestiaryInfo.first_discovered).toLocaleDateString('ko-KR')}</span>
+                    </div>
+                    <div className="bd-bestiary-stat">
+                      <span className="bd-bestiary-stat-icon">{bestiaryInfo.kill_count >= 100 ? '&#11088;' : bestiaryInfo.kill_count >= 50 ? '&#128081;' : bestiaryInfo.kill_count >= 10 ? '&#9876;' : '&#128065;'}</span>
+                      <span className="bd-bestiary-stat-label">숙련도</span>
+                      <span className={`bd-bestiary-stat-value bd-mastery-${bestiaryInfo.kill_count >= 100 ? 'master' : bestiaryInfo.kill_count >= 50 ? 'expert' : bestiaryInfo.kill_count >= 10 ? 'skilled' : 'novice'}`}>
+                        {bestiaryInfo.kill_count >= 100 ? '대가' : bestiaryInfo.kill_count >= 50 ? '숙련' : bestiaryInfo.kill_count >= 10 ? '경험' : '초보'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="bd-section">
                 <h3 className="bd-section-title">전투 능력치</h3>
                 <div className="bd-stats">
@@ -444,7 +555,7 @@ function EquipmentTab() {
   useEffect(() => { loadItems(); }, [loadItems]);
 
   const grades = ['일반', '고급', '희귀', '영웅', '전설', '신화'];
-  const types = ['weapon', 'chest', 'helmet', 'boots', 'shield', 'ring', 'necklace'];
+  const types = ['weapon', 'chest', 'helmet', 'boots', 'shield', 'ring', 'necklace', 'cosmetic'];
 
   return (
     <>
@@ -482,104 +593,146 @@ function EquipmentTab() {
         <div className="bestiary-empty">조건에 맞는 장비가 없습니다.</div>
       ) : (
         <Row className="bestiary-grid g-2">
-          {items.map(item => (
-            <Col xs={6} sm={4} md={3} lg={2} key={item.id}>
-              <div className="bestiary-card equip-card" onClick={() => setSelectedItem(item)}
-                style={{ borderColor: GRADE_COLORS[item.grade] || '#555' }}>
-                <div className="bestiary-card-img equip-card-img">
-                  <ImgWithFallback src={`/equipment/${item.id}_icon.png`} fallback={TYPE_ICONS[item.type] || '📦'}
-                    className="equip-bestiary-icon" />
-                </div>
-                <div className="bestiary-card-info">
-                  <div className="bestiary-card-name" style={{ color: GRADE_COLORS[item.grade] }}>{item.name}</div>
-                  <div className="equip-card-grade" style={{ color: GRADE_COLORS[item.grade] }}>[{item.grade}]</div>
-                  <div className="bestiary-card-cat">
-                    {TYPE_ICONS[item.type]} {TYPE_LABELS[item.type]}
-                    {item.class_restriction && <span className="equip-class-tag">{item.class_restriction}</span>}
+          {items.map(item => {
+            const isCosmetic = item.type === 'cosmetic' && item.cosmetic_effect;
+            const auraInfo = isCosmetic ? COSMETIC_AURA_MAP[item.cosmetic_effect] : null;
+            return (
+              <Col xs={6} sm={4} md={3} lg={2} key={item.id}>
+                <div className="bestiary-card equip-card" onClick={() => setSelectedItem(item)}
+                  style={{ borderColor: isCosmetic ? (auraInfo?.color || '#a78bfa') : (GRADE_COLORS[item.grade] || '#555') }}>
+                  <div className={`bestiary-card-img equip-card-img ${isCosmetic ? 'cosmetic-card-img' : ''}`}>
+                    {isCosmetic ? (
+                      <>
+                        <ImgWithFallback src={`/cosmetics/${item.cosmetic_effect}.png`} fallback="✨"
+                          className="equip-bestiary-icon cosmetic-orb-icon" />
+                        <div className={`bestiary-card-aura bd-aura-${auraInfo?.aura || 'aura_gold'}`} />
+                      </>
+                    ) : (
+                      <ImgWithFallback src={`/equipment/${item.id}_icon.png`} fallback={TYPE_ICONS[item.type] || '📦'}
+                        className="equip-bestiary-icon" />
+                    )}
+                  </div>
+                  <div className="bestiary-card-info">
+                    <div className="bestiary-card-name" style={{ color: isCosmetic ? (auraInfo?.color || '#a78bfa') : GRADE_COLORS[item.grade] }}>{item.name}</div>
+                    {!isCosmetic && <div className="equip-card-grade" style={{ color: GRADE_COLORS[item.grade] }}>[{item.grade}]</div>}
+                    <div className="bestiary-card-cat">
+                      {TYPE_ICONS[item.type]} {TYPE_LABELS[item.type]}
+                      {item.class_restriction && <span className="equip-class-tag">{item.class_restriction}</span>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Col>
-          ))}
+              </Col>
+            );
+          })}
         </Row>
       )}
 
       {/* Equipment Detail Modal */}
-      {selectedItem && (
-        <div className="bd-overlay" onClick={() => setSelectedItem(null)}>
-          <div className="bd-modal equip-detail-modal" onClick={e => e.stopPropagation()}>
-            <button className="bd-close" onClick={() => setSelectedItem(null)}>&times;</button>
+      {selectedItem && (() => {
+        const si = selectedItem;
+        const isCos = si.type === 'cosmetic' && si.cosmetic_effect;
+        const cosAura = isCos ? COSMETIC_AURA_MAP[si.cosmetic_effect] : null;
+        return (
+          <div className="bd-overlay" onClick={() => setSelectedItem(null)}>
+            <div className="bd-modal equip-detail-modal" onClick={e => e.stopPropagation()}>
+              <button className="bd-close" onClick={() => setSelectedItem(null)}>&times;</button>
 
-            <div className="equip-detail-header" style={{ '--grade-color': GRADE_COLORS[selectedItem.grade] || '#9ca3af' }}>
-              <div className="equip-detail-icon-wrap">
-                <ImgWithFallback src={`/equipment/${selectedItem.id}_icon.png`}
-                  fallback={TYPE_ICONS[selectedItem.type] || '📦'} className="equip-detail-icon" />
-              </div>
-              <div className="equip-detail-info">
-                <div className="equip-detail-name" style={{ color: GRADE_COLORS[selectedItem.grade] }}>
-                  {selectedItem.name}
-                </div>
-                <div className="equip-detail-grade" style={{ color: GRADE_COLORS[selectedItem.grade] }}>
-                  [{selectedItem.grade}] {TYPE_LABELS[selectedItem.type]}
-                </div>
-                <div className="equip-detail-desc">{selectedItem.description}</div>
-                <div className="equip-detail-tags">
-                  {selectedItem.class_restriction && (
-                    <span className="bd-tag" style={{ borderColor: '#e94560', color: '#e94560' }}>{selectedItem.class_restriction} 전용</span>
-                  )}
-                  {selectedItem.required_level > 1 && (
-                    <span className="bd-tag">Lv.{selectedItem.required_level}+</span>
-                  )}
-                  {selectedItem.weapon_hand && (
-                    <span className="bd-tag">{selectedItem.weapon_hand === '2h' ? '양손' : '한손'}</span>
-                  )}
-                  {selectedItem.max_enhance > 0 && (
-                    <span className="bd-tag" style={{ borderColor: '#ffa502', color: '#ffa502' }}>최대 +{selectedItem.max_enhance}</span>
+              <div className="equip-detail-header" style={{ '--grade-color': isCos ? (cosAura?.color || '#a78bfa') : (GRADE_COLORS[si.grade] || '#9ca3af') }}>
+                <div className={`equip-detail-icon-wrap ${isCos ? 'cosmetic-detail-icon-wrap' : ''}`}>
+                  {isCos ? (
+                    <>
+                      <ImgWithFallback src={`/cosmetics/${si.cosmetic_effect}.png`}
+                        fallback="✨" className="equip-detail-icon cosmetic-detail-orb" />
+                      <div className={`cosmetic-detail-aura bd-aura-${cosAura?.aura || 'aura_gold'}`} />
+                    </>
+                  ) : (
+                    <ImgWithFallback src={`/equipment/${si.id}_icon.png`}
+                      fallback={TYPE_ICONS[si.type] || '📦'} className="equip-detail-icon" />
                   )}
                 </div>
-              </div>
-            </div>
-
-            <div className="bd-body">
-              <div className="bd-section">
-                <h3 className="bd-section-title">장비 효과</h3>
-                <div className="equip-detail-stats">
-                  {[
-                    { label: 'HP', value: selectedItem.effect_hp, icon: '❤️', cls: 'hp' },
-                    { label: 'MP', value: selectedItem.effect_mp, icon: '💎', cls: 'mp' },
-                    { label: '물리공격', value: selectedItem.effect_phys_attack, icon: '⚔️', cls: 'atk' },
-                    { label: '마법공격', value: selectedItem.effect_mag_attack, icon: '✨', cls: 'atk' },
-                    { label: '물리방어', value: selectedItem.effect_phys_defense, icon: '🛡️', cls: 'def' },
-                    { label: '마법방어', value: selectedItem.effect_mag_defense, icon: '🔮', cls: 'def' },
-                    { label: '치명타', value: selectedItem.effect_crit_rate, icon: '💥', cls: 'atk' },
-                    { label: '회피율', value: selectedItem.effect_evasion, icon: '💨', cls: 'def' },
-                  ].filter(s => s.value && s.value !== 0).map(stat => (
-                    <div className="equip-stat-row" key={stat.label}>
-                      <span className="equip-stat-icon">{stat.icon}</span>
-                      <span className="equip-stat-label">{stat.label}</span>
-                      <span className={`equip-stat-value equip-sv-${stat.cls}`}>+{stat.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bd-section">
-                <h3 className="bd-section-title">거래 정보</h3>
-                <div className="equip-detail-trade">
-                  <div className="equip-trade-row">
-                    <span className="equip-trade-label">구매가</span>
-                    <span className="equip-trade-value gold">{selectedItem.price.toLocaleString()}G</span>
+                <div className="equip-detail-info">
+                  <div className="equip-detail-name" style={{ color: isCos ? (cosAura?.color || '#a78bfa') : GRADE_COLORS[si.grade] }}>
+                    {si.name}
                   </div>
-                  <div className="equip-trade-row">
-                    <span className="equip-trade-label">판매가</span>
-                    <span className="equip-trade-value sell">{selectedItem.sell_price.toLocaleString()}G</span>
+                  <div className="equip-detail-grade" style={{ color: isCos ? (cosAura?.color || '#a78bfa') : GRADE_COLORS[si.grade] }}>
+                    {isCos ? `✨ ${cosAura?.name || '오라'}` : `[${si.grade}] ${TYPE_LABELS[si.type]}`}
+                  </div>
+                  <div className="equip-detail-desc">{si.description}</div>
+                  <div className="equip-detail-tags">
+                    {si.class_restriction && (
+                      <span className="bd-tag" style={{ borderColor: '#e94560', color: '#e94560' }}>{si.class_restriction} 전용</span>
+                    )}
+                    {si.required_level > 1 && (
+                      <span className="bd-tag">Lv.{si.required_level}+</span>
+                    )}
+                    {si.weapon_hand && (
+                      <span className="bd-tag">{si.weapon_hand === '2h' ? '양손' : '한손'}</span>
+                    )}
+                    {!isCos && si.max_enhance > 0 && (
+                      <span className="bd-tag" style={{ borderColor: '#ffa502', color: '#ffa502' }}>최대 +{si.max_enhance}</span>
+                    )}
+                    {isCos && (
+                      <span className="bd-tag" style={{ borderColor: cosAura?.color || '#a78bfa', color: cosAura?.color || '#a78bfa' }}>코스메틱</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bd-body">
+                {isCos ? (
+                  <div className="bd-section">
+                    <h3 className="bd-section-title">오라 미리보기</h3>
+                    <div className="cosmetic-preview-section">
+                      <div className="cosmetic-preview-orb-large">
+                        <ImgWithFallback src={`/cosmetics/${si.cosmetic_effect}.png`} fallback="✨" className="cosmetic-preview-orb-img" />
+                        <div className={`cosmetic-preview-orb-aura bd-aura-${cosAura?.aura || 'aura_gold'}`} />
+                      </div>
+                      <div className="cosmetic-preview-name" style={{ color: cosAura?.color }}>{cosAura?.name || si.name}</div>
+                      <div className="cosmetic-preview-desc">장착 시 캐릭터 초상화에 오라 효과가 적용됩니다.</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bd-section">
+                    <h3 className="bd-section-title">장비 효과</h3>
+                    <div className="equip-detail-stats">
+                      {[
+                        { label: 'HP', value: si.effect_hp, icon: '❤️', cls: 'hp' },
+                        { label: 'MP', value: si.effect_mp, icon: '💎', cls: 'mp' },
+                        { label: '물리공격', value: si.effect_phys_attack, icon: '⚔️', cls: 'atk' },
+                        { label: '마법공격', value: si.effect_mag_attack, icon: '✨', cls: 'atk' },
+                        { label: '물리방어', value: si.effect_phys_defense, icon: '🛡️', cls: 'def' },
+                        { label: '마법방어', value: si.effect_mag_defense, icon: '🔮', cls: 'def' },
+                        { label: '치명타', value: si.effect_crit_rate, icon: '💥', cls: 'atk' },
+                        { label: '회피율', value: si.effect_evasion, icon: '💨', cls: 'def' },
+                      ].filter(s => s.value && s.value !== 0).map(stat => (
+                        <div className="equip-stat-row" key={stat.label}>
+                          <span className="equip-stat-icon">{stat.icon}</span>
+                          <span className="equip-stat-label">{stat.label}</span>
+                          <span className={`equip-stat-value equip-sv-${stat.cls}`}>+{stat.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bd-section">
+                  <h3 className="bd-section-title">거래 정보</h3>
+                  <div className="equip-detail-trade">
+                    <div className="equip-trade-row">
+                      <span className="equip-trade-label">구매가</span>
+                      <span className="equip-trade-value gold">{si.price.toLocaleString()}G</span>
+                    </div>
+                    <div className="equip-trade-row">
+                      <span className="equip-trade-label">판매가</span>
+                      <span className="equip-trade-value sell">{si.sell_price.toLocaleString()}G</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 }
@@ -591,6 +744,7 @@ const CLASS_INFO = {
   '풍수사': { icon: '🔮', color: '#60a5fa' },
   '무당':   { icon: '🪬', color: '#c084fc' },
   '승려':   { icon: '📿', color: '#fbbf24' },
+  '저승사자': { icon: '💀', color: '#9b59b6' },
 };
 
 const SKILL_NODE_TYPE_LABELS = { active: '액티브', passive: '패시브' };
@@ -636,9 +790,12 @@ function SkillTab() {
     }
   }
 
-  const classes = ['풍수사', '무당', '승려'];
+  const classes = ['풍수사', '무당', '승려', '저승사자'];
 
   const tierLabel = (tier) => {
+    if (tier === 7) return '신화';
+    if (tier === 6) return '전설';
+    if (tier === 5) return '초월';
     if (tier === 4) return '궁극';
     return `Tier ${tier}`;
   };
@@ -749,7 +906,7 @@ function SkillTab() {
                     {SKILL_NODE_TYPE_LABELS[ss.node_type]}
                   </span>
                   <span className="bd-tag">{ss.branch_name}</span>
-                  <span className="bd-tag" style={ss.tier === 4 ? { borderColor: '#fbbf24', color: '#fbbf24' } : {}}>
+                  <span className="bd-tag" style={ss.tier >= 5 ? { borderColor: '#ff6b6b', color: '#ff6b6b' } : ss.tier === 4 ? { borderColor: '#fbbf24', color: '#fbbf24' } : {}}>
                     {tierLabel(ss.tier)}
                   </span>
                 </div>
@@ -805,6 +962,158 @@ function SkillTab() {
                   <div className="equip-stat-row"><span className="equip-stat-icon">💠</span><span className="equip-stat-label">포인트 비용</span><span className="equip-stat-value">{ss.point_cost}</span></div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ================================
+   MONSTER SKILL TAB
+   ================================ */
+const MSKILL_TYPE_LABELS = { attack: '공격', heal: '치유', buff: '버프', debuff: '디버프', aoe: '광역' };
+const MSKILL_TYPE_ICONS = { attack: '⚔️', heal: '💚', buff: '✨', debuff: '⬇️', aoe: '💥' };
+const MSKILL_PATTERN_LABELS = { diamond: '마름모', cross: '십자', line: '직선' };
+
+function MonsterSkillTab() {
+  const [skills, setSkills] = useState([]);
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [searchText, setSearchText] = useState('');
+  const [selectedSkill, setSelectedSkill] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadSkills = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {};
+      if (typeFilter !== 'all') params.type = typeFilter;
+      if (searchText) params.search = searchText;
+      const res = await api.get('/monsters/skills/encyclopedia', { params });
+      setSkills(res.data.skills);
+    } catch { setSkills([]); }
+    setLoading(false);
+  }, [typeFilter, searchText]);
+
+  useEffect(() => { loadSkills(); }, [loadSkills]);
+
+  const ss = selectedSkill;
+
+  return (
+    <>
+      <div className="bestiary-subtitle">{skills.length}종 몬스터 스킬</div>
+
+      <div className="bestiary-filters">
+        <div className="bestiary-filter-row">
+          <div className="bestiary-cat-pills">
+            <button className={`bestiary-pill ${typeFilter === 'all' ? 'active' : ''}`} onClick={() => setTypeFilter('all')}>전체</button>
+            {Object.entries(MSKILL_TYPE_LABELS).map(([k, v]) => (
+              <button key={k} className={`bestiary-pill ${typeFilter === k ? 'active' : ''}`}
+                onClick={() => setTypeFilter(typeFilter === k ? 'all' : k)}
+                style={typeFilter === k ? { borderColor: SKILL_TYPE_COLORS[k], color: SKILL_TYPE_COLORS[k] } : {}}>
+                {MSKILL_TYPE_ICONS[k]} {v}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="bestiary-filter-row">
+          <input type="text" placeholder="스킬 이름 검색..." value={searchText}
+            onChange={e => setSearchText(e.target.value)} className="bestiary-search" />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="bestiary-loading">로딩중...</div>
+      ) : skills.length === 0 ? (
+        <div className="bestiary-empty">조건에 맞는 스킬이 없습니다.</div>
+      ) : (
+        <Row className="bestiary-grid g-2">
+          {skills.map(skill => (
+            <Col xs={6} sm={4} md={3} lg={2} key={skill.id}>
+              <div className="bestiary-card mskill-card" onClick={() => setSelectedSkill(skill)}
+                style={{ borderColor: SKILL_TYPE_COLORS[skill.type] || '#555' }}>
+                <div className="bestiary-card-img mskill-card-icon">
+                  <span className="mskill-icon-emoji">{skill.icon}</span>
+                </div>
+                <div className="bestiary-card-info">
+                  <div className="bestiary-card-name">{skill.name}</div>
+                  <div className="skill-card-meta">
+                    <span className="skill-card-type" style={{ color: SKILL_TYPE_COLORS[skill.type] }}>
+                      {MSKILL_TYPE_ICONS[skill.type]} {MSKILL_TYPE_LABELS[skill.type]}
+                    </span>
+                  </div>
+                  <div className="bestiary-card-cat" style={{ fontSize: '0.6rem' }}>
+                    {skill.monsterCount}마리 사용
+                  </div>
+                </div>
+              </div>
+            </Col>
+          ))}
+        </Row>
+      )}
+
+      {/* Monster Skill Detail Modal */}
+      {ss && (
+        <div className="bd-overlay" onClick={() => setSelectedSkill(null)}>
+          <div className="bd-modal mskill-detail-modal" onClick={e => e.stopPropagation()}>
+            <button className="bd-close" onClick={() => setSelectedSkill(null)}>&times;</button>
+
+            <div className="mskill-detail-header">
+              <span className="mskill-detail-icon">{ss.icon}</span>
+              <div className="mskill-detail-info">
+                <div className="skill-detail-name">{ss.name}</div>
+                <div className="skill-detail-tags">
+                  <span className="bd-tag" style={{ borderColor: SKILL_TYPE_COLORS[ss.type], color: SKILL_TYPE_COLORS[ss.type] }}>
+                    {MSKILL_TYPE_ICONS[ss.type]} {MSKILL_TYPE_LABELS[ss.type]}
+                  </span>
+                  {ss.pattern && (
+                    <span className="bd-tag">{MSKILL_PATTERN_LABELS[ss.pattern] || ss.pattern}</span>
+                  )}
+                </div>
+                <div className="skill-detail-desc">{ss.description}</div>
+              </div>
+            </div>
+
+            <div className="bd-body">
+              <div className="bd-section">
+                <h3 className="bd-section-title">스킬 능력치</h3>
+                <div className="equip-detail-stats">
+                  {ss.mp_cost > 0 && (
+                    <div className="equip-stat-row"><span className="equip-stat-icon">💎</span><span className="equip-stat-label">MP 소모</span><span className="equip-stat-value equip-sv-mp">{ss.mp_cost}</span></div>
+                  )}
+                  {ss.damage_multiplier > 1 && (
+                    <div className="equip-stat-row"><span className="equip-stat-icon">⚔️</span><span className="equip-stat-label">데미지 배율</span><span className="equip-stat-value equip-sv-atk">x{ss.damage_multiplier}</span></div>
+                  )}
+                  {ss.heal_amount > 0 && (
+                    <div className="equip-stat-row"><span className="equip-stat-icon">💚</span><span className="equip-stat-label">치유량</span><span className="equip-stat-value equip-sv-hp">+{ss.heal_amount}</span></div>
+                  )}
+                  {ss.buff_stat && (
+                    <div className="equip-stat-row"><span className="equip-stat-icon">{ss.buff_value > 0 ? '⬆️' : '⬇️'}</span><span className="equip-stat-label">{ss.buff_stat === 'attack' ? '공격력' : ss.buff_stat === 'defense' ? '방어력' : ss.buff_stat}</span><span className="equip-stat-value" style={{ color: ss.buff_value > 0 ? '#22c55e' : '#ef4444' }}>{ss.buff_value > 0 ? '+' : ''}{ss.buff_value}</span></div>
+                  )}
+                  {ss.cooldown > 0 && (
+                    <div className="equip-stat-row"><span className="equip-stat-icon">⏱️</span><span className="equip-stat-label">쿨타임</span><span className="equip-stat-value">{ss.cooldown}턴</span></div>
+                  )}
+                  {ss.range_val > 0 && (
+                    <div className="equip-stat-row"><span className="equip-stat-icon">📏</span><span className="equip-stat-label">사거리</span><span className="equip-stat-value">{ss.range_val}</span></div>
+                  )}
+                </div>
+              </div>
+
+              {ss.monsters && ss.monsters.length > 0 && (
+                <div className="bd-section">
+                  <h3 className="bd-section-title">사용 몬스터 ({ss.monsters.length})</h3>
+                  <div className="mskill-monster-list">
+                    {ss.monsters.map(m => (
+                      <div key={m.id} className="mskill-monster-item">
+                        <ImgWithFallback src={`/monsters/${m.id}_icon.png`} fallback={m.icon} className="mskill-monster-icon" />
+                        <span className="mskill-monster-name">{m.name}</span>
+                        <span className="mskill-monster-tier">T{m.tier}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1087,6 +1396,10 @@ function MonsterBestiary() {
           <ImgWithFallback src="/ui/tab_skill_bestiary.png" className="bestiary-tab-icon" fallback="💠" />
           <span>스킬</span>
         </button>
+        <button className={`bestiary-main-tab ${mainTab === 'mskill' ? 'active' : ''}`} onClick={() => setMainTab('mskill')}>
+          <span className="bestiary-tab-icon" style={{ fontSize: 18 }}>👹</span>
+          <span>몬스터 스킬</span>
+        </button>
         <button className={`bestiary-main-tab ${mainTab === 'tarot' ? 'active' : ''}`} onClick={() => setMainTab('tarot')}>
           <span className="bestiary-tab-icon" style={{ fontSize: 18 }}>🃏</span>
           <span>타로</span>
@@ -1094,7 +1407,7 @@ function MonsterBestiary() {
       </div>
 
       {/* Tab Content */}
-      {mainTab === 'monster' ? <MonsterTab /> : mainTab === 'equipment' ? <EquipmentTab /> : mainTab === 'skill' ? <SkillTab /> : <TarotTab />}
+      {mainTab === 'monster' ? <MonsterTab /> : mainTab === 'equipment' ? <EquipmentTab /> : mainTab === 'skill' ? <SkillTab /> : mainTab === 'mskill' ? <MonsterSkillTab /> : <TarotTab />}
     </div>
   );
 }

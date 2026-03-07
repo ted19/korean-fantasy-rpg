@@ -149,7 +149,7 @@ router.get('/my', auth, async (req, res) => {
       s.growth_mag_defense = gr.mag_defense_per_level || 0;
     }
 
-    // 각 소환수의 습득 스킬 목록도 포함
+    // 각 소환수의 습득 스킬 목록 + 장착 장비 수
     for (const s of summons) {
       const [learned] = await pool.query(
         `SELECT ss.* FROM summon_learned_skills sls
@@ -158,6 +158,11 @@ router.get('/my', auth, async (req, res) => {
         [s.id]
       );
       s.learned_skills = learned;
+      const [[{ cnt }]] = await pool.query(
+        'SELECT COUNT(*) as cnt FROM summon_equipment WHERE summon_id = ?',
+        [s.id]
+      );
+      s.equipped_count = cnt;
     }
 
     const slotInfo = getSummonSlotInfo(chars[0].level, summons.length);
@@ -294,7 +299,7 @@ router.post('/buy', auth, async (req, res) => {
   }
 });
 
-// 소환수 판매(해고) - 장비 자동 해제
+// 소환수 소환해제
 router.post('/sell', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -325,7 +330,7 @@ router.post('/sell', auth, async (req, res) => {
       [summonId]
     );
     if (equipped[0].cnt > 0) {
-      return res.status(400).json({ message: '장비를 장착한 소환수는 해고할 수 없습니다. 먼저 장비를 해제해주세요.' });
+      return res.status(400).json({ message: '장비를 장착한 소환수는 소환해제할 수 없습니다. 장비를 먼저 해제해주세요.' });
     }
 
     await conn.beginTransaction();
@@ -334,7 +339,7 @@ router.post('/sell', auth, async (req, res) => {
     await conn.commit();
 
     res.json({
-      message: `${summon.name}을(를) 해고했습니다.`,
+      message: `${summon.name}의 소환을 해제했습니다.`,
     });
   } catch (err) {
     await conn.rollback();

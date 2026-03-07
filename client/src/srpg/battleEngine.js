@@ -1104,9 +1104,9 @@ export function generateEnemies(monsterPool, playerLevel, stage = null) {
       ? monsterPool.reduce((a, b) => a.hp > b.hp ? a : b)
       : template;
 
-    const hpScale = 1 + levelBonus * 0.1 + (isBossMonster ? 0.5 : 0);
-    const atkScale = 1 + levelBonus * 0.08 + (isBossMonster ? 0.3 : 0);
-    const defScale = 1 + levelBonus * 0.05 + (isBossMonster ? 0.2 : 0);
+    const hpScale = 1 + levelBonus * 0.05 + (isBossMonster ? 0.3 : 0);
+    const atkScale = 1 + levelBonus * 0.04 + (isBossMonster ? 0.2 : 0);
+    const defScale = 1 + levelBonus * 0.04 + (isBossMonster ? 0.15 : 0);
 
     const enemy = {
       monsterId: baseMonster.id || null,
@@ -1116,6 +1116,10 @@ export function generateEnemies(monsterPool, playerLevel, stage = null) {
       mp: baseMonster.mp || 0,
       attack: Math.floor((baseMonster.attack || 5) * atkScale),
       defense: Math.floor((baseMonster.defense || 0) * defScale),
+      physAttack: Math.floor((baseMonster.physAttack || baseMonster.phys_attack || 0) * atkScale),
+      magAttack: Math.floor((baseMonster.magAttack || baseMonster.mag_attack || 0) * atkScale),
+      physDefense: Math.floor((baseMonster.physDefense || baseMonster.phys_defense || 0) * defScale + levelBonus * 0.2),
+      magDefense: Math.floor((baseMonster.magDefense || baseMonster.mag_defense || 0) * defScale + levelBonus * 0.15),
       move: baseMonster.moveRange || 3,
       exp: (baseMonster.expReward || 0) + (stage ? stage.rewardExpBonus || 0 : 0),
       gold: (baseMonster.goldReward || 0) + (stage ? stage.rewardGoldBonus || 0 : 0),

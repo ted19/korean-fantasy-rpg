@@ -658,15 +658,10 @@ router.post('/hunt', auth, async (req, res) => {
       [char.id]
     );
 
-    // 운세 버프 remaining_battles 차감
+    // 운세 버프 remaining_battles 차감 (소진되어도 삭제하지 않음 - 쿨타임 추적용)
     if (fortuneBuffs.length > 0) {
       await conn.query(
-        'UPDATE character_fortunes SET remaining_battles = remaining_battles - 1 WHERE character_id = ? AND remaining_battles > 0',
-        [char.id]
-      );
-      // 소진된 버프 삭제
-      await conn.query(
-        'DELETE FROM character_fortunes WHERE character_id = ? AND remaining_battles <= 0',
+        'UPDATE character_fortunes SET remaining_battles = GREATEST(0, remaining_battles - 1) WHERE character_id = ? AND remaining_battles > 0',
         [char.id]
       );
     }
@@ -1082,13 +1077,9 @@ router.post('/srpg-result', auth, async (req, res) => {
       }));
     }
 
-    // 운세 버프 remaining_battles 차감 (SRPG 전투)
+    // 운세 버프 remaining_battles 차감 (소진되어도 삭제하지 않음 - 쿨타임 추적용)
     await conn.query(
-      'UPDATE character_fortunes SET remaining_battles = remaining_battles - 1 WHERE character_id = ? AND remaining_battles > 0',
-      [char.id]
-    );
-    await conn.query(
-      'DELETE FROM character_fortunes WHERE character_id = ? AND remaining_battles <= 0',
+      'UPDATE character_fortunes SET remaining_battles = GREATEST(0, remaining_battles - 1) WHERE character_id = ? AND remaining_battles > 0',
       [char.id]
     );
 

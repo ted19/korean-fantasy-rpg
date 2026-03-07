@@ -327,6 +327,7 @@
 }
 
 .bd-portrait {
+  position: relative;
   width: 180px;
   min-width: 180px;
   height: 200px;
@@ -1566,4 +1567,483 @@
   font-size: 0.7rem;
   color: #fbbf24;
   font-weight: 600;
+}
+
+/* === 도감 달성률 바 === */
+.bestiary-discover-bar {
+  margin-bottom: 14px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.bestiary-discover-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.bestiary-discover-label {
+  font-size: 13px;
+  color: #aaa;
+  font-weight: 600;
+}
+.bestiary-discover-count {
+  font-size: 13px;
+  color: #eee;
+  margin-left: auto;
+}
+.bestiary-discover-pct {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fbbf24;
+  min-width: 40px;
+  text-align: right;
+}
+.bestiary-discover-track {
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bestiary-discover-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e94560, #fbbf24);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+/* === 미발견 카드 === */
+.bestiary-card-locked {
+  opacity: 0.55;
+  filter: grayscale(0.7);
+  cursor: default !important;
+}
+.bestiary-card-locked:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+.bestiary-img-unknown {
+  background: rgba(0,0,0,0.5) !important;
+}
+.bestiary-img-unknown .bestiary-icon-large {
+  font-size: 36px;
+  color: #555;
+}
+.bestiary-card-kills {
+  font-size: 10px;
+  color: #fbbf24;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+/* === 발견 필터 === */
+.bestiary-discover-pill.active {
+  background: linear-gradient(135deg, #e94560, #c0392b) !important;
+}
+
+/* === 도감 기록 섹션 === */
+.bd-bestiary-section {
+  border: 1px solid rgba(233,69,96,0.2);
+  border-radius: 10px;
+  padding: 14px;
+  background: rgba(233,69,96,0.05);
+}
+.bd-bestiary-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bd-bestiary-stat {
+  flex: 1;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px;
+}
+.bd-bestiary-stat-icon {
+  font-size: 22px;
+}
+.bd-bestiary-stat-label {
+  font-size: 11px;
+  color: #888;
+}
+.bd-bestiary-stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #eee;
+}
+.bd-mastery-master { color: #fbbf24 !important; }
+.bd-mastery-expert { color: #c084fc !important; }
+.bd-mastery-skilled { color: #60a5fa !important; }
+.bd-mastery-novice { color: #9ca3af !important; }
+
+/* === 속성 오라 효과 === */
+
+/* 카드 오라 (아이콘 위 오버레이) */
+.bestiary-card-aura {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 상세보기 초상화 오라 */
+.bd-portrait-aura {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 불꽃 */
+.bd-aura-flame {
+  background: radial-gradient(ellipse at bottom, rgba(255,69,0,0.4) 0%, rgba(255,140,0,0.15) 40%, transparent 70%);
+  animation: bdFlame 0.8s ease-in-out infinite alternate;
+  box-shadow: inset 0 0 20px rgba(255,69,0,0.25);
+}
+@keyframes bdFlame {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; filter: brightness(1.2); }
+  100% { opacity: 0.7; }
+}
+
+/* 빙결 */
+.bd-aura-ice {
+  background: radial-gradient(ellipse at center, rgba(135,206,250,0.35) 0%, rgba(200,230,255,0.15) 50%, transparent 70%);
+  animation: bdIce 3s ease-in-out infinite;
+  box-shadow: inset 0 0 18px rgba(135,206,250,0.3);
+}
+@keyframes bdIce {
+  0%, 100% { opacity: 0.6; filter: hue-rotate(0deg); }
+  50% { opacity: 1; filter: hue-rotate(15deg); }
+}
+
+/* 대지 (황금) */
+.bd-aura-aura_gold {
+  background: radial-gradient(ellipse at center, rgba(255,165,2,0.35) 0%, rgba(255,215,0,0.1) 50%, transparent 70%);
+  animation: bdGold 2s ease-in-out infinite;
+  box-shadow: inset 0 0 20px rgba(255,165,2,0.3);
+}
+@keyframes bdGold {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+/* 바람 */
+.bd-aura-wind {
+  background: radial-gradient(ellipse at center, rgba(150,220,255,0.3) 0%, rgba(200,240,255,0.1) 50%, transparent 70%);
+  animation: bdWind 2.5s ease-in-out infinite;
+  box-shadow: inset 0 0 15px rgba(150,220,255,0.2);
+}
+@keyframes bdWind {
+  0%, 100% { opacity: 0.4; transform: translateX(0); }
+  25% { opacity: 0.8; transform: translateX(2px); }
+  75% { opacity: 0.6; transform: translateX(-2px); }
+}
+
+/* 암흑 */
+.bd-aura-shadow {
+  background: radial-gradient(ellipse at center, rgba(60,0,80,0.5) 0%, rgba(30,0,50,0.2) 50%, transparent 70%);
+  animation: bdShadow 4s linear infinite;
+  box-shadow: inset 0 0 25px rgba(80,0,120,0.35);
+}
+@keyframes bdShadow {
+  0% { filter: hue-rotate(0deg); opacity: 0.6; }
+  50% { filter: hue-rotate(20deg); opacity: 0.9; }
+  100% { filter: hue-rotate(0deg); opacity: 0.6; }
+}
+
+/* 신성 */
+.bd-aura-holy {
+  background: radial-gradient(ellipse at top, rgba(255,255,200,0.4) 0%, rgba(255,223,128,0.15) 50%, transparent 70%);
+  animation: bdHoly 2.5s ease-in-out infinite;
+  box-shadow: inset 0 0 20px rgba(255,223,128,0.3);
+}
+@keyframes bdHoly {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+/* 번개 */
+.bd-aura-lightning {
+  background: radial-gradient(ellipse at center, rgba(255,255,100,0.3) 0%, rgba(100,149,237,0.15) 50%, transparent 70%);
+  animation: bdLightning 1.5s ease-in-out infinite;
+  box-shadow: inset 0 0 22px rgba(255,255,100,0.2);
+}
+@keyframes bdLightning {
+  0%, 85%, 100% { opacity: 0.4; }
+  88% { opacity: 1; filter: brightness(1.5); }
+  91% { opacity: 0.3; }
+  94% { opacity: 0.9; filter: brightness(1.3); }
+}
+
+/* 독 */
+.bd-aura-poison {
+  background: radial-gradient(ellipse at bottom, rgba(0,180,0,0.35) 0%, rgba(50,200,50,0.12) 50%, transparent 70%);
+  animation: bdPoison 2s ease-in-out infinite;
+  box-shadow: inset 0 0 18px rgba(0,180,0,0.25);
+}
+@keyframes bdPoison {
+  0%, 100% { opacity: 0.5; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-2px); }
+}
+
+/* 혈기 */
+.bd-aura-blood {
+  background: radial-gradient(ellipse at center, rgba(180,0,0,0.4) 0%, rgba(120,0,0,0.15) 50%, transparent 70%);
+  animation: bdBlood 1.5s ease-in-out infinite;
+  box-shadow: inset 0 0 22px rgba(180,0,0,0.3);
+}
+@keyframes bdBlood {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.01); }
+}
+
+/* 영혼 */
+.bd-aura-spirit {
+  background: radial-gradient(ellipse at center, rgba(180,130,255,0.35) 0%, rgba(130,200,255,0.15) 40%, transparent 75%);
+  animation: bdSpirit 3s ease-in-out infinite;
+  box-shadow: inset 0 0 25px rgba(180,130,255,0.25);
+}
+@keyframes bdSpirit {
+  0%, 100% { opacity: 0.5; filter: hue-rotate(0deg); }
+  33% { opacity: 0.9; filter: hue-rotate(30deg); }
+  66% { opacity: 0.7; filter: hue-rotate(-20deg); }
+}
+
+/* 용의 숨결 */
+.bd-aura-dragon_breath {
+  background:
+    radial-gradient(ellipse at bottom, rgba(255,69,0,0.45) 0%, transparent 50%),
+    radial-gradient(ellipse at top, rgba(255,215,0,0.4) 0%, transparent 50%);
+  animation: bdDragon 1.5s ease-in-out infinite alternate;
+  box-shadow: inset 0 0 30px rgba(255,140,0,0.4), 0 0 15px rgba(255,69,0,0.3);
+}
+@keyframes bdDragon {
+  0% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); filter: brightness(1.3); }
+  100% { opacity: 0.8; transform: scale(1.01); }
+}
+
+/* 천상의 빛 */
+.bd-aura-celestial {
+  background: conic-gradient(from 0deg, rgba(255,100,100,0.25), rgba(100,255,100,0.25), rgba(100,100,255,0.25), rgba(255,100,100,0.25));
+  animation: bdCelestial 4s linear infinite;
+  box-shadow: inset 0 0 25px rgba(200,180,255,0.3);
+}
+@keyframes bdCelestial {
+  0% { filter: hue-rotate(0deg); opacity: 0.6; }
+  100% { filter: hue-rotate(360deg); opacity: 0.6; }
+}
+
+/* 심연의 화염 */
+.bd-aura-abyssal_flame {
+  background:
+    radial-gradient(ellipse at bottom, rgba(139,0,200,0.5) 0%, transparent 50%),
+    radial-gradient(ellipse at top, rgba(60,0,120,0.3) 0%, transparent 60%);
+  animation: bdAbyssal 1.2s ease-in-out infinite alternate;
+  box-shadow: inset 0 0 30px rgba(139,0,200,0.35);
+}
+@keyframes bdAbyssal {
+  0% { opacity: 0.5; filter: brightness(0.9); }
+  100% { opacity: 1; filter: brightness(1.2); }
+}
+
+/* 별빛 */
+.bd-aura-starlight {
+  background: radial-gradient(ellipse at center, rgba(170,184,255,0.35) 0%, rgba(200,210,255,0.15) 50%, transparent 70%);
+  animation: bdStarlight 2s ease-in-out infinite;
+  box-shadow: inset 0 0 20px rgba(170,184,255,0.3);
+}
+@keyframes bdStarlight {
+  0%, 100% { opacity: 0.4; }
+  25% { opacity: 1; }
+  50% { opacity: 0.5; }
+  75% { opacity: 0.9; }
+}
+
+/* 봉황 */
+.bd-aura-phoenix {
+  background:
+    radial-gradient(ellipse at bottom, rgba(255,102,0,0.5) 0%, transparent 50%),
+    radial-gradient(ellipse at top, rgba(255,215,0,0.35) 0%, transparent 50%);
+  animation: bdPhoenix 2s ease-in-out infinite;
+  box-shadow: inset 0 0 30px rgba(255,102,0,0.4), 0 0 20px rgba(255,215,0,0.2);
+}
+@keyframes bdPhoenix {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); filter: brightness(1.3); }
+}
+
+/* 혼돈의 소용돌이 */
+.bd-aura-chaos_vortex {
+  background: conic-gradient(from 0deg, rgba(200,80,255,0.4), rgba(255,80,80,0.3), rgba(80,200,255,0.3), rgba(255,200,80,0.3), rgba(200,80,255,0.4));
+  animation: bdChaos 3s linear infinite;
+  box-shadow: inset 0 0 30px rgba(200,80,255,0.3);
+}
+@keyframes bdChaos {
+  0% { filter: hue-rotate(0deg); opacity: 0.5; transform: scale(1); }
+  50% { filter: hue-rotate(180deg); opacity: 0.9; transform: scale(1.02); }
+  100% { filter: hue-rotate(360deg); opacity: 0.5; transform: scale(1); }
+}
+
+/* === 코스메틱 카드/상세 스타일 === */
+.cosmetic-card-img {
+  background: radial-gradient(circle, rgba(30,20,50,0.8) 0%, rgba(10,10,20,1) 100%) !important;
+}
+.cosmetic-orb-icon {
+  width: 70% !important;
+  height: 70% !important;
+  object-fit: contain !important;
+  position: relative;
+  z-index: 2;
+}
+
+.cosmetic-detail-icon-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.cosmetic-detail-orb {
+  position: relative;
+  z-index: 2;
+}
+.cosmetic-detail-aura {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 오라 미리보기 */
+.cosmetic-preview-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+}
+.cosmetic-preview-orb-large {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle, rgba(30,20,50,0.8) 0%, rgba(10,10,20,1) 100%);
+  box-shadow: 0 0 30px rgba(0,0,0,0.5);
+}
+.cosmetic-preview-orb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  position: relative;
+  z-index: 2;
+}
+.cosmetic-preview-orb-aura {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+.cosmetic-preview-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+.cosmetic-preview-desc {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+}
+
+/* ===== Monster Skill Tab ===== */
+.mskill-card {
+  transition: all 0.2s;
+}
+.mskill-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.mskill-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  background: rgba(15, 18, 30, 0.6);
+}
+.mskill-icon-emoji {
+  font-size: 32px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+.mskill-detail-modal {
+  max-width: 420px;
+}
+.mskill-detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(30,30,60,0.8), rgba(20,20,40,0.9));
+  border-radius: 12px 12px 0 0;
+}
+.mskill-detail-icon {
+  font-size: 42px;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.mskill-detail-info {
+  flex: 1;
+}
+.mskill-monster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.mskill-monster-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.mskill-monster-item:hover {
+  background: rgba(255,255,255,0.06);
+}
+.mskill-monster-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.mskill-monster-name {
+  flex: 1;
+  font-size: 12px;
+  color: #ddd;
+}
+.mskill-monster-tier {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(139,92,246,0.15);
+  color: #a78bfa;
 }

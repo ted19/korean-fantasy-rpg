@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { pool } = require('../db');
 
 const router = express.Router();
@@ -63,8 +64,13 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: '사용자명 또는 비밀번호가 올바르지 않습니다.' });
     }
 
+    // 고유 세션 토큰 생성 → DB에 저장 (이전 세션 자동 무효화)
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    await pool.query('UPDATE users SET session_token = ? WHERE id = ?', [sessionToken, user.id]);
+    console.log(`[SESSION] LOGIN user=${user.id} newToken=${sessionToken.slice(0,8)}...`);
+
     const token = jwt.sign(
-      { id: user.id, username: user.username },
+      { id: user.id, username: user.username, sessionToken },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -92,7 +98,7 @@ router.get('/me', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
 
     const [users] = await pool.query(
-      'SELECT id, username, email, created_at FROM users WHERE id = ?',
+      'SELECT id, username, email, created_at, session_token FROM users WHERE id = ?',
       [decoded.id]
     );
 
@@ -100,7 +106,19 @@ router.get('/me', async (req, res) => {
       return res.status(404).json({ message: '사용자를 찾을 수 없습니다.' });
     }
 
-    res.json({ user: users[0] });
+    // 세션 토큰 검증 (중복 로그인 차단)
+    const dbSessionToken = users[0].session_token;
+    if (dbSessionToken) {
+      if (!decoded.sessionToken || dbSessionToken !== decoded.sessionToken) {
+        return res.status(409).json({
+          message: '다른 기기에서 로그인되어 현재 세션이 종료되었습니다.',
+          code: 'SESSION_EXPIRED_DUPLICATE',
+        });
+      }
+    }
+
+    const { session_token, ...userData } = users[0];
+    res.json({ user: userData });
   } catch (err) {
     if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
       return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });

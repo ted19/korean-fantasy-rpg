@@ -73,8 +73,8 @@ function Register() {
       <div className="auth-center-layout">
         <div className="auth-center-card">
           <div className="auth-center-header">
-            <h1 className="auth-hero-title">금오신화</h1>
-            <p className="auth-hero-subtitle">한국 판타지 RPG</p>
+            <h1 className="auth-hero-title">퇴마록</h1>
+            <p className="auth-hero-subtitle">퇴마록 - Toemarok</p>
           </div>
 
           <div className="auth-form-inner">
