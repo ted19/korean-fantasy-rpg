@@ -19,10 +19,12 @@ const specialDungeonRoutes = require('./routes/special-dungeon');
 const gachaRoutes = require('./routes/gacha');
 const db = require('./db');
 
+const path = require('path');
 const app = express();
-const PORT = 4000;
+const PORT = process.env.PORT || 4000;
 
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 
 // X-Char-Id 헤더 기반으로 선택된 캐릭터 ID를 req에 주입
@@ -97,6 +99,13 @@ app.use((err, req, res, next) => {
   if (!res.headersSent) {
     res.status(500).json({ message: '서버 오류가 발생했습니다.', error: err.message });
   }
+});
+
+// 프로덕션: 클라이언트 빌드 정적 파일 서빙
+const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
+app.use(express.static(clientBuildPath));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
 async function start() {

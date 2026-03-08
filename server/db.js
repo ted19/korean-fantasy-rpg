@@ -1,21 +1,28 @@
 const mysql = require('mysql2/promise');
+require('dotenv').config();
+
+const DB_HOST = process.env.DB_HOST || 'localhost';
+const DB_PORT = parseInt(process.env.DB_PORT || '3306', 10);
+const DB_USER = process.env.DB_USER || 'root';
+const DB_PASS = process.env.DB_PASSWORD || 'root';
+const DB_NAME = process.env.DB_NAME || 'game';
 
 const pool = mysql.createPool({
-  host: 'localhost',
-  port: 3306,
-  user: 'root',
-  password: 'root',
-  database: 'game',
+  host: DB_HOST,
+  port: DB_PORT,
+  user: DB_USER,
+  password: DB_PASS,
+  database: DB_NAME,
   waitForConnections: true,
   connectionLimit: 10,
 });
 
 async function initialize() {
   const conn = await mysql.createConnection({
-    host: 'localhost',
-    port: 3306,
-    user: 'root',
-    password: 'root',
+    host: DB_HOST,
+    port: DB_PORT,
+    user: DB_USER,
+    password: DB_PASS,
   });
 
   await conn.query('CREATE DATABASE IF NOT EXISTS `game`');
