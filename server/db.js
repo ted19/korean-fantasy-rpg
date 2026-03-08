@@ -1311,14 +1311,18 @@ async function initialize() {
       'song': 'cn_spirit', 'yuan': 'cn_temple', 'ming': 'cn_spirit',
       'qing': 'cn_spirit',
     };
-    // stage_levels의 dungeon_key 업데이트
-    for (const [groupKey, dungeonKey] of Object.entries(countryGroupDungeonMap)) {
-      await pool.query(
-        'UPDATE stage_levels sl JOIN stage_groups sg ON sl.group_id = sg.id SET sl.dungeon_key = ? WHERE sg.key_name = ?',
-        [dungeonKey, groupKey]
-      );
+    // stage_levels의 dungeon_key 업데이트 (stage_levels가 아직 생성 안됐을 수 있으므로 try-catch)
+    try {
+      for (const [groupKey, dungeonKey] of Object.entries(countryGroupDungeonMap)) {
+        await pool.query(
+          'UPDATE stage_levels sl JOIN stage_groups sg ON sl.group_id = sg.id SET sl.dungeon_key = ? WHERE sg.key_name = ?',
+          [dungeonKey, groupKey]
+        );
+      }
+      console.log('Stage dungeon keys updated to country-specific dungeons');
+    } catch (e) {
+      console.log('Stage dungeon key update deferred (stage_levels not yet created)');
     }
-    console.log('Stage dungeon keys updated to country-specific dungeons');
   }
 
   // ========== 던전 스테이지 시스템 ==========
@@ -3554,6 +3558,25 @@ async function initialize() {
         'UPDATE stage_levels SET description = ? WHERE group_id = ? AND stage_number = ?',
         [desc, groupId, parseInt(stageNum)]
       ).catch(() => {});
+    }
+  }
+
+  // 나라별 던전키 재적용 (stage_levels 생성 후)
+  const [countryDungeonCheck2] = await pool.query("SELECT key_name FROM dungeons WHERE key_name = 'kr_forest' LIMIT 1").catch(() => [[]]);
+  if (countryDungeonCheck2.length > 0) {
+    const cdMap = {
+      'gojoseon': 'kr_forest', 'samhan': 'kr_forest', 'goguryeo': 'kr_mountain',
+      'baekje': 'kr_swamp', 'silla': 'kr_temple', 'balhae': 'kr_mountain',
+      'goryeo': 'kr_spirit', 'joseon': 'kr_temple', 'imjin': 'kr_spirit', 'modern': 'kr_spirit',
+      'jomon': 'jp_forest', 'yayoi': 'jp_forest', 'yamato': 'jp_mountain',
+      'nara': 'jp_temple', 'heian': 'jp_spirit', 'kamakura': 'jp_mountain',
+      'muromachi': 'jp_ocean', 'sengoku': 'jp_mountain', 'edo': 'jp_spirit', 'meiji': 'jp_spirit',
+      'xia_shang': 'cn_forest', 'zhou': 'cn_mountain', 'qin': 'cn_mountain',
+      'han': 'cn_forest', 'three_kingdoms': 'cn_swamp', 'tang': 'cn_temple',
+      'song': 'cn_spirit', 'yuan': 'cn_temple', 'ming': 'cn_spirit', 'qing': 'cn_spirit',
+    };
+    for (const [gk, dk] of Object.entries(cdMap)) {
+      await pool.query('UPDATE stage_levels sl JOIN stage_groups sg ON sl.group_id = sg.id SET sl.dungeon_key = ? WHERE sg.key_name = ?', [dk, gk]).catch(() => {});
     }
   }
 

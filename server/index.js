@@ -104,7 +104,7 @@ app.use((err, req, res, next) => {
 // 프로덕션: 클라이언트 빌드 정적 파일 서빙
 const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
 app.use(express.static(clientBuildPath));
-app.get('*', (req, res) => {
+app.get('{*path}', (req, res) => {
   res.sendFile(path.join(clientBuildPath, 'index.html'));
 });
 
