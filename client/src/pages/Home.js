@@ -12,6 +12,20 @@ import StageBattle from '../srpg/StageBattle';
 import SpecialDungeonArea from './SpecialDungeonArea';
 import PrologueArea from './PrologueArea';
 
+const DUNGEON_DISPLAY_NAMES = {
+  forest: '어둠의 숲', cave: '수정 동굴', slime_cave: '슬라임 동굴', goblin: '고블린 요새',
+  swamp: '독안개 늪', mountain: '서리 산맥', ocean: '심해 유적', spirit_forest: '정령의 숲',
+  temple: '망자의 신전', demon: '마왕성', dragon: '용의 둥지',
+  kr_forest: '고조선 숲', kr_mountain: '태백산맥', kr_swamp: '습지대', kr_temple: '신라 사원', kr_spirit: '영혼의 숲',
+  jp_mountain: '후지산', jp_temple: '교토 신궁', jp_ocean: '용궁', jp_spirit: '요괴 숲',
+  cn_mountain: '곤륜산', cn_temple: '소림사', cn_swamp: '동정호', cn_spirit: '선계',
+};
+
+const STAGE_GROUP_NAMES = {
+  gojoseon: '고조선', samhan: '삼한', goguryeo: '고구려', baekje: '백제', silla: '신라',
+  balhae: '발해', goryeo: '고려', joseon: '조선', imjin: '임진왜란', modern: '근대',
+};
+
 function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSelect }) {
   const [prologueCleared, setPrologueCleared] = useState(character.prologue_cleared === 1);
   const [currentLocation, setCurrentLocation] = useState(character.prologue_cleared === 1 ? 'home' : 'prologue');
@@ -399,9 +413,25 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     const dungeonKey = battleLocation;
     const spCtx = specialBattleCtx;
 
+    // 전투 유형별 로그 라벨 결정
+    const getBattleLabel = () => {
+      if (spCtx) {
+        if (spCtx.type === 'tower') return '무한의 탑 전투';
+        if (spCtx.type === 'elemental') return '정령의 시련 전투';
+        if (spCtx.type === 'boss_raid') return '보스 토벌전';
+      }
+      if (battleStageGroup) {
+        const regionName = STAGE_GROUP_NAMES[battleStageGroup] || battleStageGroup;
+        return `스테이지 전투 [${regionName}]`;
+      }
+      const areaName = DUNGEON_DISPLAY_NAMES[dungeonKey] || dungeonKey;
+      return `던전 전투 [${areaName}]`;
+    };
+    const battleLabel = getBattleLabel();
+
     // 승리시 클리어 기록
     if (result === 'victory') {
-      addLog(`SRPG 전투 승리! EXP +${expGained}, Gold +${goldGained}`, 'heal');
+      addLog(`${battleLabel} 승리! EXP +${expGained}, Gold +${goldGained}`, 'heal');
 
       // 스페셜 던전 클리어 처리
       if (spCtx) {
@@ -471,7 +501,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         setReturnStageGroupKey(null);
       }
     } else if (result !== 'victory') {
-      addLog('SRPG 전투 패배... 마을에서 휴식하세요.', 'damage');
+      addLog(`${battleLabel} 패배... 마을에서 휴식하세요.`, 'damage');
       setReturnDungeonKey(null);
       setReturnStageGroupKey(null);
       setReturnSpecialType(null);
