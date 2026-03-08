@@ -461,17 +461,19 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         enemyTeam.push(createCardMonsterUnit(scaled, i));
       }
 
-      // 적 구성을 DB 세션에 저장 (정예 리롤 방지)
-      try {
-        api.post('/battle/session/save', {
-          battleType: 'stage',
-          context: {
-            dungeonKey: stage.dungeonKey || 'forest',
-            stage, monsters, groupKey,
-            enemySetup,
-          },
-        });
-      } catch {}
+      // 적 구성을 DB 세션에 저장 (정예 리롤 방지, 프롤로그 제외)
+      if (!isPrologue) {
+        try {
+          api.post('/battle/session/save', {
+            battleType: 'stage',
+            context: {
+              dungeonKey: stage.dungeonKey || 'forest',
+              stage, monsters, groupKey,
+              enemySetup,
+            },
+          });
+        } catch {}
+      }
 
       return { enemyTeam, eliteInfo };
     };
@@ -565,6 +567,11 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
     const end = checkBattleEnd(currentUnits);
     if (end) {
       setBattleResult(end);
+      // 프롤로그는 승리 팝업 건너뛰고 바로 종료
+      if (isPrologue && end === 'victory') {
+        onBattleEnd('victory', 0, 0);
+        return;
+      }
       setPhase('battle_end');
       return;
     }
@@ -863,7 +870,10 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         if (res.data.leveledUp) {
           addLog(`🎉 레벨 업! Lv.${res.data.levelBefore} → Lv.${res.data.character.level}`, 'level');
         }
-      }).catch(() => {});
+      }).catch(() => {
+        // API 실패 시에도 결과 화면 진행 가능하도록 fallback
+        setResultData({ character: null, leveledUp: false });
+      });
     } else {
       addLog(`\n전투 패배...`, 'damage');
       api.post('/stage/battle-result', {

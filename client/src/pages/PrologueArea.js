@@ -240,6 +240,8 @@ function PrologueArea({ character, charState, learnedSkills, passiveBonuses, onP
   const handleBattleEnd = async (result) => {
     setPhase('result');
     setShowReward(true);
+    // 프롤로그 전투 세션 잔여 데이터 삭제
+    api.post('/battle/session/clear').catch(() => {});
     try {
       const res = await api.post('/characters/prologue-clear');
       if (res.data.rewards) {
