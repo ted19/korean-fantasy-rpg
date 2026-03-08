@@ -7,15 +7,22 @@ const DB_USER = process.env.DB_USER || 'root';
 const DB_PASS = process.env.DB_PASSWORD || 'root';
 const DB_NAME = process.env.DB_NAME || 'game';
 
-const pool = mysql.createPool({
-  host: DB_HOST,
-  port: DB_PORT,
-  user: DB_USER,
-  password: DB_PASS,
-  database: DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-});
+let pool;
+
+function getPool() {
+  if (!pool) {
+    pool = mysql.createPool({
+      host: DB_HOST,
+      port: DB_PORT,
+      user: DB_USER,
+      password: DB_PASS,
+      database: DB_NAME,
+      waitForConnections: true,
+      connectionLimit: 10,
+    });
+  }
+  return pool;
+}
 
 async function initialize() {
   const conn = await mysql.createConnection({
@@ -25,8 +32,19 @@ async function initialize() {
     password: DB_PASS,
   });
 
-  await conn.query('CREATE DATABASE IF NOT EXISTS `game`');
+  await conn.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\``);
   await conn.end();
+
+  // DB 생성 후 pool 초기화
+  pool = mysql.createPool({
+    host: DB_HOST,
+    port: DB_PORT,
+    user: DB_USER,
+    password: DB_PASS,
+    database: DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+  });
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -5995,4 +6013,4 @@ async function refreshStamina(char, connOrPool) {
   return { stamina: curSt, maxStamina: maxSt };
 }
 
-module.exports = { pool, initialize, getSelectedChar, calcMaxStamina, refreshStamina };
+module.exports = { get pool() { return getPool(); }, initialize, getSelectedChar, calcMaxStamina, refreshStamina };
