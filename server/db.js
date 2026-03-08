@@ -2009,13 +2009,13 @@ async function initialize() {
     await pool.query(sql).catch(() => {});
   }
 
-  // ========== 몬스터 밸런스 패치 v3 (1회만 실행) ==========
-  // 플래그 테이블로 중복 적용 방지
+  // ========== 몬스터 밸런스 패치 v4 (데이터 기반 체크) ==========
+  // 플래그 대신 실제 몬스터 스탯을 확인하여 패치 필요 여부 판단
   await pool.query(`CREATE TABLE IF NOT EXISTS db_flags (flag_name VARCHAR(50) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`).catch(() => {});
-  const [balFlags] = await pool.query("SELECT * FROM db_flags WHERE flag_name = 'monster_balance_v4'");
-  if (balFlags.length === 0) {
-    // 이전 패치 제거 후 재적용
-    await pool.query("DELETE FROM db_flags WHERE flag_name LIKE 'monster_balance%'").catch(() => {});
+  // tier 1 몬스터의 평균 HP가 100 미만이면 패치 미적용 상태
+  const [avgCheck] = await pool.query("SELECT AVG(hp) as avg_hp FROM monsters WHERE tier = 1");
+  const needsBalance = avgCheck.length > 0 && avgCheck[0].avg_hp < 100;
+  if (needsBalance) {
     console.log('Applying monster balance patch v4...');
     // 캐릭터 기준: Lv15 HP372, atk79, patk59, pdef52, mdef38, def72
     // SRPG공식: dmg = base * (100/(100+def*1.2))
