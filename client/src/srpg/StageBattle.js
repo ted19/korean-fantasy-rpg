@@ -1427,8 +1427,9 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                   {isVictory ? 'VICTORY' : 'DEFEAT'}
                 </h2>
                 <div className="srpg-result-subtitle">
-                  {isVictory ? '전투에서 승리했습니다!' : '전투에서 패배했습니다...'}
+                  {isVictory ? '전투에서 승리했습니다!' : '어둠이 전장을 뒤덮었다...'}
                 </div>
+                {!isVictory && <div className="defeat-subtitle-flavor">전사들이 쓰러지고, 마물의 포효가 울려 퍼진다.</div>}
                 <div className="srpg-result-round">Round {round}</div>
               </div>
 
@@ -1617,22 +1618,89 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                 </div>
               )}
 
-              {/* 패배 시 패널티 표시 */}
-              {!isVictory && defeatPenalty && (
+              {/* 패배 시 상세 UI */}
+              {!isVictory && (
                 <div className="srpg-result-content">
-                  <div className="srpg-result-rewards-panel" style={{borderColor:'#e94560'}}>
-                    <div className="srpg-result-section-title" style={{color:'#e94560'}}>
-                      <span>패배 패널티</span>
+                  {/* 전투 요약 */}
+                  <div className="defeat-summary-panel">
+                    <div className="defeat-summary-header">
+                      <span className="defeat-skull-icon">&#9760;</span>
+                      <span>전투 요약</span>
                     </div>
-                    <div className="srpg-result-reward-grid">
-                      <div className="srpg-rr-item" style={{color:'#e94560'}}>
-                        <span className="srpg-rr-label">골드 차감</span>
-                        <span className="srpg-rr-value" style={{color:'#e94560'}}>-{defeatPenalty.goldLoss}</span>
+                    <div className="defeat-stats-grid">
+                      <div className="defeat-stat-item">
+                        <span className="defeat-stat-label">전투 라운드</span>
+                        <span className="defeat-stat-value">{round}</span>
                       </div>
-                      <div className="srpg-rr-item" style={{color:'#e94560'}}>
-                        <span className="srpg-rr-label">경험치 차감</span>
-                        <span className="srpg-rr-value" style={{color:'#e94560'}}>-{defeatPenalty.expLoss}</span>
+                      <div className="defeat-stat-item">
+                        <span className="defeat-stat-label">처치한 적</span>
+                        <span className="defeat-stat-value">{units.filter(u => u.team === 'enemy' && u.hp <= 0).length} / {units.filter(u => u.team === 'enemy').length}</span>
                       </div>
+                      <div className="defeat-stat-item">
+                        <span className="defeat-stat-label">아군 생존</span>
+                        <span className="defeat-stat-value defeat-zero">{units.filter(u => u.team === 'player' && u.hp > 0).length} / {units.filter(u => u.team === 'player').length}</span>
+                      </div>
+                      <div className="defeat-stat-item">
+                        <span className="defeat-stat-label">총 피해량</span>
+                        <span className="defeat-stat-value">{contributions.reduce((s, c) => s + c.damage, 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 쓰러진 아군 */}
+                  <div className="defeat-fallen-panel">
+                    <div className="defeat-fallen-header">쓰러진 전사들</div>
+                    <div className="defeat-fallen-list">
+                      {units.filter(u => u.team === 'player').map(u => (
+                        <div key={u.id} className={`defeat-fallen-unit ${u.hp <= 0 ? 'dead' : 'alive'}`}>
+                          <img src={u.imageUrl} alt="" className="defeat-fallen-portrait" onError={e => { e.target.style.display='none'; }} />
+                          <div className="defeat-fallen-info">
+                            <span className="defeat-fallen-name">{u.name}</span>
+                            <span className={`defeat-fallen-status ${u.hp <= 0 ? 'dead' : 'alive'}`}>
+                              {u.hp <= 0 ? '전사' : `생존 (HP ${u.hp})`}
+                            </span>
+                          </div>
+                          {u.hp <= 0 && <span className="defeat-fallen-x">&#10060;</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 패널티 */}
+                  {defeatPenalty && (
+                    <div className="defeat-penalty-panel">
+                      <div className="defeat-penalty-header">
+                        <span className="defeat-penalty-icon">&#9888;</span>
+                        <span>패배 패널티</span>
+                      </div>
+                      <div className="defeat-penalty-grid">
+                        <div className="defeat-penalty-item">
+                          <img src="/ui/gold_coin.png" alt="" className="defeat-penalty-img" onError={e => { e.target.style.display='none'; }} />
+                          <div className="defeat-penalty-detail">
+                            <span className="defeat-penalty-label">골드 차감</span>
+                            <span className="defeat-penalty-value">-{defeatPenalty.goldLoss}</span>
+                          </div>
+                        </div>
+                        <div className="defeat-penalty-item">
+                          <img src="/ui/exp_icon.png" alt="" className="defeat-penalty-img" onError={e => { e.target.style.display='none'; }} />
+                          <div className="defeat-penalty-detail">
+                            <span className="defeat-penalty-label">경험치 차감</span>
+                            <span className="defeat-penalty-value">-{defeatPenalty.expLoss}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 조언 */}
+                  <div className="defeat-tip-panel">
+                    <div className="defeat-tip-icon">&#128161;</div>
+                    <div className="defeat-tip-text">
+                      {round <= 3
+                        ? '적의 전력이 너무 강합니다. 레벨을 올리거나 장비를 강화해보세요.'
+                        : round <= 6
+                        ? '아군 편성을 재검토하고, 소환수나 용병을 활용해보세요.'
+                        : '아깝습니다! 스킬 사용 타이밍과 방어를 적극 활용해보세요.'}
                     </div>
                   </div>
                 </div>
@@ -1643,7 +1711,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                 onClick={handleBattleEndClick}
                 disabled={isVictory && !rd}
               >
-                {isVictory && !rd ? '저장 중...' : isVictory ? '계속하기' : '마을로 돌아가기'}
+                {isVictory && !rd ? '저장 중...' : isVictory ? '계속하기' : '마을로 퇴각하기'}
               </button>
             </div>
           </div>
