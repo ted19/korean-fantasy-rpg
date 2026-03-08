@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Badge } from 'react-bootstrap';
 import api from '../api';
 import './StageArea.css';
@@ -6,6 +6,194 @@ import './MonsterBestiary.css';
 
 // 기본 accent (서버에서 못 받아올 때 fallback)
 const DEFAULT_ACCENT = '#4ade80';
+
+// ========== 스테이지 진입 컷신 ==========
+const STAGE_INTRO_SCENES = {
+  '풍수사': [
+    {
+      bg: '/stages/stage_map_bg.png',
+      speaker: '나레이션',
+      text: '용맥의 흐름을 따라 걷던 풍수사의 발길이 멈추었다. 눈앞에 펼쳐진 것은 시대의 기억이 각인된 전장들.',
+    },
+    {
+      bg: '/stages/gojoseon_bg.png',
+      speaker: '풍수사',
+      text: '이 땅의 기운이... 과거의 전쟁터에서 흘러나오고 있다. 고조선 시대부터 이어진 싸움의 흔적이야.',
+    },
+    {
+      bg: '/stages/gojoseon_bg.png',
+      speaker: '나레이션',
+      text: '대지에는 수천 년의 전투가 남긴 원념이 서려 있다. 그 원념이 마물을 끌어들이고, 새로운 전장을 만들어내고 있었다.',
+    },
+    {
+      bg: '/stages/gojoseon_bg.png',
+      speaker: '풍수사',
+      text: '용맥을 바로잡으려면 각 시대의 전장을 돌파해야 해. 고조선부터 시작이다... 바람아, 나를 인도하라.',
+    },
+    {
+      bg: '/stages/gojoseon_bg.png',
+      speaker: '나레이션',
+      text: '풍수사는 나침반을 들고 첫 번째 시대의 문으로 발걸음을 옮겼다. 역사를 관통하는 긴 여정의 시작이었다.',
+    },
+  ],
+  '무당': [
+    {
+      bg: '/stages/stage_map_bg.png',
+      speaker: '나레이션',
+      text: '영혼의 울음소리를 따라온 무당이 거대한 시간의 문 앞에 섰다. 이승과 저승의 경계가 역사 속에서 무너지고 있었다.',
+    },
+    {
+      bg: '/stages/samhan_bg.png',
+      speaker: '무당',
+      text: '느껴져... 이 장소에는 시대마다 죽은 자들의 한이 겹겹이 쌓여 있어. 그 한이 마물을 불러내고 있는 거야.',
+    },
+    {
+      bg: '/stages/samhan_bg.png',
+      speaker: '나레이션',
+      text: '삼한 시대의 전쟁터부터 시작된 원혼의 사슬. 무당만이 그 사슬을 끊고 영혼을 해방시킬 수 있다.',
+    },
+    {
+      bg: '/stages/samhan_bg.png',
+      speaker: '무당',
+      text: '방울 소리로 길을 열겠어. 각 시대의 원혼을 달래고, 마물의 근원을 찾아야 해.',
+    },
+    {
+      bg: '/stages/samhan_bg.png',
+      speaker: '나레이션',
+      text: '무당은 신령의 가호를 빌며 첫 번째 시대로 발을 들였다. 영혼을 구원하는 기나긴 굿판이 시작되었다.',
+    },
+  ],
+  '승려': [
+    {
+      bg: '/stages/stage_map_bg.png',
+      speaker: '나레이션',
+      text: '산에서 내려온 승려가 거대한 전장의 흔적 앞에 섰다. 부처의 가르침으로도 막을 수 없는 살기가 땅에서 솟아오르고 있었다.',
+    },
+    {
+      bg: '/stages/silla_bg.png',
+      speaker: '승려',
+      text: '나무아미타불... 이 땅에 서린 업장이 깊구나. 역사 속 전쟁의 상처가 마물을 낳고 있다.',
+    },
+    {
+      bg: '/stages/silla_bg.png',
+      speaker: '나레이션',
+      text: '삼국의 전장에서 흘린 피가 대지를 물들이고, 그 위에서 마물이 태어났다. 승려의 금강역사만이 이를 정화할 수 있다.',
+    },
+    {
+      bg: '/stages/silla_bg.png',
+      speaker: '승려',
+      text: '주먹으로 마물을 물리치고, 경문으로 영혼을 천도하겠다. 각 시대의 업장을 걷어내야 한다.',
+    },
+    {
+      bg: '/stages/silla_bg.png',
+      speaker: '나레이션',
+      text: '승려는 목탁을 두드리며 첫 번째 시대의 문을 열었다. 금강의 주먹과 자비의 마음으로 역사를 정화하는 수행이 시작되었다.',
+    },
+  ],
+  '저승사자': [
+    {
+      bg: '/stages/stage_map_bg.png',
+      speaker: '나레이션',
+      text: '저승사자가 이승의 전장 지도를 펼쳤다. 염라대왕의 명부에 기록되지 않은 혼백들이 시대를 넘어 떠돌고 있었다.',
+    },
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '저승사자',
+      text: '명부에 없는 자들이 이렇게 많다니... 역사 속 전장에서 제대로 저승으로 건너가지 못한 혼백들이군.',
+    },
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '나레이션',
+      text: '미처 거두지 못한 혼백들이 마물이 되어 각 시대의 전장을 점거하고 있었다. 저승사자의 낫만이 이들을 해방시킬 수 있다.',
+    },
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '저승사자',
+      text: '고조선부터 근대까지... 모든 시대의 미혼백을 거두겠다. 이것이 대왕님이 내린 진정한 임무였군.',
+    },
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '나레이션',
+      text: '저승사자는 낫을 들고 첫 번째 시대의 문으로 사라졌다. 시간을 넘나드는 혼백 수거의 여정이 시작되었다.',
+    },
+  ],
+};
+
+function StageCutscene({ charId, classType, onComplete }) {
+  const scenes = STAGE_INTRO_SCENES[classType] || STAGE_INTRO_SCENES['풍수사'];
+  const [sceneIdx, setSceneIdx] = useState(0);
+  const [textVisible, setTextVisible] = useState('');
+  const [textDone, setTextDone] = useState(false);
+  const [fadeOut, setFadeOut] = useState(false);
+  const timerRef = useRef(null);
+
+  const scene = scenes[sceneIdx];
+
+  useEffect(() => {
+    setTextVisible('');
+    setTextDone(false);
+    const text = scene.text;
+    let i = 0;
+    timerRef.current = setInterval(() => {
+      i++;
+      setTextVisible(text.slice(0, i));
+      if (i >= text.length) {
+        clearInterval(timerRef.current);
+        setTextDone(true);
+      }
+    }, 30);
+    return () => clearInterval(timerRef.current);
+  }, [sceneIdx]); // eslint-disable-line
+
+  const handleClick = () => {
+    if (!textDone) {
+      clearInterval(timerRef.current);
+      setTextVisible(scene.text);
+      setTextDone(true);
+      return;
+    }
+    if (sceneIdx < scenes.length - 1) {
+      setSceneIdx(sceneIdx + 1);
+    } else {
+      setFadeOut(true);
+      localStorage.setItem('stage_intro_seen_' + charId, '1');
+      setTimeout(() => onComplete(), 600);
+    }
+  };
+
+  return (
+    <div className={`prologue-area${fadeOut ? ' fade-out' : ''}`} style={{ position: 'fixed', inset: 0, zIndex: 9999 }}>
+      <div className="prologue-scene" onClick={handleClick}>
+        <div className="prologue-bg">
+          <img src={scene.bg} alt="" onError={(e) => { e.target.style.display = 'none'; }} />
+          <div className="prologue-bg-overlay" />
+        </div>
+        <div className="prologue-chapter-title">
+          <div className="prologue-chapter-label">역사의 전장</div>
+          <div className="prologue-chapter-name">시대를 관통하는 여정</div>
+        </div>
+        <div className="prologue-progress">
+          {scenes.map((_, i) => (
+            <div key={i} className={`prologue-progress-dot${i <= sceneIdx ? ' active' : ''}`} />
+          ))}
+        </div>
+        <div className="prologue-dialog">
+          <div className="prologue-dialog-inner">
+            <div className={`prologue-speaker${scene.speaker === '나레이션' ? ' narration' : ''}`}>
+              {scene.speaker === '나레이션' ? '' : scene.speaker}
+            </div>
+            <div className="prologue-text">{textVisible}</div>
+            {textDone && (
+              <div className="prologue-next-hint">
+                {sceneIdx < scenes.length - 1 ? '클릭하여 계속...' : '클릭하여 전장으로 진입...'}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StageImg({ src, fallback, className, alt }) {
   const [err, setErr] = useState(false);
@@ -40,7 +228,11 @@ const AI_TYPE_INFO = {
 
 const SKILL_TYPE_COLORS = { attack: '#ef4444', heal: '#22c55e', buff: '#f59e0b', debuff: '#a855f7', aoe: '#f97316' };
 
-function StageArea({ charState, onStartStageBattle, returnGroupKey, onReturnHandled, contentCharges }) {
+function StageArea({ character, charState, onStartStageBattle, returnGroupKey, onReturnHandled, contentCharges }) {
+  const charId = charState?.id || character?.id;
+  const classType = character?.class_type || '풍수사';
+  const seenKey = 'stage_intro_seen_' + charId;
+  const [showCutscene, setShowCutscene] = useState(() => !localStorage.getItem(seenKey));
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupDetail, setGroupDetail] = useState(null);
@@ -134,6 +326,11 @@ function StageArea({ charState, onStartStageBattle, returnGroupKey, onReturnHand
   };
 
   if (loading) return <div className="stage-loading">스테이지 로딩 중...</div>;
+
+  // 스테이지 진입 컷신 (캐릭터당 최초 1회)
+  if (showCutscene) {
+    return <StageCutscene charId={charId} classType={classType} onComplete={() => setShowCutscene(false)} />;
+  }
 
   // 그룹 상세 - 스테이지 로드맵
   if (selectedGroup && groupDetail) {

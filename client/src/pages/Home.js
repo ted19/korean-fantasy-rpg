@@ -646,6 +646,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       case 'stage':
         return (
           <StageArea
+            character={character}
             charState={charState}
             onStartStageBattle={handleStartStageBattle}
             returnGroupKey={returnStageGroupKey}
