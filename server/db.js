@@ -2045,7 +2045,7 @@ async function initialize() {
       END`,
       // attack (general stat)
       `UPDATE monsters SET attack = CASE
-        WHEN tier = 1 THEN FLOOR(8 + RAND() * 4)
+        WHEN tier = 1 THEN FLOOR(6 + RAND() * 3)
         WHEN tier = 2 THEN FLOOR(18 + RAND() * 8)
         WHEN tier = 3 THEN FLOOR(32 + RAND() * 12)
         WHEN tier = 4 THEN FLOOR(50 + RAND() * 16)
@@ -2071,7 +2071,7 @@ async function initialize() {
       END`,
       // phys_attack (melee/ranged): 주 공격 스탯
       `UPDATE monsters SET phys_attack = CASE
-        WHEN tier = 1 THEN FLOOR(5 + RAND() * 4)
+        WHEN tier = 1 THEN FLOOR(3 + RAND() * 3)
         WHEN tier = 2 THEN FLOOR(13 + RAND() * 6)
         WHEN tier = 3 THEN FLOOR(24 + RAND() * 8)
         WHEN tier = 4 THEN FLOOR(38 + RAND() * 12)
@@ -2084,7 +2084,7 @@ async function initialize() {
       END WHERE range_type IN ('melee','ranged')`,
       // phys_attack (magic): 보조
       `UPDATE monsters SET phys_attack = CASE
-        WHEN tier = 1 THEN FLOOR(2 + RAND() * 2)
+        WHEN tier = 1 THEN FLOOR(1 + RAND() * 2)
         WHEN tier = 2 THEN FLOOR(4 + RAND() * 3)
         WHEN tier = 3 THEN FLOOR(7 + RAND() * 4)
         WHEN tier = 4 THEN FLOOR(11 + RAND() * 5)
@@ -2093,7 +2093,7 @@ async function initialize() {
       END WHERE range_type = 'magic'`,
       // mag_attack (magic): 주 공격 스탯
       `UPDATE monsters SET mag_attack = CASE
-        WHEN tier = 1 THEN FLOOR(5 + RAND() * 4)
+        WHEN tier = 1 THEN FLOOR(3 + RAND() * 3)
         WHEN tier = 2 THEN FLOOR(13 + RAND() * 6)
         WHEN tier = 3 THEN FLOOR(24 + RAND() * 8)
         WHEN tier = 4 THEN FLOOR(38 + RAND() * 12)
@@ -2106,7 +2106,7 @@ async function initialize() {
       END WHERE range_type = 'magic'`,
       // mag_attack (melee/ranged): 보조
       `UPDATE monsters SET mag_attack = CASE
-        WHEN tier = 1 THEN FLOOR(2 + RAND() * 2)
+        WHEN tier = 1 THEN FLOOR(1 + RAND() * 2)
         WHEN tier = 2 THEN FLOOR(4 + RAND() * 3)
         WHEN tier = 3 THEN FLOOR(7 + RAND() * 4)
         WHEN tier = 4 THEN FLOOR(11 + RAND() * 5)

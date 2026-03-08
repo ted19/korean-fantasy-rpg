@@ -390,10 +390,8 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         };
       }
       const lv = effectiveLv - 1;
-      // HP: 레벨당 +10% (플레이어보다 약간 느리게)
-      // 공격: 레벨당 +8% (긴장감 유지)
-      // 방어: 레벨당 +4% (플레이어 공격이 무의미해지지 않도록 낮게)
-      return {
+      // HP: 레벨당 +10%, 공격: +8%, 방어: +4%
+      const scaled = {
         ...template,
         level: effectiveLv,
         hp: Math.max(10, Math.floor(template.hp * (1 + lv * 0.10))),
@@ -404,6 +402,11 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         phys_defense: Math.floor((template.phys_defense || 0) * (1 + lv * 0.04)),
         mag_defense: Math.floor((template.mag_defense || 0) * (1 + lv * 0.04)),
       };
+      // 초반 스테이지(Lv1~3): 몬스터 스킬 제거 → 일반공격만 사용
+      if (effectiveLv <= 3) {
+        scaled.skills = [];
+      }
+      return scaled;
     };
 
     const buildEnemyTeam = () => {
