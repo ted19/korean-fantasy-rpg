@@ -33,7 +33,7 @@ function getUnitImage(unit) {
     return { src: tid ? `/tower_sprites/merc_${tid}.png` : null, fallbackSrc: unit.imageUrl || (tid ? `/mercenaries/${tid}_icon.png` : null) };
   }
   if (unit.monsterId) {
-    return { src: `/monsters/${unit.monsterId}_icon.png`, fallbackSrc: `/tower_sprites/monster_${unit.monsterId}.png` };
+    return { src: `/tower_sprites/monster_${unit.monsterId}.png`, fallbackSrc: `/monsters/${unit.monsterId}_icon.png` };
   }
   return { src: null, fallbackSrc: null };
 }

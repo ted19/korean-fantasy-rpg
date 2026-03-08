@@ -475,6 +475,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       setReturnDungeonKey(null);
       setReturnStageGroupKey(null);
       setReturnSpecialType(null);
+      setVillageTarget('inn');
       setCurrentLocation('village');
     } else {
       // 승리 시 스페셜 던전이었으면 스페셜로 복귀
