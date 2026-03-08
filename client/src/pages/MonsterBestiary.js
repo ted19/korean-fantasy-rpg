@@ -352,17 +352,17 @@ function MonsterTab() {
                   <h3 className="bd-section-title">도감 기록</h3>
                   <div className="bd-bestiary-stats">
                     <div className="bd-bestiary-stat">
-                      <span className="bd-bestiary-stat-icon">&#9876;</span>
+                      <span className="bd-bestiary-stat-icon">⚔️</span>
                       <span className="bd-bestiary-stat-label">총 처치</span>
                       <span className="bd-bestiary-stat-value">{bestiaryInfo.kill_count.toLocaleString()}회</span>
                     </div>
                     <div className="bd-bestiary-stat">
-                      <span className="bd-bestiary-stat-icon">&#128270;</span>
+                      <span className="bd-bestiary-stat-icon">🔍</span>
                       <span className="bd-bestiary-stat-label">최초 발견</span>
                       <span className="bd-bestiary-stat-value">{new Date(bestiaryInfo.first_discovered).toLocaleDateString('ko-KR')}</span>
                     </div>
                     <div className="bd-bestiary-stat">
-                      <span className="bd-bestiary-stat-icon">{bestiaryInfo.kill_count >= 100 ? '&#11088;' : bestiaryInfo.kill_count >= 50 ? '&#128081;' : bestiaryInfo.kill_count >= 10 ? '&#9876;' : '&#128065;'}</span>
+                      <span className="bd-bestiary-stat-icon">{bestiaryInfo.kill_count >= 100 ? '⭐' : bestiaryInfo.kill_count >= 50 ? '👑' : bestiaryInfo.kill_count >= 10 ? '⚔️' : '👁️'}</span>
                       <span className="bd-bestiary-stat-label">숙련도</span>
                       <span className={`bd-bestiary-stat-value bd-mastery-${bestiaryInfo.kill_count >= 100 ? 'master' : bestiaryInfo.kill_count >= 50 ? 'expert' : bestiaryInfo.kill_count >= 10 ? 'skilled' : 'novice'}`}>
                         {bestiaryInfo.kill_count >= 100 ? '대가' : bestiaryInfo.kill_count >= 50 ? '숙련' : bestiaryInfo.kill_count >= 10 ? '경험' : '초보'}

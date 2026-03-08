@@ -1650,32 +1650,34 @@
   background: rgba(233,69,96,0.05);
 }
 .bd-bestiary-stats {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 .bd-bestiary-stat {
-  flex: 1;
-  min-width: 100px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 10px 8px;
+  padding: 12px 8px;
   background: rgba(0,0,0,0.3);
   border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
 }
 .bd-bestiary-stat-icon {
   font-size: 22px;
+  line-height: 1;
 }
 .bd-bestiary-stat-label {
   font-size: 11px;
   color: #888;
+  white-space: nowrap;
 }
 .bd-bestiary-stat-value {
   font-size: 14px;
   font-weight: 700;
   color: #eee;
+  white-space: nowrap;
 }
 .bd-mastery-master { color: #fbbf24 !important; }
 .bd-mastery-expert { color: #c084fc !important; }
