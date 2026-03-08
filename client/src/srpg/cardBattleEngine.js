@@ -347,7 +347,7 @@ export function calculateDamage(attacker, defender, skill = null) {
 
   // 랜덤 편차
   const variance = Math.floor(Math.random() * 5) - 2;
-  let damage = Math.max(1, Math.floor(baseDmg - totalDef * 0.75 + variance));
+  let damage = Math.max(1, Math.floor(baseDmg - totalDef * 0.55 + variance));
 
   // 속성 상성 적용
   let elementMult = 1.0;

@@ -436,11 +436,16 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       const eliteTier = (isPrologue || !isStageCleared) ? null : rollEliteTier();
       const eliteIdx = eliteTier ? Math.floor(Math.random() * monsterCount) : -1;
 
+      // 스테이지 레벨 범위에 맞는 티어만 등장하도록 필터링
+      const maxTier = Math.ceil(zoneLvMax / 3);
+      const tierFiltered = availableMonsters.filter(m => (m.tier || 1) <= maxTier);
+      const monsterPool = tierFiltered.length > 0 ? tierFiltered : availableMonsters;
+
       let eliteInfo = null;
       const enemyTeam = [];
       const enemySetup = [];
-      for (let i = 0; i < monsterCount && availableMonsters.length > 0; i++) {
-        const template = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
+      for (let i = 0; i < monsterCount && monsterPool.length > 0; i++) {
+        const template = monsterPool[Math.floor(Math.random() * monsterPool.length)];
         // 개별 몬스터 레벨에 약간의 랜덤 편차 (±1)
         const lvVariance = Math.floor(Math.random() * 3) - 1;
         const monLv = Math.max(1, effectiveLv + lvVariance);
