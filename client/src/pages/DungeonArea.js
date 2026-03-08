@@ -1,9 +1,197 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Badge } from 'react-bootstrap';
 import api from '../api';
 import { ELITE_TIERS } from '../srpg/battleEngine';
 import './DungeonArea.css';
 import './MonsterBestiary.css';
+
+// ========== 던전 진입 컷신 ==========
+const DUNGEON_INTRO_SCENES = {
+  '풍수사': [
+    {
+      bg: '/dungeons/forest_bg.png',
+      speaker: '나레이션',
+      text: '스테이지의 전장 너머, 더 깊고 위험한 곳이 있었다. 자연의 기운이 뒤틀린 곳—던전이라 불리는 마물의 소굴.',
+    },
+    {
+      bg: '/dungeons/forest_bg.png',
+      speaker: '풍수사',
+      text: '이곳의 용맥은 완전히 역류하고 있어... 마물이 둥지를 틀기 딱 좋은 환경이야.',
+    },
+    {
+      bg: '/dungeons/cave_bg.png',
+      speaker: '나레이션',
+      text: '어둠의 숲, 수정 동굴, 심해 유적... 각 던전에는 고유한 마물 생태계가 형성되어 있다.',
+    },
+    {
+      bg: '/dungeons/cave_bg.png',
+      speaker: '풍수사',
+      text: '던전을 하나씩 정화하면 이 땅의 기운도 되살아날 거야. 나침반이 가리키는 대로 가보자.',
+    },
+    {
+      bg: '/dungeons/dungeon_map_bg.png',
+      speaker: '나레이션',
+      text: '풍수사는 던전 지도를 펼쳤다. 각 던전마다 입장 티켓이 필요하고, 더 깊이 들어갈수록 강력한 마물이 기다리고 있다.',
+    },
+  ],
+  '무당': [
+    {
+      bg: '/dungeons/spirit_forest_bg.png',
+      speaker: '나레이션',
+      text: '영혼의 울음소리가 가장 강하게 들리는 곳. 던전—이승과 저승의 경계가 가장 얇은 장소들이다.',
+    },
+    {
+      bg: '/dungeons/spirit_forest_bg.png',
+      speaker: '무당',
+      text: '여기에선 영혼의 소리가 비명처럼 울려... 원혼만이 아니야, 살아있는 마물도 득실거리고 있어.',
+    },
+    {
+      bg: '/dungeons/swamp_bg.png',
+      speaker: '나레이션',
+      text: '독안개 늪, 정령의 숲, 망자의 신전... 각 던전은 서로 다른 종류의 저주와 마기로 오염되어 있다.',
+    },
+    {
+      bg: '/dungeons/swamp_bg.png',
+      speaker: '무당',
+      text: '방울 소리로 길을 열고, 부적으로 마물을 봉인하겠어. 하나씩 정화해 나가면 돼.',
+    },
+    {
+      bg: '/dungeons/dungeon_map_bg.png',
+      speaker: '나레이션',
+      text: '무당은 영안으로 던전의 위치를 감지했다. 입장 티켓을 모아 각 던전의 심층부까지 도달해야 한다.',
+    },
+  ],
+  '승려': [
+    {
+      bg: '/dungeons/cave_bg.png',
+      speaker: '나레이션',
+      text: '산 아래에는 사람의 손이 닿지 않는 동굴과 숲이 있다. 그곳에 마물이 서식하는 던전이 형성되었다.',
+    },
+    {
+      bg: '/dungeons/cave_bg.png',
+      speaker: '승려',
+      text: '나무아미타불... 이 안에서 느껴지는 마기가 심상치 않구나. 수행의 힘으로 정화해야겠다.',
+    },
+    {
+      bg: '/dungeons/mountain_bg.png',
+      speaker: '나레이션',
+      text: '수정 동굴, 서리 산맥, 용의 둥지... 각 던전에는 승려의 금강역사로도 쉽지 않은 강적이 도사리고 있다.',
+    },
+    {
+      bg: '/dungeons/mountain_bg.png',
+      speaker: '승려',
+      text: '두려움은 없다. 주먹 하나로 동굴을 뚫고, 경문 하나로 마물을 교화하겠다.',
+    },
+    {
+      bg: '/dungeons/dungeon_map_bg.png',
+      speaker: '나레이션',
+      text: '승려는 목탁을 쥐고 첫 번째 던전을 향해 걸어갔다. 던전 입장 티켓을 모아 심층 탐험에 도전해야 한다.',
+    },
+  ],
+  '저승사자': [
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '나레이션',
+      text: '이승에는 저승보다 어두운 곳이 있다. 던전—마물이 넘쳐나는 이승의 지옥이다.',
+    },
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '저승사자',
+      text: '이곳의 마기는 저승의 그것과 다르군. 살아있는 마물이 스스로 만들어낸 지옥이라니...',
+    },
+    {
+      bg: '/dungeons/dragon_bg.png',
+      speaker: '나레이션',
+      text: '마왕성, 용의 둥지, 심해 유적... 가장 강력한 마물들이 던전의 최심부에서 기다리고 있다.',
+    },
+    {
+      bg: '/dungeons/dragon_bg.png',
+      speaker: '저승사자',
+      text: '명부에 이름이 오른 마물도 있군. 낫으로 영혼을 거두고, 이 던전들을 저승의 관할 아래 두겠다.',
+    },
+    {
+      bg: '/dungeons/dungeon_map_bg.png',
+      speaker: '나레이션',
+      text: '저승사자는 명부를 펼쳤다. 각 던전의 마물을 하나씩 처리하며 이승의 질서를 바로잡아야 한다.',
+    },
+  ],
+};
+
+function DungeonCutscene({ charId, classType, onComplete }) {
+  const scenes = DUNGEON_INTRO_SCENES[classType] || DUNGEON_INTRO_SCENES['풍수사'];
+  const [sceneIdx, setSceneIdx] = useState(0);
+  const [textVisible, setTextVisible] = useState('');
+  const [textDone, setTextDone] = useState(false);
+  const [fadeOut, setFadeOut] = useState(false);
+  const timerRef = useRef(null);
+
+  const scene = scenes[sceneIdx];
+
+  useEffect(() => {
+    setTextVisible('');
+    setTextDone(false);
+    const text = scene.text;
+    let i = 0;
+    timerRef.current = setInterval(() => {
+      i++;
+      setTextVisible(text.slice(0, i));
+      if (i >= text.length) {
+        clearInterval(timerRef.current);
+        setTextDone(true);
+      }
+    }, 30);
+    return () => clearInterval(timerRef.current);
+  }, [sceneIdx]); // eslint-disable-line
+
+  const handleClick = () => {
+    if (!textDone) {
+      clearInterval(timerRef.current);
+      setTextVisible(scene.text);
+      setTextDone(true);
+      return;
+    }
+    if (sceneIdx < scenes.length - 1) {
+      setSceneIdx(sceneIdx + 1);
+    } else {
+      setFadeOut(true);
+      localStorage.setItem('dungeon_intro_seen_' + charId, '1');
+      setTimeout(() => onComplete(), 600);
+    }
+  };
+
+  return (
+    <div className={`prologue-area${fadeOut ? ' fade-out' : ''}`} style={{ position: 'fixed', inset: 0, zIndex: 9999 }}>
+      <div className="prologue-scene" onClick={handleClick}>
+        <div className="prologue-bg">
+          <img src={scene.bg} alt="" onError={(e) => { e.target.style.display = 'none'; }} />
+          <div className="prologue-bg-overlay" />
+        </div>
+        <div className="prologue-chapter-title">
+          <div className="prologue-chapter-label">던전 탐험</div>
+          <div className="prologue-chapter-name">마물의 소굴</div>
+        </div>
+        <div className="prologue-progress">
+          {scenes.map((_, i) => (
+            <div key={i} className={`prologue-progress-dot${i <= sceneIdx ? ' active' : ''}`} />
+          ))}
+        </div>
+        <div className="prologue-dialog">
+          <div className="prologue-dialog-inner">
+            <div className={`prologue-speaker${scene.speaker === '나레이션' ? ' narration' : ''}`}>
+              {scene.speaker === '나레이션' ? '' : scene.speaker}
+            </div>
+            <div className="prologue-text">{textVisible}</div>
+            {textDone && (
+              <div className="prologue-next-hint">
+                {sceneIdx < scenes.length - 1 ? '클릭하여 계속...' : '클릭하여 던전 목록으로...'}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // 던전별 테마 색상
 const DUNGEON_THEMES = {
@@ -71,7 +259,11 @@ function DungeonImg({ src, fallback, className, alt }) {
   return <img src={src} alt={alt || ''} className={className} onError={() => setErr(true)} />;
 }
 
-function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, onStartBattle, returnDungeonKey, onReturnHandled, contentCharges }) {
+function DungeonArea({ character, charState, mySummons, activeSummonIds, onToggleSummon, onStartBattle, returnDungeonKey, onReturnHandled, contentCharges }) {
+  const charId = charState?.id || character?.id;
+  const classType = character?.class_type || '풍수사';
+  const seenKey = 'dungeon_intro_seen_' + charId;
+  const [showCutscene, setShowCutscene] = useState(() => !localStorage.getItem(seenKey));
   const [dungeons, setDungeons] = useState([]);
   const [selectedDungeon, setSelectedDungeon] = useState(null);
   const [dungeonDetail, setDungeonDetail] = useState(null);
@@ -157,6 +349,10 @@ function DungeonArea({ charState, mySummons, activeSummonIds, onToggleSummon, on
   };
 
   if (loading) return <div className="dg-loading">던전 목록 로딩 중...</div>;
+
+  if (showCutscene) {
+    return <DungeonCutscene charId={charId} classType={classType} onComplete={() => setShowCutscene(false)} />;
+  }
 
   // 던전 상세 - 스테이지 로드맵
   if (selectedDungeon && dungeonDetail) {

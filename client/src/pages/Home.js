@@ -657,6 +657,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       case 'dungeon':
         return (
           <DungeonArea
+            character={character}
             charState={charState}
             mySummons={mySummons}
             activeSummonIds={activeSummonIds}
