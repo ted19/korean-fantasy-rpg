@@ -219,6 +219,8 @@ router.get('/group/:key', auth, async (req, res) => {
           spawnWeight: m.spawn_weight,
           aiType: m.ai_type || 'aggressive',
           rangeType: m.range_type || 'melee',
+          tier: m.tier || 1,
+          element: m.element || 'neutral',
           skills: skillMap[m.id] || [],
         }));
       }
