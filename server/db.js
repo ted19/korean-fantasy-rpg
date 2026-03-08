@@ -2009,46 +2009,112 @@ async function initialize() {
     await pool.query(sql).catch(() => {});
   }
 
-  // ========== 몬스터 밸런스 패치 v4 (데이터 기반 체크) ==========
-  // 플래그 대신 실제 몬스터 스탯을 확인하여 패치 필요 여부 판단
+  // ========== 몬스터 밸런스 패치 v5 (절대값 기반, 데이터 체크) ==========
+  // 티어별 적정 스탯 목표:
+  // T1(Lv1~5): HP 60~90, patk 12~15, matk 12~15, pdef 6~8, mdef 4~6
+  // T2(Lv5~15): HP 120~200, patk 22~30, matk 22~30, pdef 10~14, mdef 8~12
+  // T3(Lv15~25): HP 200~350, patk 35~45, matk 35~45, pdef 16~20, mdef 14~18
+  // T4(Lv25~40): HP 350~550, patk 50~65, matk 50~65, pdef 22~28, mdef 20~25
+  // T5(Lv40~60): HP 550~800, patk 70~85, matk 70~85, pdef 30~38, mdef 28~35
   await pool.query(`CREATE TABLE IF NOT EXISTS db_flags (flag_name VARCHAR(50) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`).catch(() => {});
-  // tier 1 몬스터의 평균 HP가 100 미만이면 패치 미적용 상태
-  const [avgCheck] = await pool.query("SELECT AVG(hp) as avg_hp FROM monsters WHERE tier = 1");
-  const needsBalance = avgCheck.length > 0 && avgCheck[0].avg_hp < 100;
-  if (needsBalance) {
-    console.log('Applying monster balance patch v4...');
-    // 캐릭터 기준: Lv15 HP372, atk79, patk59, pdef52, mdef38, def72
-    // SRPG공식: dmg = base * (100/(100+def*1.2))
+  const [balV5Flag] = await pool.query("SELECT * FROM db_flags WHERE flag_name = 'monster_balance_v5'");
+  if (balV5Flag.length === 0) {
+    console.log('Applying monster balance patch v5...');
     // Card공식: dmg = (patk + atk*0.5) - (pdef + def*0.3)*0.75
-    // 캐릭→T2 Card: baseDmg = 59+79*0.5=98.5, 목표 totalDef=~40 → dmg=68 → HP 300이면 5대
-    // T2몬→캐릭 Card: 목표 baseDmg=~100 → totalDef=52+72*0.3=73.6 → dmg=100-55=45 → 8대
+    // Lv1 풍수사(hp=80, matk=14, atk=15, pdef=3, def=5) vs T1:
+    //   플레이어→몬: baseDmg=14+7.5=21.5, totalDef=5+1.5=6.5 → dmg=21.5-4.9=17 → HP70이면 4대 ✓
+    //   몬→플레이어: baseDmg=13+7=20, totalDef=3+1.5=4.5 → dmg=20-3.4=17 → HP80이면 5대 ✓
+    // Lv9 승려(hp=256, patk=37, atk=41, pdef=32, def=37) vs T1:
+    //   플레이어→몬: baseDmg=37+20.5=57.5, totalDef=6+1.5=7.5 → dmg=57.5-5.6=52 → HP70이면 2대 ✓
+    //   몬→플레이어: baseDmg=13+7=20, totalDef=32+11.1=43.1 → dmg=1(방무) → 레벨 차 큼 ✓
     const balanceQueries = [
-      // HP: T1=130~200, T2=200~300, T3=280~400
-      "UPDATE monsters SET hp = FLOOR(hp * 3.5 + tier * 30)",
-      // attack: 카드배틀 baseDmg에 *0.5 기여
-      "UPDATE monsters SET attack = FLOOR(attack * 3 + tier * 6)",
-      // defense: 카드배틀 totalDef에 *0.3 기여
-      "UPDATE monsters SET defense = FLOOR(defense * 2.5 + tier * 4)",
-      // phys_attack: 목표 T1=38, T2=48, T3=58
-      "UPDATE monsters SET phys_attack = tier * 12 + 25 + FLOOR(attack * 0.05) WHERE range_type IN ('melee','ranged')",
-      "UPDATE monsters SET phys_attack = tier * 7 + 15 + FLOOR(attack * 0.03) WHERE range_type = 'magic'",
-      // mag_attack
-      "UPDATE monsters SET mag_attack = tier * 12 + 25 + FLOOR(attack * 0.05) WHERE range_type = 'magic'",
-      "UPDATE monsters SET mag_attack = tier * 7 + 15 + FLOOR(attack * 0.03) WHERE range_type IN ('melee','ranged')",
-      // phys_defense: 목표 T1=16, T2=21, T3=26
-      "UPDATE monsters SET phys_defense = tier * 5 + 10 + FLOOR(defense * 0.06)",
+      // HP: 원본 비율 유지하면서 티어별 스케일링 (원본 seed값 기준으로 역산)
+      // v4가 적용된 경우: hp = original*3.5+tier*30 → original = (hp-tier*30)/3.5
+      // v4 미적용인 경우: hp = original 그대로
+      // 안전하게: 티어별 절대 범위로 SET (기존 hp 비율 활용)
+      `UPDATE monsters SET hp = CASE
+        WHEN tier = 1 THEN FLOOR(40 + hp * 0.25)
+        WHEN tier = 2 THEN FLOOR(100 + hp * 0.3)
+        WHEN tier = 3 THEN FLOOR(180 + hp * 0.35)
+        WHEN tier = 4 THEN FLOOR(300 + hp * 0.4)
+        WHEN tier = 5 THEN FLOOR(480 + hp * 0.45)
+        ELSE FLOOR(600 + hp * 0.5)
+      END`,
+      // attack: 티어별 스케일
+      `UPDATE monsters SET attack = CASE
+        WHEN tier = 1 THEN FLOOR(8 + attack * 0.3)
+        WHEN tier = 2 THEN FLOOR(18 + attack * 0.35)
+        WHEN tier = 3 THEN FLOOR(32 + attack * 0.4)
+        WHEN tier = 4 THEN FLOOR(50 + attack * 0.45)
+        WHEN tier = 5 THEN FLOOR(75 + attack * 0.5)
+        ELSE FLOOR(100 + attack * 0.5)
+      END`,
+      // defense
+      `UPDATE monsters SET defense = CASE
+        WHEN tier = 1 THEN FLOOR(3 + defense * 0.3)
+        WHEN tier = 2 THEN FLOOR(8 + defense * 0.35)
+        WHEN tier = 3 THEN FLOOR(15 + defense * 0.4)
+        WHEN tier = 4 THEN FLOOR(25 + defense * 0.45)
+        WHEN tier = 5 THEN FLOOR(38 + defense * 0.5)
+        ELSE FLOOR(50 + defense * 0.5)
+      END`,
+      // phys_attack (melee/ranged): 티어별 절대값 + attack 비례
+      `UPDATE monsters SET phys_attack = CASE
+        WHEN tier = 1 THEN FLOOR(tier * 5 + 7 + attack * 0.08)
+        WHEN tier = 2 THEN FLOOR(tier * 8 + 5 + attack * 0.12)
+        WHEN tier = 3 THEN FLOOR(tier * 11 + 3 + attack * 0.15)
+        WHEN tier = 4 THEN FLOOR(tier * 13 + 2 + attack * 0.18)
+        WHEN tier = 5 THEN FLOOR(tier * 15 + 0 + attack * 0.2)
+        ELSE FLOOR(tier * 16 + attack * 0.2)
+      END WHERE range_type IN ('melee','ranged')`,
+      // phys_attack (magic): 보조 스탯
+      `UPDATE monsters SET phys_attack = CASE
+        WHEN tier = 1 THEN FLOOR(tier * 3 + 2 + attack * 0.03)
+        WHEN tier = 2 THEN FLOOR(tier * 4 + 2 + attack * 0.05)
+        WHEN tier = 3 THEN FLOOR(tier * 5 + 2 + attack * 0.08)
+        ELSE FLOOR(tier * 6 + 2 + attack * 0.1)
+      END WHERE range_type = 'magic'`,
+      // mag_attack (magic): 주 스탯
+      `UPDATE monsters SET mag_attack = CASE
+        WHEN tier = 1 THEN FLOOR(tier * 5 + 7 + attack * 0.08)
+        WHEN tier = 2 THEN FLOOR(tier * 8 + 5 + attack * 0.12)
+        WHEN tier = 3 THEN FLOOR(tier * 11 + 3 + attack * 0.15)
+        WHEN tier = 4 THEN FLOOR(tier * 13 + 2 + attack * 0.18)
+        WHEN tier = 5 THEN FLOOR(tier * 15 + 0 + attack * 0.2)
+        ELSE FLOOR(tier * 16 + attack * 0.2)
+      END WHERE range_type = 'magic'`,
+      // mag_attack (melee/ranged): 보조 스탯
+      `UPDATE monsters SET mag_attack = CASE
+        WHEN tier = 1 THEN FLOOR(tier * 3 + 2 + attack * 0.03)
+        WHEN tier = 2 THEN FLOOR(tier * 4 + 2 + attack * 0.05)
+        WHEN tier = 3 THEN FLOOR(tier * 5 + 2 + attack * 0.08)
+        ELSE FLOOR(tier * 6 + 2 + attack * 0.1)
+      END WHERE range_type IN ('melee','ranged')`,
+      // phys_defense
+      `UPDATE monsters SET phys_defense = CASE
+        WHEN tier = 1 THEN FLOOR(tier * 2 + 3 + defense * 0.08)
+        WHEN tier = 2 THEN FLOOR(tier * 3 + 3 + defense * 0.12)
+        WHEN tier = 3 THEN FLOOR(tier * 4 + 3 + defense * 0.15)
+        ELSE FLOOR(tier * 5 + 3 + defense * 0.18)
+      END`,
       // mag_defense
-      "UPDATE monsters SET mag_defense = tier * 4 + 8 + FLOOR(defense * 0.05)",
+      `UPDATE monsters SET mag_defense = CASE
+        WHEN tier = 1 THEN FLOOR(tier * 1.5 + 2 + defense * 0.06)
+        WHEN tier = 2 THEN FLOOR(tier * 2.5 + 2 + defense * 0.1)
+        WHEN tier = 3 THEN FLOOR(tier * 3.5 + 2 + defense * 0.12)
+        ELSE FLOOR(tier * 4 + 2 + defense * 0.15)
+      END`,
       // crit/evasion/mp
       "UPDATE monsters SET crit_rate = GREATEST(crit_rate, tier * 2 + 3)",
       "UPDATE monsters SET evasion = GREATEST(evasion, tier + 2)",
-      "UPDATE monsters SET mp = GREATEST(mp, tier * 10 + 25)",
+      "UPDATE monsters SET mp = GREATEST(mp, tier * 8 + 20)",
     ];
     for (const sql of balanceQueries) {
       await pool.query(sql).catch(e => console.error('Balance query failed:', sql, e.message));
     }
-    await pool.query("INSERT INTO db_flags (flag_name) VALUES ('monster_balance_v4')").catch(() => {});
-    console.log('Monster balance patch v4 applied');
+    await pool.query("DELETE FROM db_flags WHERE flag_name LIKE 'monster_balance%'").catch(() => {});
+    await pool.query("INSERT INTO db_flags (flag_name) VALUES ('monster_balance_v5')").catch(() => {});
+    console.log('Monster balance patch v5 applied');
   }
 
   // 몬스터-스킬 연결 (INSERT IGNORE로 중복 안전)
@@ -5984,7 +6050,7 @@ async function initialize() {
   // content_type ENUM → VARCHAR 마이그레이션
   await pool.query("ALTER TABLE content_charges MODIFY content_type VARCHAR(50) NOT NULL").catch(() => {});
 
-  console.log('Database initialized (balance v4 applied)');
+  console.log('Database initialized (balance v5 applied)');
 }
 
 // 선택된 캐릭터 조회 헬퍼 (X-Char-Id 헤더 기반)
