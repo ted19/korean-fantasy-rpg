@@ -74,6 +74,25 @@ export default function PixelMap2D({
   const [deadUnits, setDeadUnits] = useState(new Set());
   const effectIdRef = useRef(0);
   const prevUnitsRef = useRef([]);
+  const gridRef = useRef(null);
+
+  // 타일 크기를 CSS 변수에서 동적으로 읽어옴 (모바일 대응)
+  const [tileSize, setTileSize] = useState(104);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const update = () => {
+      const val = getComputedStyle(el).getPropertyValue('--tile-size');
+      const parsed = parseInt(val);
+      if (parsed && parsed !== tileSize) setTileSize(parsed);
+    };
+    update();
+    const mql = window.matchMedia('(max-width: 768px)');
+    const handler = () => update();
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
+  const halfTile = tileSize / 2;
 
   // 드래그 팬 (맵 영역 밖에서만) + 줌 (휠)
   const areaRef = useRef(null);
@@ -152,16 +171,20 @@ export default function PixelMap2D({
     });
 
     // HP 변화 감지 → 피격 이펙트 (피격 유닛의 현재 좌표에 정확히 표시)
+    // 공격에 의한 타겟 ID 집합 (공격 대상만 피격 이펙트 적용)
+    const attackTargetIds = new Set();
+    for (const [, targetId] of attackerTargetMap) attackTargetIds.add(targetId);
+
     units.forEach(u => {
       const prev = prevUnits.find(p => p.id === u.id);
       if (!prev) return;
       if (u.hp < prev.hp && u.hp >= 0) {
-        setShakeUnit(u.id);
-        setTimeout(() => setShakeUnit(null), 300);
-        // 이 유닛을 타겟으로 하는 공격자 찾기 (ID 기반 매칭 - 좌표 비교보다 정확)
+        // 이 유닛을 타겟으로 하는 공격자 찾기 (ID 기반 매칭)
         const attackers = newAttackers.filter(a => attackerTargetMap.get(a.id) === u.id);
         if (attackers.length > 0) {
-          // 각 공격자별로 피격 이펙트 (협공 포함) - 유닛의 현재 좌표에 표시
+          // 공격에 의한 피격: 셰이크 + 무기별 이펙트
+          setShakeUnit(u.id);
+          setTimeout(() => setShakeUnit(null), 300);
           attackers.forEach(attacker => {
             const wt = attacker.weaponType || 'default';
             const hitType = ['staff','bell','talisman'].includes(wt) ? 'magic' : ['bow'].includes(wt) ? 'arrow-hit' : 'slash';
@@ -169,14 +192,11 @@ export default function PixelMap2D({
             setHitEffects(prev2 => [...prev2.slice(-8), { id, x: u.x, z: u.z, type: hitType, fromX: attacker.x, fromZ: attacker.z }]);
             setTimeout(() => setHitEffects(prev2 => prev2.filter(e => e.id !== id)), 450);
           });
-        } else {
-          // 공격자를 찾을 수 없으면 기본 slash 이펙트 (유닛 현재 좌표)
-          const id = ++effectIdRef.current;
-          setHitEffects(prev2 => [...prev2.slice(-8), { id, x: u.x, z: u.z, type: 'slash' }]);
-          setTimeout(() => setHitEffects(prev2 => prev2.filter(e => e.id !== id)), 450);
         }
+        // 공격자가 없는 HP 감소(지형 데미지 등)는 이펙트 생략 (팝업은 SrpgBattle에서 처리)
       }
-      if (u.hp > prev.hp) {
+      if (u.hp > prev.hp && attackTargetIds.size > 0) {
+        // 전투 중 회복: heal-fx 이펙트 (공격이 일어나고 있을 때만, 지형 힐 단독은 제외)
         const id = ++effectIdRef.current;
         setHitEffects(prev2 => [...prev2.slice(-8), { id, x: u.x, z: u.z, type: 'heal-fx' }]);
         setTimeout(() => setHitEffects(prev2 => prev2.filter(e => e.id !== id)), 400);
@@ -217,9 +237,10 @@ export default function PixelMap2D({
     >
       <div
         className="pm2d-grid"
+        ref={gridRef}
         style={{
-          gridTemplateColumns: `repeat(${mapData.width}, 104px)`,
-          gridTemplateRows: `repeat(${mapData.height}, 104px)`,
+          gridTemplateColumns: `repeat(${mapData.width}, var(--tile-size, 104px))`,
+          gridTemplateRows: `repeat(${mapData.height}, var(--tile-size, 104px))`,
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           transformOrigin: 'center center',
         }}
@@ -252,19 +273,19 @@ export default function PixelMap2D({
         })}
 
         {/* ===== 유닛 오버레이 레이어 (타일 위, 별도 absolute layer) ===== */}
-        <div className="pm2d-unit-layer" style={{ width: mapData.width * 104, height: mapData.height * 104 }}>
+        <div className="pm2d-unit-layer" style={{ width: mapData.width * tileSize, height: mapData.height * tileSize }}>
           {/* 유닛 렌더 */}
           {units.filter(u => (u.hp > 0 || deadUnits.has(u.id)) && !(movingUnit && movingUnit.id === u.id)).map(u => {
             const isDead = deadUnits.has(u.id) && u.hp <= 0;
-            const left = u.x * 104;
-            const top = u.z * 104;
+            const left = u.x * tileSize;
+            const top = u.z * tileSize;
             // 유닛 클릭 → 해당 좌표의 타일 클릭으로 전달
             const unitTile = mapData.tiles.find(t => t.x === u.x && t.z === u.z);
             return (
               <div
                 key={u.id}
                 className={`pm2d-unit ${u.team === 'player' ? 'ally' : 'enemy'} ${activeUnit && u.id === activeUnit.id ? 'active-unit' : ''} ${u.acted ? 'acted' : ''} ${isDead ? 'dead-unit' : ''} ${shakeUnit === u.id ? 'shake' : ''} ${u.eliteTier ? 'elite' : ''}`}
-                style={{ left: left + 52, top: top + 52, ...(u.eliteTier ? { '--elite-color': u.eliteTier.color } : {}) }}
+                style={{ left: left + halfTile, top: top + halfTile, ...(u.eliteTier ? { '--elite-color': u.eliteTier.color } : {}) }}
                 onClick={() => unitTile && handleClick(unitTile)}
               >
                 <div className="pm2d-unit-aura" />
@@ -292,10 +313,10 @@ export default function PixelMap2D({
               <div
                 className={`pm2d-walking-unit ${mu.team === 'player' ? 'ally' : 'enemy'}`}
                 style={{
-                  '--from-x': `${movingUnit.fromX * 104 + 52}px`,
-                  '--from-y': `${movingUnit.fromZ * 104 + 52}px`,
-                  '--to-x': `${movingUnit.toX * 104 + 52}px`,
-                  '--to-y': `${movingUnit.toZ * 104 + 52}px`,
+                  '--from-x': `${movingUnit.fromX * tileSize + halfTile}px`,
+                  '--from-y': `${movingUnit.fromZ * tileSize + halfTile}px`,
+                  '--to-x': `${movingUnit.toX * tileSize + halfTile}px`,
+                  '--to-y': `${movingUnit.toZ * tileSize + halfTile}px`,
                 }}
               >
                 <UnitImg src={src} fallbackSrc={fallbackSrc} fallback={mu.icon} className="pm2d-unit-sprite" />
@@ -313,13 +334,13 @@ export default function PixelMap2D({
               rotStyle = { '--fx-angle': `${angle}deg` };
             }
             return (
-              <div key={e.id} className={`pm2d-hit-fx ${e.type}`} style={{ left: e.x * 104 + 52, top: e.z * 104 + 42, ...rotStyle }} />
+              <div key={e.id} className={`pm2d-hit-fx ${e.type}`} style={{ left: e.x * tileSize + halfTile, top: e.z * tileSize + halfTile - 10, ...rotStyle }} />
             );
           })}
 
           {/* 데미지 팝업 */}
           {(damagePopups || []).map((p, j) => (
-            <div key={`popup-${p.time}-${j}`} className={`pm2d-dmg-popup ${p.type}`} style={{ left: p.x * 104 + 52, top: p.z * 104 + 20 }}>{p.text}</div>
+            <div key={`popup-${p.id || p.time}-${j}`} className={`pm2d-dmg-popup ${p.type}`} style={{ left: p.x * tileSize + halfTile, top: p.z * tileSize + halfTile - 32 }}>{p.text}</div>
           ))}
         </div>
       </div>

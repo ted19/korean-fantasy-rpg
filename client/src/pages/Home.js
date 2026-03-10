@@ -247,6 +247,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       setSrpgBattle(true);
       setFighting(true);
     } else if (s.battleType === 'srpg' || s.battleType === 'tower') {
+      savedEnemySetupRef.current = ctx.enemySetup || null;
       savedRetreatFailedRef.current = ctx.retreatFailed || false;
       setBattleLocation(ctx.dungeonKey);
       setBattleStage(ctx.stage);
@@ -326,6 +327,8 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         return;
       }
     }
+    savedEnemySetupRef.current = null; // 새 전투는 적 구성 초기화
+    savedRetreatFailedRef.current = false;
     setBattleLocation(dungeonKey);
     setBattleStage(stage);
     if (specialCtx) {
@@ -559,6 +562,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           onLog={addLog}
           use2DMap={true}
           savedRetreatFailed={savedRetreatFailedRef.current}
+          savedEnemySetup={savedEnemySetupRef.current}
         />
       </div>
     );
@@ -582,6 +586,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           onLog={addLog}
           use2DMap={true}
           savedRetreatFailed={savedRetreatFailedRef.current}
+          savedEnemySetup={savedEnemySetupRef.current}
         />
       </div>
     );

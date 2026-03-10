@@ -8,7 +8,7 @@ import {
   calcDamage, calcHeal, determineTurnOrder, aiDecide,
   checkBattleEnd, generateEnemies, getWeaponInfo, getTerrainEffect, getTileTurnEffect,
   getJointAttackAllies, calcJointDamage,
-  ELITE_TIERS,
+  ELITE_TIERS, rollEliteTier, applyEliteStats,
 } from './battleEngine';
 import api from '../api';
 import './SrpgBattle.css';
@@ -56,6 +56,7 @@ export default function SrpgBattle({
   onBattleEnd,
   use2DMap = false,
   savedRetreatFailed = false,
+  savedEnemySetup = null,
 }) {
   const [mapData, setMapData] = useState(null);
   const [units, setUnits] = useState([]);
@@ -124,7 +125,12 @@ export default function SrpgBattle({
   const addPopup = (x, z, text, type = 'damage') => {
     const tile = mapRef.current?.tiles.find(t => t.x === x && t.z === z);
     const y = tile ? tile.height * 0.4 : 0;
-    setDamagePopups(prev => [...prev.slice(-5), { x, y, z, text, type, time: Date.now() }]);
+    const id = Date.now() + Math.random();
+    setDamagePopups(prev => [...prev.slice(-5), { x, y, z, text, type, time: Date.now(), id }]);
+    // 애니메이션 종료 후 자동 제거 (1.2초)
+    setTimeout(() => {
+      setDamagePopups(prev => prev.filter(p => p.id !== id));
+    }, 1200);
   };
 
   // 무기 타입별 공격 이펙트 선택
@@ -282,7 +288,51 @@ export default function SrpgBattle({
         }
 
         // 적 생성 (DB 몬스터 데이터 기반 + 스테이지 보너스)
-        const enemies = generateEnemies(dbMonsters, charState.level, stage);
+        let enemies;
+        let enemySetupToSave = null;
+        if (savedEnemySetup && savedEnemySetup.length > 0) {
+          // 저장된 적 구성 복원 (정예 리롤 방지)
+          enemies = savedEnemySetup.map(setup => {
+            const template = dbMonsters.find(m => m.id === setup.monsterId);
+            if (!template) return null;
+            const levelBonus = stage ? (stage.monsterLevelBonus || 0) : 0;
+            const hpScale = 1 + levelBonus * 0.05 + (setup.isBoss ? 0.3 : 0);
+            const atkScale = 1 + levelBonus * 0.04 + (setup.isBoss ? 0.2 : 0);
+            const defScale = 1 + levelBonus * 0.04 + (setup.isBoss ? 0.15 : 0);
+            let enemy = {
+              monsterId: template.id,
+              name: template.name,
+              isBoss: setup.isBoss || false,
+              hp: Math.floor((template.hp || 50) * hpScale),
+              mp: template.mp || 0,
+              attack: Math.floor((template.attack || 5) * atkScale),
+              defense: Math.floor((template.defense || 0) * defScale),
+              physAttack: Math.floor((template.physAttack || template.phys_attack || 0) * atkScale),
+              magAttack: Math.floor((template.magAttack || template.mag_attack || 0) * atkScale),
+              physDefense: Math.floor((template.physDefense || template.phys_defense || 0) * defScale + levelBonus * 0.2),
+              magDefense: Math.floor((template.magDefense || template.mag_defense || 0) * defScale + levelBonus * 0.15),
+              move: template.moveRange || 3,
+              exp: (template.expReward || 0) + (stage ? stage.rewardExpBonus || 0 : 0),
+              gold: (template.goldReward || 0) + (stage ? stage.rewardGoldBonus || 0 : 0),
+              icon: template.icon || '👹',
+              aiType: setup.isBoss ? 'boss' : (template.aiType || 'aggressive'),
+              skills: template.skills || [],
+            };
+            if (setup.eliteTierKey) {
+              const tier = ELITE_TIERS.find(t => t.key === setup.eliteTierKey);
+              if (tier) enemy = applyEliteStats(enemy, tier);
+            }
+            return enemy;
+          }).filter(Boolean);
+        } else {
+          enemies = generateEnemies(dbMonsters, charState.level, stage);
+          // 적 구성을 세션에 저장
+          enemySetupToSave = enemies.map(e => ({
+            monsterId: e.monsterId,
+            isBoss: e.isBoss || false,
+            eliteTierKey: e.eliteTier ? e.eliteTier.key : null,
+          }));
+        }
         // 정예 몬스터 알림
         const eliteEnemy = enemies.find(e => e.eliteTier);
         if (eliteEnemy) {
@@ -293,6 +343,19 @@ export default function SrpgBattle({
             allUnits.push(createMonsterUnit(m, map.monsterSpawns[i], i));
           }
         });
+        // 적 구성 세션 저장 (새로 생성된 경우만)
+        if (enemySetupToSave) {
+          try {
+            api.post('/battle/session/save', {
+              battleType: 'srpg',
+              context: {
+                dungeonKey: location,
+                stage,
+                enemySetup: enemySetupToSave,
+              },
+            });
+          } catch {}
+        }
 
         setUnits(allUnits);
 

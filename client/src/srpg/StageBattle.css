@@ -2034,16 +2034,43 @@
   letter-spacing: 1px;
 }
 
+/* ===== Mobile - Tablet ===== */
+@media (max-width: 768px) {
+  .cb-header-inner { padding: 8px 12px; }
+  .cb-stage-name { font-size: 0.95rem; }
+  .cb-round { font-size: 0.78rem; padding: 2px 10px; }
+  .cb-turn-bar { padding: 5px 10px; gap: 3px; }
+  .cb-turn-icon { width: 28px; height: 28px; border-radius: 5px; }
+  .cb-field { padding: 8px 6px; min-height: 280px; gap: 8px; }
+  .cb-side { max-width: 300px; }
+  .cb-vs-img { width: 44px; height: 44px; }
+  .cb-actions-inner { padding: 8px 12px; }
+  .cb-action-btn { padding: 7px 12px; font-size: 0.72rem; }
+}
+
 /* ===== Mobile ===== */
 @media (max-width: 640px) {
+  .cb-header-inner { padding: 7px 10px; }
+  .cb-stage-name { font-size: 0.85rem; letter-spacing: 0.5px; }
+  .cb-round { font-size: 0.72rem; padding: 2px 8px; }
+  .cb-round-icon { width: 16px; height: 16px; }
+  .cb-retreat-btn { padding: 4px 10px; font-size: 0.68rem; }
+  .cb-btn-icon { width: 14px; height: 14px; }
+
+  .cb-turn-bar { padding: 4px 8px; gap: 2px; }
+  .cb-turn-icon { width: 26px; height: 26px; border-radius: 4px; border-width: 1.5px; }
+  .cb-turn-label { font-size: 0.5rem; margin-right: 4px; }
+
   .cb-field {
     padding: 6px 4px;
     min-height: auto;
     gap: 6px;
   }
   .cb-side { max-width: none; }
+  .cb-side-label { font-size: 0.5rem; letter-spacing: 1.5px; }
   .cb-side-grid { gap: 3px; }
   .cb-vs { font-size: 0.9rem; padding: 0; }
+  .cb-vs-img { width: 36px; height: 36px; }
   .cb-card { border-radius: 6px; border-width: 1.5px; }
   .cb-card-emoji { font-size: 1.4rem; }
   .cb-card-name { font-size: 0.5rem; }
@@ -2056,7 +2083,14 @@
   .cb-card-range { font-size: 0.45rem; }
   .cb-auto-btn { padding: 3px 7px; font-size: 0.6rem; }
   .cb-auto-btns { gap: 3px; }
+  .cb-actions-inner { padding: 8px 10px; }
+  .cb-action-label { font-size: 0.72rem; margin-bottom: 6px; }
   .cb-action-btn { padding: 6px 10px; font-size: 0.7rem; }
+  .cb-action-buttons { gap: 5px; }
+  .cb-popup { font-size: 1.1rem; }
+  .cb-popup.damage { font-size: 1.3rem; }
+  .cb-popup.heal { font-size: 1.1rem; }
+  .cb-popup.kill { font-size: 1.4rem; }
   .cb-result-main { max-width: 360px; gap: 12px; }
   .cb-result-title.victory { font-size: 2.2rem; letter-spacing: 10px; text-indent: 10px; }
   .cb-result-title.defeat { font-size: 2rem; }
@@ -2097,7 +2131,53 @@
   .cb-skill-cutin-icon { font-size: 1.8rem; }
   .cb-skill-cutin-img { width: 40px; height: 40px; }
   .cb-skill-cutin-name { font-size: 1rem; }
-  .cb-vs-img { width: 36px; height: 36px; }
+  .cb-elite-badge { font-size: 0.45rem; padding: 1px 6px; }
+}
+
+/* ===== Mobile - Small ===== */
+@media (max-width: 420px) {
+  .cb-header-inner { padding: 6px 8px; }
+  .cb-stage-name { font-size: 0.75rem; }
+  .cb-round { font-size: 0.65rem; padding: 2px 6px; }
+  .cb-retreat-btn { padding: 3px 8px; font-size: 0.6rem; gap: 2px; }
+  .cb-auto-btn { padding: 2px 5px; font-size: 0.55rem; }
+
+  .cb-turn-bar { padding: 3px 6px; }
+  .cb-turn-icon { width: 22px; height: 22px; border-radius: 3px; }
+  .cb-turn-icon.active { transform: scale(1.15); }
+
+  .cb-field { padding: 4px 2px; gap: 4px; }
+  .cb-side-grid { gap: 2px; }
+  .cb-vs { padding: 0; }
+  .cb-vs-img { width: 28px; height: 28px; }
+  .cb-vs-text { font-size: 1rem; }
+  .cb-card { border-radius: 5px; border-width: 1px; }
+  .cb-card-name { font-size: 0.45rem; }
+  .cb-card-info { padding: 2px 2px 3px; gap: 1px; }
+  .cb-card-bar { height: 6px; border-radius: 2px; }
+  .cb-card-bar.mp { height: 4px; }
+  .cb-card-bar-text { font-size: 0.3rem; }
+  .cb-card-lv-badge { font-size: 0.35rem; padding: 0 3px; }
+  .cb-card-row-badge { font-size: 0.3rem; padding: 0 2px; }
+  .cb-card-effects { gap: 1px; }
+  .cb-effect { width: 11px; height: 11px; font-size: 0.38rem; }
+
+  .cb-actions-inner { padding: 6px 8px; }
+  .cb-action-label { font-size: 0.65rem; margin-bottom: 5px; }
+  .cb-action-btn { padding: 5px 8px; font-size: 0.62rem; gap: 3px; }
+  .cb-action-buttons { gap: 4px; }
+
+  .cb-popup { font-size: 0.9rem; }
+  .cb-popup.damage { font-size: 1.1rem; }
+  .cb-popup.kill { font-size: 1.2rem; }
+
+  .cb-result-main { max-width: 95vw; gap: 10px; width: 95%; }
+  .cb-result-title.victory { font-size: 1.8rem; letter-spacing: 6px; text-indent: 6px; }
+  .cb-result-title.defeat { font-size: 1.6rem; }
+  .cb-result-btn-premium { padding: 10px 28px; font-size: 0.85rem; }
+  .cb-result-rewards-grid { gap: 8px; }
+
+  .cb-elite-badge { font-size: 0.4rem; padding: 0 5px; }
 }
 
 /* ===== 드랍 아이템 애니메이션 ===== */
@@ -2194,4 +2274,25 @@
 .srpg-contrib-exp {
   color: #81c784; font-weight: 700; font-size: 0.75rem;
   min-width: 55px; text-align: right; flex-shrink: 0;
+}
+
+/* ===== Contribution Mobile ===== */
+@media (max-width: 640px) {
+  .srpg-contrib-row { gap: 5px; padding: 4px 6px; font-size: 0.7rem; }
+  .srpg-contrib-unit { min-width: 60px; gap: 3px; }
+  .srpg-contrib-icon { width: 20px; height: 20px; }
+  .srpg-contrib-name { max-width: 45px; font-size: 0.65rem; }
+  .srpg-contrib-stats { min-width: 70px; gap: 4px; }
+  .srpg-contrib-dmg, .srpg-contrib-kills { font-size: 0.65rem; }
+  .srpg-contrib-bar-wrap { height: 12px; min-width: 40px; }
+  .srpg-contrib-pct { font-size: 0.6rem; }
+  .srpg-contrib-exp { min-width: 45px; font-size: 0.68rem; }
+}
+@media (max-width: 420px) {
+  .srpg-contrib-row { flex-wrap: wrap; gap: 3px; padding: 4px 5px; }
+  .srpg-contrib-unit { min-width: 50px; }
+  .srpg-contrib-name { max-width: 40px; font-size: 0.6rem; }
+  .srpg-contrib-stats { min-width: 60px; }
+  .srpg-contrib-bar-wrap { min-width: 30px; }
+  .srpg-contrib-exp { min-width: 40px; font-size: 0.62rem; }
 }

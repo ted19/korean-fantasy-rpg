@@ -1265,9 +1265,10 @@
 .pm2d-grid, .pm2d-tile { cursor: pointer; }
 
 .pm2d-grid {
+  --tile-size: 104px;
   display: grid;
   gap: 0;
-  grid-auto-rows: 104px;
+  grid-auto-rows: var(--tile-size);
   background: transparent;
   border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
@@ -1281,8 +1282,8 @@
 
 /* Tiles - dirt_rough.jpg 텍스처 */
 .pm2d-tile {
-  width: 104px;
-  height: 104px;
+  width: var(--tile-size, 104px);
+  height: var(--tile-size, 104px);
   position: relative;
   cursor: pointer;
   border: none;
@@ -1816,9 +1817,101 @@
 
 /* Mobile */
 @media (max-width: 768px) {
-  .pm2d-tile { width: 80px; height: 80px; }
+  .pm2d-grid { --tile-size: 80px; }
+  .pm2d-tile { width: var(--tile-size); height: var(--tile-size); }
   .pm2d-unit-sprite { width: 56px; height: 56px; }
   .pm2d-unit { width: 64px; height: 64px; }
+
+  .srpg-hud { padding: 8px; bottom: 130px; }
+  .srpg-turn-info { max-width: 65%; padding: 4px 8px; }
+  .srpg-round { font-size: 11px; }
+  .srpg-active-unit { font-size: 11px; padding: 2px 6px; }
+  .srpg-active-portrait { width: 18px; height: 18px; }
+  .srpg-turn-order { max-width: 65%; }
+  .srpg-turn-unit { padding: 2px 3px; }
+  .srpg-turn-portrait { width: 20px; height: 20px; }
+  .srpg-turn-hp-bar, .srpg-turn-mp-bar { width: 20px; }
+
+  .srpg-unit-detail { top: 8px; right: 8px; padding: 8px 10px; min-width: 90px; max-width: 120px; }
+  .srpg-unit-name { font-size: 11px; margin-bottom: 4px; }
+  .srpg-detail-portrait { width: 22px; height: 22px; }
+  .srpg-bar-label { font-size: 10px; }
+  .srpg-bar-value { font-size: 9px; }
+  .srpg-unit-stats { font-size: 11px; gap: 8px; }
+
+  .srpg-log { height: 130px; }
+  .srpg-log-header { padding: 5px 12px; font-size: 10px; }
+  .srpg-log-content { padding: 4px 12px; }
+  .srpg-log-line { font-size: 11px; line-height: 1.5; }
+
+  .srpg-actions { gap: 6px; padding-bottom: 8px; max-width: 100%; padding-left: 8px; padding-right: 8px; }
+  .srpg-action-btn { padding: 8px 14px; font-size: 12px; }
+
+  .srpg-map { min-height: 200px; }
+
+  .srpg-mode-hint { font-size: 11px; padding: 6px 16px; }
+
+  .srpg-result-screen { width: 95vw; max-height: 90vh; }
+  .srpg-result-title { font-size: 1.8rem; letter-spacing: 6px; }
+  .srpg-result-title.defeat { font-size: 1.6rem; }
+  .srpg-result-title-area { padding: 20px 16px 10px; }
+  .srpg-result-content { padding: 0 14px 10px; gap: 10px; }
+  .srpg-result-reward-grid { gap: 6px; }
+  .srpg-rr-item { padding: 8px 10px; }
+  .srpg-rr-value { font-size: 1rem; }
+
+  .srpg-ctx-menu { min-width: 90px; }
+  .srpg-ctx-btn { padding: 6px 12px; font-size: 12px; }
+}
+
+@media (max-width: 480px) {
+  .pm2d-grid { --tile-size: 64px; }
+  .pm2d-tile { width: var(--tile-size); height: var(--tile-size); }
+  .pm2d-unit-sprite { width: 44px; height: 44px; }
+  .pm2d-unit { width: 52px; height: 52px; }
+
+  .srpg-hud { padding: 6px; bottom: 110px; }
+  .srpg-turn-info { max-width: 70%; padding: 3px 6px; gap: 4px; }
+  .srpg-round { font-size: 10px; }
+  .srpg-active-unit { font-size: 10px; padding: 2px 5px; }
+  .srpg-turn-order { max-width: 70%; gap: 2px; }
+  .srpg-turn-unit { padding: 2px; }
+  .srpg-turn-portrait { width: 18px; height: 18px; }
+  .srpg-turn-hp-bar, .srpg-turn-mp-bar { width: 18px; }
+
+  .srpg-unit-detail { top: 6px; right: 6px; padding: 6px 8px; min-width: 80px; max-width: 110px; }
+  .srpg-unit-name { font-size: 10px; gap: 4px; }
+  .srpg-detail-portrait { width: 20px; height: 20px; }
+  .srpg-bar-track { height: 5px; }
+  .srpg-bar-label { font-size: 9px; width: 16px; }
+  .srpg-bar-value { font-size: 8px; }
+  .srpg-unit-stats { font-size: 10px; gap: 6px; }
+  .srpg-terrain-info { font-size: 10px; gap: 6px; }
+
+  .srpg-log { height: 100px; }
+  .srpg-log-header { padding: 4px 10px; font-size: 9px; }
+  .srpg-log-content { padding: 3px 10px; }
+  .srpg-log-line { font-size: 10px; line-height: 1.4; }
+
+  .srpg-actions { gap: 4px; padding-bottom: 6px; }
+  .srpg-action-btn { padding: 7px 10px; font-size: 11px; gap: 1px; }
+  .srpg-skill-mp { font-size: 9px; }
+
+  .srpg-map { min-height: 160px; }
+
+  .srpg-mode-hint { font-size: 10px; padding: 5px 12px; }
+
+  .srpg-result-title { font-size: 1.5rem; letter-spacing: 4px; }
+  .srpg-result-title.defeat { font-size: 1.4rem; }
+  .srpg-result-banner { width: 160px; }
+  .srpg-result-subtitle { font-size: 0.75rem; }
+
+  .elite-alert-popup { padding: 20px 24px; }
+  .elite-alert-img-wrap { width: 140px; height: 140px; }
+  .elite-alert-img { width: 120px; height: 120px; }
+  .elite-alert-name { font-size: 1.3rem; }
+  .elite-alert-tier { font-size: 0.95rem; }
+  .elite-alert-subtitle { font-size: 0.9rem; }
 }
 
 /* ========== 정예 몬스터 등장 알림 ========== */

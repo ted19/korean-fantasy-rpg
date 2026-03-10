@@ -1288,13 +1288,38 @@
   background: linear-gradient(135deg, #ff5a7a, #e74c3c);
 }
 
+/* ===== Mobile - Tablet ===== */
+@media (max-width: 768px) {
+  .dg-scene { padding: 14px; }
+  .dg-title { font-size: 1.3rem; letter-spacing: 2px; }
+  .dg-subtitle { font-size: 0.75rem; margin-bottom: 18px; }
+  .dg-card { width: 230px; }
+  .dg-node { width: 160px; min-height: 90px; }
+  .dg-node.boss { width: 190px; min-height: 110px; }
+  .dg-popup { width: 95vw; max-width: 440px; }
+  .dg-popup-banner { height: 150px; }
+  .dg-popup-name { font-size: 1.15rem; }
+  .dg-popup-body { padding: 14px 16px 16px; }
+  .dg-detail-info { padding: 12px 14px; }
+  .dg-detail-info h3 { font-size: 1.1rem; }
+  .dg-roadmap { padding: 14px; }
+  .dg-monster-list { gap: 6px; }
+  .dg-summon-list { gap: 6px; }
+}
+
 /* ===== Mobile ===== */
 @media (max-width: 600px) {
+  .dg-scene { padding: 10px; min-height: 300px; }
+  .dg-title { font-size: 1.15rem; letter-spacing: 2px; }
+  .dg-subtitle { font-size: 0.7rem; margin-bottom: 14px; }
+
   /* Dungeon list roadmap */
   .dg-list-row.left { padding-left: calc(50% + 18px); }
   .dg-list-row.right { padding-right: calc(50% + 18px); }
   .dg-list-dot { width: 26px; height: 26px; font-size: 0.6rem; }
   .dg-card { width: 200px; }
+  .dg-card-info { padding: 8px 10px 10px; }
+  .dg-card-name { font-size: 0.85rem; }
 
   /* Stage roadmap */
   .dg-row.left { padding-left: calc(50% + 14px); }
@@ -1305,9 +1330,90 @@
   .dg-path-dot.boss { width: 28px; height: 28px; }
   .dg-node-desc { display: none; }
   .dg-card-desc { display: none; }
+
+  /* Detail */
   .dg-detail-banner { height: 100px; }
+  .dg-detail-info { padding: 10px 12px; }
+  .dg-detail-info h3 { font-size: 1rem; }
+  .dg-detail-info p { font-size: 0.75rem; }
+  .dg-detail-stats { gap: 8px; }
+  .dg-roadmap { padding: 12px; }
+  .dg-roadmap-title { font-size: 0.9rem; }
+
+  /* Popup */
   .dg-popup { width: 95vw; max-height: 85vh; }
-  .dg-popup-info-grid { grid-template-columns: 1fr 1fr; }
+  .dg-popup-banner { height: 140px; }
+  .dg-popup-name { font-size: 1.1rem; }
+  .dg-popup-body { padding: 12px 14px 16px; }
+  .dg-popup-desc { font-size: 12px; margin-bottom: 12px; }
+  .dg-popup-info-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .dg-popup-info-item { padding: 6px 8px; }
+  .dg-popup-info-label { font-size: 9px; }
+  .dg-popup-info-value { font-size: 12px; }
+  .dg-popup-start-btn { padding: 10px; font-size: 14px; }
+  .dg-popup-ticket-info { padding: 8px 12px; }
+
+  /* Ticket summary */
+  .dg-ticket-summary { padding: 10px 12px; }
+  .dg-ticket-chip { padding: 4px 8px; font-size: 0.72rem; }
+
+  /* Monsters & Summons */
+  .dg-monster-card { padding: 5px 8px; gap: 6px; }
+  .dg-monster-img-wrap { width: 28px; height: 28px; }
+  .dg-monster-name { font-size: 0.68rem; }
+  .dg-monster-stats { font-size: 0.55rem; }
+  .dg-summon-btn { padding: 6px 10px; gap: 6px; }
+  .dg-summon-img-wrap { width: 24px; height: 24px; }
+  .dg-summon-name { font-size: 0.7rem; }
+
+  .dg-back-btn { padding: 8px 16px; font-size: 13px; margin-bottom: 10px; }
+}
+
+/* ===== Mobile - Small ===== */
+@media (max-width: 420px) {
+  .dg-scene { padding: 8px; }
+  .dg-title { font-size: 1rem; letter-spacing: 1px; }
+
+  /* Zigzag → 단일 열 레이아웃 */
+  .dg-list-path { left: 20px; }
+  .dg-list-row.left,
+  .dg-list-row.right {
+    flex-direction: row;
+    padding-left: 44px;
+    padding-right: 8px;
+  }
+  .dg-list-dot { left: 20px; width: 24px; height: 24px; font-size: 0.55rem; }
+  .dg-card { width: 100%; }
+
+  .dg-roadmap-path-line { left: 16px; }
+  .dg-row.left,
+  .dg-row.right {
+    flex-direction: row;
+    padding-left: 38px;
+    padding-right: 6px;
+  }
+  .dg-path-dot { left: 16px; width: 20px; height: 20px; font-size: 0.5rem; }
+  .dg-path-dot.boss { width: 24px; height: 24px; }
+  .dg-node { width: 100%; min-height: 70px; }
+  .dg-node.boss { width: 100%; min-height: 85px; }
+  .dg-node-name { font-size: 0.6rem; max-width: 100%; }
+  .dg-node-number { font-size: 0.7rem; }
+  .dg-boss-tag { font-size: 0.5rem; padding: 1px 10px; }
+
+  .dg-popup-banner { height: 120px; }
+  .dg-popup-name { font-size: 1rem; }
+  .dg-popup-chapter { font-size: 10px; }
+  .dg-popup-close { width: 28px; height: 28px; font-size: 1.2rem; }
+  .dg-popup-info-grid { grid-template-columns: 1fr 1fr; gap: 5px; }
+  .dg-popup-start-btn { padding: 10px; font-size: 13px; letter-spacing: 1px; }
+
+  .dg-ticket-summary { padding: 8px 10px; }
+  .dg-ticket-chip { padding: 3px 6px; font-size: 0.68rem; gap: 3px; }
+  .dg-ticket-chip-icon { font-size: 0.85rem; }
+
+  .dg-detail-banner { height: 80px; }
+  .dg-roadmap { padding: 10px; }
+  .dg-roadmap-header { flex-direction: column; align-items: flex-start; gap: 4px; }
 }
 
 /* ===== Ticket Display ===== */
