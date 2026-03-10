@@ -51,6 +51,8 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
   const [retreatFailed, setRetreatFailed] = useState(false); // 후퇴 실패 여부
   const [retreatDisabled, setRetreatDisabled] = useState(!!savedRetreatFailed); // 후퇴 버튼 비활성화 (DB에서 복원)
+  const [retreatResult, setRetreatResult] = useState(null); // 'success' | 'fail'
+  const [retreatDisplayPct, setRetreatDisplayPct] = useState(50);
   const [battleEntering, setBattleEntering] = useState(true); // 입장 연출
   const [contributions, setContributions] = useState([]); // {id, name, icon, imageUrl, damage, kills, pct, exp}
   const [eliteAlert, setEliteAlert] = useState(null); // { name, icon, monsterId, tier }
@@ -906,6 +908,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
     setShowSkillList(false);
     setShowItemList(false);
     if (action === 'retreat') {
+      setRetreatDisplayPct(Math.floor(Math.random() * 41) + 30);
       setShowRetreatConfirm(true);
       return;
     }
@@ -1200,7 +1203,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
             </div>
           )}
           {!isPrologue && (
-            <button className="cb-retreat-btn" onClick={() => setShowRetreatConfirm(true)} disabled={retreatDisabled} style={retreatDisabled ? {opacity:0.4, cursor:'not-allowed'} : {}}>
+            <button className="cb-retreat-btn" onClick={() => { setRetreatDisplayPct(Math.floor(Math.random() * 41) + 30); setShowRetreatConfirm(true); }} disabled={retreatDisabled} style={retreatDisabled ? {opacity:0.4, cursor:'not-allowed'} : {}}>
               <img src="/ui/battle/action_retreat.png" alt="" className="cb-btn-icon" onError={(e) => { e.target.style.display='none'; }} />
               {retreatDisabled ? '후퇴불가' : '후퇴'}
             </button>
@@ -1738,8 +1741,8 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
 
       {/* 후퇴 확인 팝업 */}
       {showRetreatConfirm && (() => {
-        const retreatPct = Math.min(80, 40 + round * 5);
-        const pctClass = retreatPct >= 65 ? 'high' : retreatPct >= 45 ? 'mid' : 'low';
+        const retreatPct = retreatDisplayPct;
+        const pctClass = retreatPct >= 55 ? 'high' : retreatPct >= 40 ? 'mid' : 'low';
         return (
           <div className="retreat-overlay" onClick={() => setShowRetreatConfirm(false)}>
             <div className="retreat-popup" onClick={e => e.stopPropagation()}>
@@ -1792,22 +1795,25 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                 {/* 버튼 */}
                 <div className="retreat-actions">
                   <button className="retreat-btn retreat-btn-try" onClick={() => {
-                    const successRate = retreatPct / 100;
+                    const successRate = (Math.floor(Math.random() * 41) + 30) / 100;
                     if (Math.random() < successRate) {
                       addLog('후퇴에 성공했습니다!', 'system');
                       setShowRetreatConfirm(false);
+                      setRetreatResult('success');
                       api.post('/battle/session/penalty', { penaltyType: 'retreat' }).then(res => {
                         if (res.data.penalty) {
                           addLog(`패널티: 골드 -${res.data.penalty.goldLoss}, 경험치 -${res.data.penalty.expLoss}`, 'damage');
                         }
                       }).catch(() => {});
-                      setTimeout(() => onBattleEnd('retreat', 0, 0), 500);
+                      setTimeout(() => onBattleEnd('retreat', 0, 0), 2500);
                     } else {
                       addLog('후퇴에 실패했습니다! 더 이상 후퇴할 수 없습니다.', 'damage');
                       setShowRetreatConfirm(false);
+                      setRetreatResult('fail');
                       setRetreatFailed(true);
                       setRetreatDisabled(true);
                       api.post('/battle/session/retreat-failed').catch(() => {});
+                      setTimeout(() => setRetreatResult(null), 2500);
                     }
                   }}>
                     <span className="retreat-btn-emoji">&#x1F3C3;</span>
@@ -1825,6 +1831,34 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
           </div>
         );
       })()}
+
+      {/* 후퇴 결과 팝업 */}
+      {retreatResult && (
+        <div className={`retreat-result-overlay ${retreatResult}`}>
+          <div className={`retreat-result-popup ${retreatResult}`}>
+            <img
+              src={retreatResult === 'success' ? '/ui/battle/retreat_success_bg.png' : '/ui/battle/retreat_fail_bg.png'}
+              alt="" className="retreat-result-bg"
+            />
+            <div className="retreat-result-bg-overlay" />
+            <div className="retreat-result-content">
+              <img
+                src={retreatResult === 'success' ? '/ui/battle/retreat_success_icon.png' : '/ui/battle/retreat_fail_icon.png'}
+                alt="" className="retreat-result-icon"
+              />
+              <div className="retreat-result-title">
+                {retreatResult === 'success' ? '후퇴 성공!' : '후퇴 실패!'}
+              </div>
+              <div className="retreat-result-desc">
+                {retreatResult === 'success'
+                  ? '전장에서 안전하게 퇴각했습니다'
+                  : '후퇴에 실패했습니다. 더 이상 후퇴할 수 없습니다!'}
+              </div>
+              <div className={`retreat-result-bar ${retreatResult}`} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 전투 로그 */}
       <div className="cb-log" ref={logRef}>

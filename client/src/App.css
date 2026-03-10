@@ -6658,6 +6658,173 @@ body {
   50% { opacity: 1; }
 }
 
+/* ========== 후퇴 결과 팝업 ========== */
+.retreat-result-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9995;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: retreatResultFadeIn 0.4s ease;
+}
+.retreat-result-overlay.success {
+  background: radial-gradient(ellipse at center, rgba(30,80,60,0.85) 0%, rgba(0,0,0,0.92) 100%);
+}
+.retreat-result-overlay.fail {
+  background: radial-gradient(ellipse at center, rgba(80,20,20,0.85) 0%, rgba(0,0,0,0.92) 100%);
+}
+@keyframes retreatResultFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.retreat-result-popup {
+  position: relative;
+  width: 420px;
+  max-width: 92vw;
+  border-radius: 20px;
+  overflow: hidden;
+  animation: retreatResultPopIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.retreat-result-popup.success {
+  box-shadow:
+    0 0 60px rgba(46,213,115,0.4),
+    0 0 120px rgba(30,144,255,0.15),
+    0 20px 60px rgba(0,0,0,0.6);
+  border: 1px solid rgba(46,213,115,0.3);
+}
+.retreat-result-popup.fail {
+  box-shadow:
+    0 0 60px rgba(233,69,96,0.4),
+    0 0 120px rgba(200,50,50,0.15),
+    0 20px 60px rgba(0,0,0,0.6);
+  border: 1px solid rgba(233,69,96,0.3);
+}
+@keyframes retreatResultPopIn {
+  from { opacity: 0; transform: scale(0.7) translateY(30px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.retreat-result-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+.retreat-result-popup.success .retreat-result-bg {
+  filter: brightness(0.35) saturate(1.4) hue-rotate(-10deg);
+}
+.retreat-result-popup.fail .retreat-result-bg {
+  filter: brightness(0.3) saturate(1.5) hue-rotate(5deg);
+}
+
+.retreat-result-bg-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.retreat-result-popup.success .retreat-result-bg-overlay {
+  background: linear-gradient(180deg,
+    rgba(10,30,20,0.2) 0%,
+    rgba(10,30,20,0.7) 50%,
+    rgba(10,30,20,0.95) 100%
+  );
+}
+.retreat-result-popup.fail .retreat-result-bg-overlay {
+  background: linear-gradient(180deg,
+    rgba(30,10,10,0.2) 0%,
+    rgba(30,10,10,0.7) 50%,
+    rgba(30,10,10,0.95) 100%
+  );
+}
+
+.retreat-result-content {
+  position: relative;
+  z-index: 2;
+  padding: 32px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.retreat-result-icon {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 16px;
+  animation: retreatIconFloat 3s ease-in-out infinite;
+  border-radius: 50%;
+}
+.retreat-result-popup.success .retreat-result-icon {
+  filter: drop-shadow(0 0 20px rgba(46,213,115,0.5)) drop-shadow(0 0 40px rgba(30,144,255,0.3));
+}
+.retreat-result-popup.fail .retreat-result-icon {
+  filter: drop-shadow(0 0 20px rgba(233,69,96,0.5)) drop-shadow(0 0 40px rgba(200,50,50,0.3));
+  animation: retreatIconShake 0.5s ease-in-out, retreatIconFloat 3s ease-in-out 0.5s infinite;
+}
+@keyframes retreatIconFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.03); }
+}
+@keyframes retreatIconShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px) rotate(-3deg); }
+  40% { transform: translateX(8px) rotate(3deg); }
+  60% { transform: translateX(-5px) rotate(-2deg); }
+  80% { transform: translateX(5px) rotate(2deg); }
+}
+
+.retreat-result-title {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+}
+.retreat-result-popup.success .retreat-result-title {
+  color: #2ed573;
+  text-shadow: 0 0 20px rgba(46,213,115,0.5), 0 2px 4px rgba(0,0,0,0.8);
+}
+.retreat-result-popup.fail .retreat-result-title {
+  color: #e94560;
+  text-shadow: 0 0 20px rgba(233,69,96,0.5), 0 2px 4px rgba(0,0,0,0.8);
+}
+
+.retreat-result-desc {
+  font-size: 14px;
+  color: #b0c0d8;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.retreat-result-bar {
+  width: 80%;
+  height: 3px;
+  border-radius: 3px;
+  animation: retreatBarGlow 2s ease-in-out infinite;
+}
+.retreat-result-bar.success {
+  background: linear-gradient(90deg, transparent, rgba(46,213,115,0.6), rgba(30,144,255,0.4), transparent);
+}
+.retreat-result-bar.fail {
+  background: linear-gradient(90deg, transparent, rgba(233,69,96,0.6), rgba(255,165,2,0.4), transparent);
+}
+@keyframes retreatBarGlow {
+  0%, 100% { opacity: 0.4; transform: scaleX(0.8); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+
+/* 모바일 대응 */
+@media (max-width: 480px) {
+  .retreat-result-popup { width: 90vw; border-radius: 14px; }
+  .retreat-result-content { padding: 24px 16px 20px; }
+  .retreat-result-icon { width: 80px; height: 80px; }
+  .retreat-result-title { font-size: 22px; letter-spacing: 2px; }
+  .retreat-result-desc { font-size: 12.5px; }
+}
+
 /* === Session Expired Popup === */
 .session-expired-overlay {
   position: fixed; inset: 0; z-index: 99999;

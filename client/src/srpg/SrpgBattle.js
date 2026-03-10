@@ -1242,8 +1242,11 @@ export default function SrpgBattle({
     }
   }, [phase, battleResult]); // eslint-disable-line
 
+  const [retreatResult, setRetreatResult] = useState(null); // 'success' | 'fail'
+  const [retreatDisplayPct, setRetreatDisplayPct] = useState(50);
+
   const handleRetreat = () => {
-    const successRate = Math.min(80, 40 + roundCount * 5) / 100;
+    const successRate = (Math.floor(Math.random() * 41) + 30) / 100;
     if (Math.random() < successRate) {
       addLog('후퇴에 성공했습니다!', 'system');
       api.post('/battle/session/penalty', { penaltyType: 'retreat' }).then(res => {
@@ -1252,12 +1255,15 @@ export default function SrpgBattle({
         }
       }).catch(() => {});
       setShowRetreatConfirm(false);
-      setTimeout(() => onBattleEnd('retreat', 0, 0), 500);
+      setRetreatResult('success');
+      setTimeout(() => onBattleEnd('retreat', 0, 0), 2500);
     } else {
       addLog('후퇴에 실패했습니다! 더 이상 후퇴할 수 없습니다.', 'damage');
       setShowRetreatConfirm(false);
+      setRetreatResult('fail');
       setRetreatDisabled(true);
       api.post('/battle/session/retreat-failed').catch(() => {});
+      setTimeout(() => setRetreatResult(null), 2500);
     }
   };
 
@@ -1339,7 +1345,7 @@ export default function SrpgBattle({
               </button>
               <button
                 className="srpg-retreat-btn"
-                onClick={() => setShowRetreatConfirm(true)}
+                onClick={() => { setRetreatDisplayPct(Math.floor(Math.random() * 41) + 30); setShowRetreatConfirm(true); }}
                 disabled={retreatDisabled}
                 style={retreatDisabled ? {opacity:0.4, cursor:'not-allowed'} : {}}
               >
@@ -1465,8 +1471,8 @@ export default function SrpgBattle({
       </div>
 
       {showRetreatConfirm && (() => {
-        const retreatPct = Math.min(80, 40 + roundCount * 5);
-        const pctClass = retreatPct >= 65 ? 'high' : retreatPct >= 45 ? 'mid' : 'low';
+        const retreatPct = retreatDisplayPct;
+        const pctClass = retreatPct >= 55 ? 'high' : retreatPct >= 40 ? 'mid' : 'low';
         return (
           <div className="retreat-overlay" onClick={() => setShowRetreatConfirm(false)}>
             <div className="retreat-popup" onClick={e => e.stopPropagation()}>
@@ -1529,6 +1535,34 @@ export default function SrpgBattle({
           </div>
         );
       })()}
+
+      {/* 후퇴 결과 팝업 */}
+      {retreatResult && (
+        <div className={`retreat-result-overlay ${retreatResult}`}>
+          <div className={`retreat-result-popup ${retreatResult}`}>
+            <img
+              src={retreatResult === 'success' ? '/ui/battle/retreat_success_bg.png' : '/ui/battle/retreat_fail_bg.png'}
+              alt="" className="retreat-result-bg"
+            />
+            <div className="retreat-result-bg-overlay" />
+            <div className="retreat-result-content">
+              <img
+                src={retreatResult === 'success' ? '/ui/battle/retreat_success_icon.png' : '/ui/battle/retreat_fail_icon.png'}
+                alt="" className="retreat-result-icon"
+              />
+              <div className="retreat-result-title">
+                {retreatResult === 'success' ? '후퇴 성공!' : '후퇴 실패!'}
+              </div>
+              <div className="retreat-result-desc">
+                {retreatResult === 'success'
+                  ? '전장에서 안전하게 퇴각했습니다'
+                  : '후퇴에 실패했습니다. 더 이상 후퇴할 수 없습니다!'}
+              </div>
+              <div className={`retreat-result-bar ${retreatResult}`} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 스킬 컷인 */}
       {skillCutIn && (
