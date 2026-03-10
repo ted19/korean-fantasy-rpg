@@ -44,12 +44,11 @@ router.get('/info', auth, async (req, res) => {
     // 장착 중인 장비
     const [equipped] = await pool.query(
       `SELECT e.slot, e.item_id, it.*,
-              IFNULL(inv.enhance_level, 0) as enhance_level,
+              IFNULL((SELECT inv.enhance_level FROM inventory inv WHERE inv.character_id = e.character_id AND inv.item_id = e.item_id LIMIT 1), 0) as enhance_level,
               IFNULL(it.max_enhance, 0) as max_enhance,
               IFNULL(it.grade, '일반') as grade
        FROM equipment e
        JOIN items it ON e.item_id = it.id
-       LEFT JOIN inventory inv ON inv.character_id = e.character_id AND inv.item_id = e.item_id
        WHERE e.character_id = ?`,
       [charId]
     );
