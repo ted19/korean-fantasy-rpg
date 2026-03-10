@@ -2152,6 +2152,15 @@ async function initialize() {
     console.log('Monster balance patch v6 applied');
   }
 
+  // 마력 물약 effect_hp 수정 (0이어야 함)
+  const [potionFixFlag] = await pool.query("SELECT * FROM db_flags WHERE flag_name = 'potion_fix_v1'").catch(() => [[]]);
+  if (potionFixFlag.length === 0) {
+    await pool.query("UPDATE items SET effect_hp = 0 WHERE name LIKE '마력 물약%' AND effect_hp != 0").catch(() => {});
+    await pool.query("UPDATE items SET effect_mp = 0 WHERE name LIKE '체력 물약%' AND effect_mp != 0").catch(() => {});
+    await pool.query("INSERT INTO db_flags (flag_name) VALUES ('potion_fix_v1')").catch(() => {});
+    console.log('Potion effect fix applied');
+  }
+
   // 몬스터-스킬 연결 (INSERT IGNORE로 중복 안전)
   const [allMonsters] = await pool.query('SELECT id, name, ai_type FROM monsters');
   const [allMSkills] = await pool.query('SELECT id, name FROM monster_skills');
@@ -4811,6 +4820,17 @@ async function initialize() {
     }
   }
 
+  // 소환 재료 대폭 축소: 들쥐 1/10, 나머지 1/5
+  {
+    const [smcFlag] = await pool.query("SELECT COUNT(*) as cnt FROM summon_material_costs smc JOIN summon_templates st ON smc.template_id=st.id WHERE st.name='들쥐 소환수' AND smc.quantity > 10");
+    if (smcFlag[0].cnt > 0) {
+      // 들쥐 소환수: 1/10
+      await pool.query(`UPDATE summon_material_costs smc JOIN summon_templates st ON smc.template_id=st.id SET smc.quantity = GREATEST(1, FLOOR(smc.quantity / 10)) WHERE st.name='들쥐 소환수'`);
+      // 나머지: 1/5
+      await pool.query(`UPDATE summon_material_costs smc JOIN summon_templates st ON smc.template_id=st.id SET smc.quantity = GREATEST(1, FLOOR(smc.quantity / 5)) WHERE st.name != '들쥐 소환수'`);
+    }
+  }
+
   // 소환수 스킬 required_level 10배 확대 (1→10, 2→20, ...) - 아직 변환 안 된 경우만
   {
     const [ssCheck] = await pool.query('SELECT MAX(required_level) as mx FROM summon_skills');
@@ -5698,7 +5718,7 @@ async function initialize() {
   await pool.query("UPDATE items SET price = 550, sell_price = 275 WHERE name = '신목 목걸이'").catch(() => {});
 
   // -- 용병 가격 하향 --
-  await pool.query("UPDATE mercenary_templates SET price = 5000, sell_price = 500 WHERE name = '검사 이준'").catch(() => {});
+  await pool.query("UPDATE mercenary_templates SET price = 1000, sell_price = 100 WHERE name = '검사 이준'").catch(() => {});
   await pool.query("UPDATE mercenary_templates SET price = 6000, sell_price = 600 WHERE name = '창병 박무'").catch(() => {});
   await pool.query("UPDATE mercenary_templates SET price = 8000, sell_price = 800 WHERE name = '궁수 한소이'").catch(() => {});
   await pool.query("UPDATE mercenary_templates SET price = 10000, sell_price = 1000 WHERE name = '도사 최현'").catch(() => {});
