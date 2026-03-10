@@ -251,6 +251,34 @@ router.get('/tickets', auth, async (req, res) => {
 });
 
 // 던전 입장 시 티켓 소모
+// 티켓 보유 여부 검증 (소모하지 않음)
+router.post('/check-ticket', auth, async (req, res) => {
+  try {
+    const { dungeonKey } = req.body;
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    const [tickets] = await pool.query(
+      `SELECT dt.id as ticket_id, dt.name, IFNULL(ct.quantity, 0) as quantity
+       FROM dungeon_tickets dt
+       LEFT JOIN character_tickets ct ON ct.ticket_id = dt.id AND ct.character_id = ?
+       WHERE dt.dungeon_key = ?`,
+      [char.id, dungeonKey]
+    );
+    if (tickets.length === 0) return res.status(404).json({ message: '해당 던전 티켓 정보가 없습니다.' });
+
+    const ticket = tickets[0];
+    if (ticket.quantity <= 0) {
+      return res.status(400).json({ message: `${ticket.name}이(가) 부족합니다! 스테이지에서 획득할 수 있습니다.` });
+    }
+
+    res.json({ success: true, remaining: ticket.quantity });
+  } catch (err) {
+    console.error('Check ticket error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 router.post('/use-ticket', auth, async (req, res) => {
   try {
     const { dungeonKey } = req.body;

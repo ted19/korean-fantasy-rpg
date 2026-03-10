@@ -303,28 +303,37 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
         return;
       }
-      // 던전 전투: 티켓 소모 → 입장 횟수 소모 (티켓 먼저 체크)
+      // 던전 전투: 입장 횟수 먼저 체크 (소모 전 검증)
       if (isDungeon && dungeonKey) {
         try {
-          await api.post('/dungeon/use-ticket', { dungeonKey });
+          await api.post('/dungeon/check-ticket', { dungeonKey });
         } catch (err) {
           setBattleBlockMsg(err.response?.data?.message || '던전 티켓이 부족합니다!');
           return;
         }
         try {
-          await api.post('/stage/use-charge', { contentType: `dungeon_${dungeonKey}_${stage?.stageNumber || 1}` });
-          loadContentCharges();
+          await api.post('/stage/check-charge', { contentType: `dungeon_${dungeonKey}_${stage?.stageNumber || 1}` });
         } catch (err) {
           setBattleBlockMsg(err.response?.data?.message || '던전 입장 횟수를 모두 소진했습니다!');
           return;
         }
       }
+      // 검증 통과 후 실제 소모
       try {
         const stRes = await api.post('/stage/spend-stamina', { cost: staminaCost });
         handleCharStateUpdate({ stamina: stRes.data.stamina, maxStamina: stRes.data.maxStamina, lastStaminaTime: stRes.data.last_stamina_time || new Date().toISOString() });
       } catch (err) {
         setBattleBlockMsg(err.response?.data?.message || '행동력 차감에 실패했습니다.');
         return;
+      }
+      if (isDungeon && dungeonKey) {
+        try {
+          await api.post('/dungeon/use-ticket', { dungeonKey });
+        } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
+        try {
+          await api.post('/stage/use-charge', { contentType: `dungeon_${dungeonKey}_${stage?.stageNumber || 1}` });
+          loadContentCharges();
+        } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
       }
     }
     savedEnemySetupRef.current = null; // 새 전투는 적 구성 초기화
@@ -365,22 +374,29 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
       return;
     }
-    // 스테이지 입장 횟수 소모
+    // 스테이지 입장 횟수 검증 (소모 전 체크)
     if (!isSpecial) {
       try {
-        await api.post('/stage/use-charge', { contentType: `stage_${groupKey}_${stage.stageNumber}` });
-        loadContentCharges();
+        await api.post('/stage/check-charge', { contentType: `stage_${groupKey}_${stage.stageNumber}` });
       } catch (err) {
         setBattleBlockMsg(err.response?.data?.message || '스테이지 입장 횟수를 모두 소진했습니다!');
         return;
       }
     }
+    // 검증 통과 후 행동력 차감
     try {
       const stRes = await api.post('/stage/spend-stamina', { cost: staminaCost });
       handleCharStateUpdate({ stamina: stRes.data.stamina, maxStamina: stRes.data.maxStamina, lastStaminaTime: stRes.data.last_stamina_time || new Date().toISOString() });
     } catch (err) {
       setBattleBlockMsg(err.response?.data?.message || '행동력 차감에 실패했습니다.');
       return;
+    }
+    // 행동력 차감 성공 후 실제 입장 횟수 소모
+    if (!isSpecial) {
+      try {
+        await api.post('/stage/use-charge', { contentType: `stage_${groupKey}_${stage.stageNumber}` });
+        loadContentCharges();
+      } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
     }
     savedEnemySetupRef.current = null; // 새 전투는 적 구성 초기화
     savedRetreatFailedRef.current = false;
@@ -804,7 +820,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       {/* 전투 불가 팝업 */}
       {battleBlockMsg && (
         <div className="battle-block-overlay" onClick={() => setBattleBlockMsg(null)}>
-          <div className={`battle-block-popup ${battleBlockMsg === '__FORMATION__' ? 'formation-popup' : ''}`} onClick={e => e.stopPropagation()}>
+          <div className={`battle-block-popup ${battleBlockMsg === '__FORMATION__' ? 'formation-popup' : battleBlockMsg.includes('행동력') ? 'stamina-popup' : ''}`} onClick={e => e.stopPropagation()}>
             {battleBlockMsg === '__FORMATION__' ? (
               <>
                 <div className="formation-popup-bg">
@@ -836,10 +852,47 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
                   </div>
                 </div>
               </>
+            ) : battleBlockMsg.includes('행동력') ? (
+              <>
+                <div className="stamina-block-bg">
+                  <img src="/ui/battle/stamina_empty_bg.png" alt="" />
+                  <div className="stamina-block-bg-overlay" />
+                </div>
+                <div className="stamina-block-particles">
+                  <div className="stamina-particle" />
+                  <div className="stamina-particle" />
+                  <div className="stamina-particle" />
+                  <div className="stamina-particle" />
+                  <div className="stamina-particle" />
+                </div>
+                <div className="stamina-block-content">
+                  <div className="stamina-block-icon-wrap">
+                    <div className="stamina-block-icon-glow" />
+                    <img src="/ui/battle/stamina_empty_icon.png" alt="" className="stamina-block-icon" />
+                  </div>
+                  <div className="stamina-block-title">행동력 부족</div>
+                  <div className="stamina-block-divider"><span /></div>
+                  <div className="stamina-block-gauge">
+                    <div className="stamina-block-gauge-label">
+                      <span>현재 행동력</span>
+                      <span className="stamina-block-gauge-val">{charState.stamina ?? 0} / {charState.maxStamina ?? 10}</span>
+                    </div>
+                    <div className="stamina-block-gauge-track">
+                      <div className="stamina-block-gauge-fill" style={{width: `${Math.max(0, ((charState.stamina ?? 0) / (charState.maxStamina ?? 10)) * 100)}%`}} />
+                    </div>
+                  </div>
+                  <div className="stamina-block-msg">{battleBlockMsg}</div>
+                  <div className="stamina-block-hint">
+                    <span className="stamina-hint-icon">&#x23F0;</span>
+                    5분마다 1씩 자동 회복됩니다
+                  </div>
+                  <button className="stamina-block-confirm-btn" onClick={() => setBattleBlockMsg(null)}>확인</button>
+                </div>
+              </>
             ) : (
               <>
                 <div className="battle-block-icon">
-                  {battleBlockMsg.includes('HP') ? '💔' : battleBlockMsg.includes('행동력') ? '⚡' : '⚠️'}
+                  {battleBlockMsg.includes('HP') ? '💔' : '⚠️'}
                 </div>
                 <div className="battle-block-title">전투 불가</div>
                 <div className="battle-block-msg">{battleBlockMsg}</div>

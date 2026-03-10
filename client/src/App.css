@@ -5826,6 +5826,240 @@ body {
   padding: 10px 20px;
   font-size: 14px;
 }
+/* === 행동력 부족 프리미엄 팝업 === */
+.battle-block-popup.stamina-popup {
+  background: none;
+  border: none;
+  padding: 0;
+  max-width: 420px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow:
+    0 0 60px rgba(59,130,246,0.25),
+    0 0 120px rgba(100,50,200,0.1),
+    0 12px 50px rgba(0,0,0,0.7);
+  border: 1px solid rgba(59,130,246,0.25);
+  position: relative;
+}
+
+.stamina-block-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.stamina-block-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.3) saturate(1.2) hue-rotate(-5deg);
+}
+.stamina-block-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(10,12,30,0.2) 0%,
+    rgba(10,12,30,0.75) 45%,
+    rgba(10,12,30,0.97) 100%
+  );
+}
+
+/* 파티클 */
+.stamina-block-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.stamina-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(100,165,250,0.7);
+  box-shadow: 0 0 6px rgba(100,165,250,0.5);
+  animation: staminaParticleFloat 4s ease-in-out infinite;
+}
+.stamina-particle:nth-child(1) { left: 15%; bottom: -5%; animation-delay: 0s; }
+.stamina-particle:nth-child(2) { left: 35%; bottom: -5%; animation-delay: 0.8s; width: 3px; height: 3px; }
+.stamina-particle:nth-child(3) { left: 55%; bottom: -5%; animation-delay: 1.6s; }
+.stamina-particle:nth-child(4) { left: 72%; bottom: -5%; animation-delay: 2.2s; width: 5px; height: 5px; }
+.stamina-particle:nth-child(5) { left: 88%; bottom: -5%; animation-delay: 3s; width: 3px; height: 3px; }
+@keyframes staminaParticleFloat {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  20% { opacity: 0.8; }
+  80% { opacity: 0.6; }
+  100% { transform: translateY(-280px) scale(0.3); opacity: 0; }
+}
+
+/* 콘텐츠 */
+.stamina-block-content {
+  position: relative;
+  z-index: 2;
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 아이콘 */
+.stamina-block-icon-wrap {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  margin-bottom: 12px;
+}
+.stamina-block-icon-glow {
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59,130,246,0.25) 0%, transparent 70%);
+  animation: staminaIconGlow 3s ease-in-out infinite;
+}
+@keyframes staminaIconGlow {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+.stamina-block-icon {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  position: relative;
+  filter: drop-shadow(0 0 16px rgba(59,130,246,0.4));
+  animation: staminaIconPulse 3s ease-in-out infinite;
+}
+@keyframes staminaIconPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* 타이틀 */
+.stamina-block-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #60a5fa;
+  letter-spacing: 3px;
+  text-shadow: 0 0 20px rgba(59,130,246,0.5), 0 2px 4px rgba(0,0,0,0.8);
+  margin-bottom: 6px;
+}
+
+/* 구분선 */
+.stamina-block-divider {
+  width: 80%;
+  height: 2px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: center;
+}
+.stamina-block-divider span {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: linear-gradient(90deg, transparent, rgba(59,130,246,0.5), rgba(147,51,234,0.3), transparent);
+  border-radius: 2px;
+  animation: staminaDividerPulse 3s ease-in-out infinite;
+}
+@keyframes staminaDividerPulse {
+  0%, 100% { opacity: 0.4; transform: scaleX(0.9); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+
+/* 게이지 */
+.stamina-block-gauge {
+  width: 100%;
+  margin-bottom: 14px;
+}
+.stamina-block-gauge-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #8ea4c8;
+  margin-bottom: 6px;
+}
+.stamina-block-gauge-val {
+  font-weight: 800;
+  color: #e94560;
+  font-size: 14px;
+}
+.stamina-block-gauge-track {
+  width: 100%;
+  height: 12px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;
+  position: relative;
+}
+.stamina-block-gauge-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #1e40af, #3b82f6, #60a5fa);
+  box-shadow: 0 0 10px rgba(59,130,246,0.4);
+  transition: width 0.5s ease;
+  min-width: 2px;
+}
+
+/* 메시지 */
+.stamina-block-msg {
+  font-size: 13.5px;
+  color: #b0c0d8;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 10px;
+  white-space: pre-line;
+}
+
+/* 힌트 */
+.stamina-block-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #7c8db5;
+  background: rgba(59,130,246,0.06);
+  border: 1px solid rgba(59,130,246,0.12);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 18px;
+}
+.stamina-hint-icon {
+  font-size: 14px;
+}
+
+/* 확인 버튼 */
+.stamina-block-confirm-btn {
+  width: 100%;
+  padding: 13px 16px;
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 18px rgba(59,130,246,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  letter-spacing: 1px;
+}
+.stamina-block-confirm-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(59,130,246,0.5);
+  background: linear-gradient(135deg, #2563eb 0%, #60a5fa 50%, #93c5fd 100%);
+}
+
+/* 모바일 */
+@media (max-width: 480px) {
+  .battle-block-popup.stamina-popup { max-width: 92vw; border-radius: 14px; }
+  .stamina-block-content { padding: 22px 16px 18px; }
+  .stamina-block-icon-wrap { width: 72px; height: 72px; }
+  .stamina-block-icon { width: 72px; height: 72px; }
+  .stamina-block-title { font-size: 20px; letter-spacing: 2px; }
+  .stamina-block-msg { font-size: 12.5px; }
+  .stamina-block-inn-btn, .stamina-block-close-btn { font-size: 13px; padding: 10px 12px; }
+}
+
 /* === 진영 편성 필요 프리미엄 팝업 === */
 .battle-block-popup.formation-popup {
   background: none;

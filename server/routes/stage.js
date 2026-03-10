@@ -406,6 +406,37 @@ router.get('/charges', auth, async (req, res) => {
 });
 
 // 입장 횟수 소모 (개별 키별: stage_gojoseon, dungeon_cave 등)
+// 입장 횟수 검증 (소모하지 않음)
+router.post('/check-charge', auth, async (req, res) => {
+  try {
+    const { contentType } = req.body;
+    if (!contentType || typeof contentType !== 'string') {
+      return res.status(400).json({ message: '잘못된 콘텐츠 타입입니다.' });
+    }
+
+    const char = await getSelectedChar(req, pool);
+    if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    const row = await getOrCreateCharges(char.id, contentType, pool);
+
+    if (row.charges <= 0) {
+      const elapsed = Date.now() - new Date(row.last_recharged_at).getTime();
+      const remaining = Math.max(0, CHARGE_COOLDOWN_MS - elapsed);
+      const hours = Math.floor(remaining / 3600000);
+      const minutes = Math.floor((remaining % 3600000) / 60000);
+      return res.status(400).json({
+        message: `입장 횟수를 모두 소진했습니다!\n${hours}시간 ${minutes}분 후 충전됩니다.`,
+        cooldown: remaining,
+      });
+    }
+
+    res.json({ charges: row.charges, maxCharges: MAX_CHARGES });
+  } catch (err) {
+    console.error('Check charge error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 router.post('/use-charge', auth, async (req, res) => {
   try {
     const { contentType } = req.body; // 'stage_gojoseon', 'dungeon_cave' 등
