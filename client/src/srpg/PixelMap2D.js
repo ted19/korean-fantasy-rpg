@@ -26,20 +26,21 @@ function getUnitImage(unit) {
   }
   if (unit.id.startsWith('summon_')) {
     const tid = unit.templateId || unit.summonId;
-    return { src: tid ? `/tower_sprites/summon_${tid}.png` : null, fallbackSrc: unit.imageUrl || (tid ? `/summons/${tid}_icon.png` : null) };
+    return { src: tid ? `/tower_sprites/summon_${tid}.png` : null, fallbackSrc: unit.imageUrl || (tid ? `/summons_nobg/${tid}_full.png` : null) };
   }
   if (unit.id.startsWith('merc_')) {
     const tid = unit.templateId || unit.mercId;
-    return { src: tid ? `/tower_sprites/merc_${tid}.png` : null, fallbackSrc: unit.imageUrl || (tid ? `/mercenaries/${tid}_icon.png` : null) };
+    return { src: tid ? `/tower_sprites/merc_${tid}.png` : null, fallbackSrc: unit.imageUrl || (tid ? `/mercenaries/${tid}_full.png` : null) };
   }
   if (unit.monsterId) {
-    return { src: `/tower_sprites/monster_${unit.monsterId}.png`, fallbackSrc: `/monsters/${unit.monsterId}_icon.png` };
+    return { src: `/tower_sprites/monster_${unit.monsterId}.png`, fallbackSrc: `/monsters_nobg/${unit.monsterId}_icon.png` };
   }
   return { src: null, fallbackSrc: null };
 }
 
 /* ========== 타일 배경 이미지 URL ========== */
-function getTileBg() {
+function getTileBg(dungeonTheme) {
+  if (dungeonTheme === 'tower') return '/textures/tile_tower_stone.png';
   return '/textures/tile_goblin_bush.png';
 }
 
@@ -68,6 +69,7 @@ export default function PixelMap2D({
   potions,
   location,
   movingUnit,
+  dungeonTheme,
 }) {
   const [hitEffects, setHitEffects] = useState([]);
   const [shakeUnit, setShakeUnit] = useState(null);
@@ -228,8 +230,9 @@ export default function PixelMap2D({
 
   return (
     <div
-      className="pm2d-area"
+      className={`pm2d-area${dungeonTheme === 'tower' ? ' pm2d-tower' : ''}`}
       ref={areaRef}
+      style={dungeonTheme === 'tower' ? { backgroundImage: `url(${process.env.PUBLIC_URL}/textures/tower_battle_bg.png)` } : undefined}
       onClick={handleBgClick}
       onPointerDown={handleAreaPointerDown}
       onPointerMove={handleAreaPointerMove}
@@ -258,7 +261,7 @@ export default function PixelMap2D({
           const hasObstacle = OBSTACLE_TILES.has(tile.tileKey);
           const TILE_TOOLTIPS = { wall:'🪨 바위 (이동 불가)', water:'💧 물 (마공 +3)', danger:'🔥 위험 (HP -8%)', special:'✦ 룬 (HP +10%)', accent2:'🪨 돌 (방어 +3)', ice:'🧊 빙결 (회피 -5)', poison:'☠️ 독 (HP -5%)', holy:'🕊️ 신성 (HP +6%)', thorns:'🌿 가시 (HP -4%)', wind:'🌀 바람 (회피 +5)', lava:'🌋 용암 (HP -12%)', shadow:'🌑 그림자 (치명타 +5)', crystal:'💎 수정 (마방 +4)' };
           const tileTooltip = TILE_TOOLTIPS[tile.tileKey] || '';
-          const tileBgUrl = getTileBg();
+          const tileBgUrl = getTileBg(dungeonTheme);
           return (
             <div
               key={i}
@@ -288,7 +291,7 @@ export default function PixelMap2D({
                 style={{ left: left + halfTile, top: top + halfTile, ...(u.eliteTier ? { '--elite-color': u.eliteTier.color } : {}) }}
                 onClick={() => unitTile && handleClick(unitTile)}
               >
-                <div className="pm2d-unit-aura" />
+                <div className={`pm2d-unit-aura ${u.element ? `elem-${u.element}` : 'elem-neutral'}`} />
                 {u.eliteTier && <div className="pm2d-elite-badge">{u.eliteTier.icon}</div>}
                 <UnitImg src={getUnitImage(u).src} fallbackSrc={getUnitImage(u).fallbackSrc} fallback={u.icon} className="pm2d-unit-sprite" />
                 <div className="pm2d-unit-hp-bar">

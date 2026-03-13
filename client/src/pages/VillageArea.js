@@ -155,7 +155,7 @@ function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummons
   if (activeView) {
     const maxWidth = activeView === 'summon' ? 900 : undefined;
     const Content = {
-      inn: <InnArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} onMercenariesChanged={onMercenariesChanged} />,
+      inn: <InnArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} onMercenariesChanged={onMercenariesChanged} initialTab={viewData?.initialTab} />,
       shop: <Shop character={character} charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
       blacksmith: <BlacksmithArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
       quest: <Quest charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,

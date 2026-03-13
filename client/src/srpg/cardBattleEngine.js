@@ -91,7 +91,7 @@ export function createCardSummonUnit(summon) {
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
     icon: summon.icon || '👻',
-    imageUrl: `/summons/${summon.template_id}_full.png`,
+    imageUrl: `/summons_nobg/${summon.template_id}_full.png`,
     color: '#81c784',
     isGuarding: false,
     guardTarget: null,
@@ -169,7 +169,7 @@ export function createCardMonsterUnit(monster, index) {
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
     icon: monster.icon || '👹',
-    imageUrl: `/monsters/${monster.id}_full.png`,
+    imageUrl: `/monsters_nobg/${monster.id}_full.png`,
     color: '#ef5350',
     expReward: monster.expReward || monster.exp_reward || 0,
     goldReward: monster.goldReward || monster.gold_reward || 0,
@@ -416,18 +416,18 @@ export function executeSkill(caster, skill, target, allUnits) {
         let dmgText = `${caster.name}의 ${skill.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
         if (result.isCrit) dmgText += ' (치명타!)';
         if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
-        logs.push({ text: dmgText, type: 'damage', isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
+        logs.push({ text: dmgText, type: 'damage', targetId: actualTarget.id, isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
 
         // 흡혈
         if (skill.heal_amount && skill.heal_amount > 0) {
           const healAmt = Math.min(skill.heal_amount, caster.maxHp - caster.hp);
           caster.hp += healAmt;
-          logs.push({ text: `${caster.name} HP +${healAmt} 흡수`, type: 'heal' });
+          logs.push({ text: `${caster.name} HP +${healAmt} 흡수`, type: 'heal', targetId: caster.id });
         }
       }
 
       if (actualTarget.hp <= 0) {
-        logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill' });
+        logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill', targetId: actualTarget.id });
         promoteBackRow(actualTarget.team, allUnits);
       }
       break;
@@ -448,7 +448,7 @@ export function executeSkill(caster, skill, target, allUnits) {
           if (result.elementLabel) aoeText += ` [${result.elementLabel}]`;
           logs.push({ text: aoeText, type: 'damage', isCrit: result.isCrit, targetId: enemy.id, elementMult: result.elementMult, elementLabel: result.elementLabel });
           if (enemy.hp <= 0) {
-            logs.push({ text: `  ${enemy.name} 쓰러짐!`, type: 'kill' });
+            logs.push({ text: `  ${enemy.name} 쓰러짐!`, type: 'kill', targetId: enemy.id });
           }
         }
       }
@@ -460,7 +460,7 @@ export function executeSkill(caster, skill, target, allUnits) {
       const healAmt = skill.heal_amount || 30;
       const actual = Math.min(healAmt, target.maxHp - target.hp);
       target.hp += actual;
-      logs.push({ text: `${caster.name}의 ${skill.name} → ${target.name} HP +${actual}`, type: 'heal' });
+      logs.push({ text: `${caster.name}의 ${skill.name} → ${target.name} HP +${actual}`, type: 'heal', targetId: target.id });
       break;
     }
 
@@ -477,7 +477,7 @@ export function executeSkill(caster, skill, target, allUnits) {
       });
       logs.push({
         text: `${caster.name}의 ${skill.name} → ${buffTarget.name} ${skill.buff_stat || 'attack'} +${skill.buff_value || 5} (${skill.buff_duration || 3}턴)`,
-        type: 'buff',
+        type: 'buff', targetId: buffTarget.id,
       });
       break;
     }
@@ -494,7 +494,7 @@ export function executeSkill(caster, skill, target, allUnits) {
       });
       logs.push({
         text: `${caster.name}의 ${skill.name} → ${target.name} ${skill.buff_stat || 'defense'} -${skill.buff_value || 3} (${skill.buff_duration || 3}턴)`,
-        type: 'debuff',
+        type: 'debuff', targetId: target.id,
       });
       break;
     }
@@ -526,11 +526,11 @@ export function executeAttack(attacker, target, allUnits) {
     let dmgText = `${attacker.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
     if (result.isCrit) dmgText += ' (치명타!)';
     if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
-    logs.push({ text: dmgText, type: 'damage', isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
+    logs.push({ text: dmgText, type: 'damage', targetId: actualTarget.id, isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
   }
 
   if (actualTarget.hp <= 0) {
-    logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill' });
+    logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill', targetId: actualTarget.id });
     promoteBackRow(actualTarget.team, allUnits);
   }
 

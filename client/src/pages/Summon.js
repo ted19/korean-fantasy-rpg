@@ -21,6 +21,8 @@ function NpcImg({ src, className }) {
 
 function SummonImg({ src, fallback, className }) {
   const [err, setErr] = useState(false);
+  const prevSrc = React.useRef(src);
+  if (prevSrc.current !== src) { prevSrc.current = src; if (err) setErr(false); }
   if (err) return <span className={className}>{fallback}</span>;
   return <img src={src} alt="" className={className} onError={() => setErr(true)} />;
 }
@@ -290,6 +292,13 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
       {/* 고용하기 탭 */}
       {tab === 'shop' && (
         <div className="inn-content">
+          {selectedTemplate && (
+            <div className="summon-full-panel">
+              <SummonImg src={`/summons/${selectedTemplate.id}_full.png`} fallback={selectedTemplate.icon} className="summon-full-panel-img" />
+              <div className="summon-full-panel-name">{selectedTemplate.name}</div>
+              <div className="summon-full-panel-type">{selectedTemplate.type} · {(ELEMENT_INFO[selectedTemplate.element] || ELEMENT_INFO.neutral).name}</div>
+            </div>
+          )}
           <div className="inn-list">
             {filteredTemplates.map((t) => {
               const mats = t.summon_materials || [];
@@ -354,7 +363,7 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
             return (
               <div className="inn-detail">
                 <div className="inn-detail-header">
-                  <SummonImg src={selectedTemplate.icon_url || `/summons/${selectedTemplate.id}_full.png`} fallback={selectedTemplate.icon} className="inn-detail-portrait" />
+                  <SummonImg src={`/summons/${selectedTemplate.id}_full.png`} fallback={selectedTemplate.icon} className="inn-detail-portrait" />
                   <div>
                     <h3>{selectedTemplate.name}</h3>
                     <div className="inn-detail-sub">
@@ -436,6 +445,13 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
       {/* 내 소환수 탭 */}
       {tab === 'my' && (
         <div className="inn-content">
+          {selectedSummon && (
+            <div className="summon-full-panel">
+              <SummonImg src={`/summons/${selectedSummon.template_id}_full.png`} fallback={selectedSummon.icon} className="summon-full-panel-img" />
+              <div className="summon-full-panel-name">{selectedSummon.name}</div>
+              <div className="summon-full-panel-type">{selectedSummon.type} · Lv.{selectedSummon.level}</div>
+            </div>
+          )}
           <div className="inn-list">
             {filteredSummons.length === 0 ? (
               <div className="facility-empty">보유한 소환수가 없습니다.</div>
@@ -482,7 +498,7 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
             return (
               <div className="inn-detail">
                 <div className="inn-detail-header">
-                  <SummonImg src={selectedSummon.icon_url_img || `/summons/${selectedSummon.template_id}_full.png`} fallback={selectedSummon.icon} className="inn-detail-portrait" />
+                  <SummonImg src={`/summons/${selectedSummon.template_id}_full.png`} fallback={selectedSummon.icon} className="inn-detail-portrait" />
                   <div>
                     <h3>{selectedSummon.name} <span className="inn-detail-level">Lv.{selectedSummon.level}</span></h3>
                     <div className="inn-detail-sub">

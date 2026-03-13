@@ -884,7 +884,7 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                     <div className="text-center mb-3">
                       <div className="char-home-avatar">
                         <SummonImg
-                          src={selectedSummon.icon_url_img || `/summons/${selectedSummon.template_id}_full.png`}
+                          src={`/summons/${selectedSummon.template_id}_full.png`}
                           fallback={selectedSummon.icon}
                           className="summon-profile-img"
                         />

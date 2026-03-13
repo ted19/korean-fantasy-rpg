@@ -425,8 +425,8 @@ router.post('/use', auth, async (req, res) => {
 
     const currentHp = char.current_hp ?? char.hp;
     const currentMp = char.current_mp ?? char.mp;
-    const newHp = Math.min(char.hp, currentHp + inv.effect_hp);
-    const newMp = Math.min(char.mp, currentMp + inv.effect_mp);
+    const newHp = inv.effect_hp > 0 ? Math.min(char.hp, currentHp + inv.effect_hp) : currentHp;
+    const newMp = inv.effect_mp > 0 ? Math.min(char.mp, currentMp + inv.effect_mp) : currentMp;
 
     await conn.query('UPDATE characters SET current_hp = ?, current_mp = ? WHERE id = ?', [newHp, newMp, char.id]);
 

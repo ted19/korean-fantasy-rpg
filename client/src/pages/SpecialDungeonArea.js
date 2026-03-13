@@ -95,10 +95,15 @@ function SpecialDungeonArea({ charState, onStartBattle, onStartStageBattle }) {
       desc: nf.isBoss ? '보스층입니다! 강력한 적이 기다리고 있습니다.' : `무한의 탑 ${nf.floor}층에 도전합니다.`,
       info: [
         { label: '몬스터', value: `${nf.monsterCount}마리` },
-        { label: '레벨 보너스', value: `+${nf.levelBonus} (HP×${(1 + nf.levelBonus * 0.1).toFixed(1)} 공격×${(1 + nf.levelBonus * 0.08).toFixed(1)} 방어×${(1 + nf.levelBonus * 0.05).toFixed(1)})` },
+        { label: '레벨', value: `+${nf.levelBonus}` },
         { label: '경험치', value: `${nf.expReward}` },
         { label: '골드', value: `${nf.goldReward}` },
       ],
+      bonusDetail: {
+        hp: (1 + nf.levelBonus * 0.1).toFixed(1),
+        atk: (1 + nf.levelBonus * 0.08).toFixed(1),
+        def: (1 + nf.levelBonus * 0.05).toFixed(1),
+      },
       data: nf,
     });
   };
@@ -170,16 +175,24 @@ function SpecialDungeonArea({ charState, onStartBattle, onStartStageBattle }) {
     if (popup.type === 'tower') {
       const isBoss = popup.data?.isBoss;
       const floor = popup.data?.floor || 0;
+      const themeKey = popup.data?.dungeonKey || 'cave';
+      const THEME_NAMES = { cave: '동굴', goblin: '고블린 요새', mountain: '설산', ocean: '해저', temple: '고대 사원', demon: '마계', dragon: '용의 둥지' };
+      const THEME_COLORS = { cave: '#4a9eff', goblin: '#44cc44', mountain: '#aaddff', ocean: '#22aadd', temple: '#ffcc44', demon: '#ff4444', dragon: '#ffaa22' };
+      const themeColor = THEME_COLORS[themeKey] || '#a78bfa';
       return (
         <div className="spd-popup-overlay" onClick={() => setPopup(null)}>
-          <div className="spd-tower-popup" onClick={e => e.stopPropagation()}>
-            {/* Header image */}
+          <div className={`spd-tower-popup ${isBoss ? 'boss-mode' : ''}`} onClick={e => e.stopPropagation()}>
+            {/* Header with parallax-like image */}
             <div className="spd-tp-header">
               <SpdImg
                 src={isBoss ? '/special_dungeons/tower_floor_boss.png' : '/special_dungeons/tower_floor_normal.png'}
                 className="spd-tp-header-img"
               />
               <div className="spd-tp-header-overlay" />
+              {/* Animated particles */}
+              <div className="spd-tp-particles">
+                {[...Array(6)].map((_, i) => <div key={i} className="spd-tp-particle" style={{ left: `${15 + i * 14}%`, animationDelay: `${i * 0.3}s` }} />)}
+              </div>
               <div className="spd-tp-floor-badge" data-boss={isBoss ? 'true' : undefined}>
                 <span className="spd-tp-floor-num">{floor}</span>
                 <span className="spd-tp-floor-label">FLOOR</span>
@@ -192,27 +205,55 @@ function SpecialDungeonArea({ charState, onStartBattle, onStartStageBattle }) {
               <div className="spd-tp-title">{popup.title}</div>
               <div className="spd-tp-desc">{popup.desc}</div>
 
-              {/* Stats grid */}
-              <div className="spd-tp-stats">
-                {popup.info.map((item, i) => (
-                  <div key={i} className="spd-tp-stat">
-                    <div className="spd-tp-stat-val">{item.value}</div>
-                    <div className="spd-tp-stat-label">{item.label}</div>
+              {/* Theme banner with AI image */}
+              <div className="spd-tp-theme-banner" style={{ borderColor: `${themeColor}33` }}>
+                <SpdImg src={`/special_dungeons/tower_theme_${themeKey}.png`} className="spd-tp-theme-banner-img" />
+                <div className="spd-tp-theme-banner-overlay" />
+                <div className="spd-tp-theme-banner-info">
+                  <SpdImg src="/special_dungeons/tower_theme_icon.png" className="spd-tp-theme-banner-icon" />
+                  <div>
+                    <div className="spd-tp-theme-name" style={{ color: themeColor }}>{THEME_NAMES[themeKey] || themeKey}</div>
+                    <div className="spd-tp-theme-sub">던전 테마</div>
                   </div>
-                ))}
+                </div>
               </div>
 
-              {/* Dungeon theme indicator */}
-              <div className="spd-tp-theme">
-                <SpdImg src="/special_dungeons/tower_icon.png" className="spd-tp-theme-icon" />
-                <span>던전 테마: {popup.data?.dungeonKey || '미정'}</span>
+              {/* Stats grid */}
+              <div className="spd-tp-stats">
+                {popup.info.map((item, i) => {
+                  const statIcons = ['👹', '📈', '✨', '💰'];
+                  return (
+                    <div key={i} className="spd-tp-stat">
+                      <div className="spd-tp-stat-icon">{statIcons[i] || '📊'}</div>
+                      <div className="spd-tp-stat-val">{item.value}</div>
+                      <div className="spd-tp-stat-label">{item.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bonus detail bar */}
+              {popup.bonusDetail && (
+                <div className="spd-tp-bonus-bar">
+                  <span className="spd-tp-bonus-item"><span className="spd-tp-bonus-label">HP</span> ×{popup.bonusDetail.hp}</span>
+                  <span className="spd-tp-bonus-divider" />
+                  <span className="spd-tp-bonus-item"><span className="spd-tp-bonus-label">공격</span> ×{popup.bonusDetail.atk}</span>
+                  <span className="spd-tp-bonus-divider" />
+                  <span className="spd-tp-bonus-item"><span className="spd-tp-bonus-label">방어</span> ×{popup.bonusDetail.def}</span>
+                </div>
+              )}
+
+              {/* Stamina cost */}
+              <div className="spd-tp-stamina-cost">
+                <span className="spd-tp-stamina-icon">⚡</span>
+                <span>행동력 3 소모</span>
               </div>
 
               {/* Buttons */}
               <div className="spd-tp-btns">
                 <button className="spd-tp-btn cancel" onClick={() => setPopup(null)}>취소</button>
-                <button className="spd-tp-btn start" onClick={startHandler}>
-                  <span className="spd-tp-btn-icon">⚔️</span>
+                <button className={`spd-tp-btn start ${isBoss ? 'boss' : ''}`} onClick={startHandler}>
+                  <SpdImg src="/special_dungeons/tower_challenge_sword.png" className="spd-tp-btn-sword" />
                   도전 시작
                 </button>
               </div>

@@ -405,6 +405,15 @@ router.post('/reward', auth, async (req, res) => {
         crit_rate: c.crit_rate, evasion: c.evasion,
         current_hp: c.current_hp, current_mp: c.current_mp,
       },
+      reward: {
+        questTitle: cq.title,
+        exp: cq.reward_exp,
+        gold: cq.reward_gold,
+        itemName: rewardItemName,
+        itemQty: cq.reward_item_qty,
+        itemId: cq.reward_item_id,
+        levelUp: questLevelUps > 0 ? newLevel : null,
+      },
     });
   } catch (err) {
     await conn.rollback();

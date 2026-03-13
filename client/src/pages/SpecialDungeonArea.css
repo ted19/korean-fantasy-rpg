@@ -1426,42 +1426,158 @@
   border-radius: 12px;
   transition: all 0.2s;
 }
+.spd-tower-popup.boss-mode .spd-tp-stat {
+  background: rgba(249,115,22,0.06);
+  border-color: rgba(249,115,22,0.12);
+}
 .spd-tp-stat:hover {
   background: rgba(167,139,250,0.1);
   border-color: rgba(167,139,250,0.25);
+  transform: translateY(-1px);
+}
+.spd-tower-popup.boss-mode .spd-tp-stat:hover {
+  background: rgba(249,115,22,0.1);
+  border-color: rgba(249,115,22,0.25);
+}
+.spd-tp-stat-icon {
+  font-size: 1.2rem;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
 .spd-tp-stat-val {
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 800;
   color: #a78bfa;
   margin-bottom: 2px;
 }
+.spd-tower-popup.boss-mode .spd-tp-stat-val { color: #fb923c; }
 .spd-tp-stat-label {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: #777;
   letter-spacing: 1px;
 }
 
-/* Theme indicator */
-.spd-tp-theme {
+/* Particles animation */
+.spd-tp-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.spd-tp-particle {
+  position: absolute;
+  bottom: 20%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(167,139,250,0.6);
+  animation: spdParticleFloat 3s infinite ease-in-out;
+}
+.spd-tower-popup.boss-mode .spd-tp-particle { background: rgba(249,115,22,0.6); }
+@keyframes spdParticleFloat {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-120px) scale(0); opacity: 0; }
+}
+
+/* Theme banner with AI image */
+.spd-tp-theme-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(167,139,250,0.15);
+  margin-bottom: 14px;
+  height: 70px;
+}
+.spd-tp-theme-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.7);
+}
+.spd-tp-theme-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(18,18,31,0.9) 0%, rgba(18,18,31,0.3) 100%);
+}
+.spd-tp-theme-banner-info {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+}
+.spd-tp-theme-banner-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.spd-tp-theme-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.spd-tp-theme-sub {
+  font-size: 0.65rem;
+  color: #888;
+  letter-spacing: 1px;
+}
+
+/* Bonus detail bar */
+.spd-tp-bonus-bar {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px;
-  margin-bottom: 20px;
-  background: rgba(255,255,255,0.03);
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
+  gap: 0;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: rgba(167,139,250,0.05);
+  border: 1px solid rgba(167,139,250,0.1);
+  border-radius: 8px;
   font-size: 0.78rem;
+  color: #ccc;
+}
+.spd-tower-popup.boss-mode .spd-tp-bonus-bar {
+  background: rgba(249,115,22,0.05);
+  border-color: rgba(249,115,22,0.1);
+}
+.spd-tp-bonus-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+.spd-tp-bonus-label {
+  font-weight: 400;
   color: #888;
+  font-size: 0.72rem;
 }
-.spd-tp-theme-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  object-fit: cover;
+.spd-tp-bonus-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255,255,255,0.1);
 }
+
+/* Stamina cost */
+.spd-tp-stamina-cost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 14px;
+  font-size: 0.78rem;
+  color: #999;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.spd-tp-stamina-icon { font-size: 1rem; }
 
 /* Buttons */
 .spd-tp-btns {
@@ -1476,7 +1592,7 @@
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s;
 }
 .spd-tp-btn.cancel {
   background: rgba(255,255,255,0.05);
@@ -1496,13 +1612,49 @@
   justify-content: center;
   gap: 8px;
   box-shadow: 0 4px 15px rgba(167,139,250,0.3);
+  position: relative;
+  overflow: hidden;
+}
+.spd-tp-btn.start::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  animation: spdBtnShimmer 3s infinite;
+}
+@keyframes spdBtnShimmer {
+  0% { left: -100%; }
+  50%, 100% { left: 100%; }
 }
 .spd-tp-btn.start:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(167,139,250,0.45);
 }
+.spd-tp-btn.start.boss {
+  background: linear-gradient(135deg, #f97316, #dc2626);
+  box-shadow: 0 4px 15px rgba(249,115,22,0.3);
+}
+.spd-tp-btn.start.boss:hover {
+  box-shadow: 0 8px 25px rgba(249,115,22,0.45);
+}
+.spd-tp-btn-sword {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  filter: brightness(1.5) drop-shadow(0 0 4px rgba(255,255,255,0.4));
+}
 .spd-tp-btn-icon {
   font-size: 1.1rem;
+}
+
+/* Boss mode glow */
+.spd-tower-popup.boss-mode {
+  border-color: rgba(249,115,22,0.3);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(249,115,22,0.15);
+}
+.spd-tower-popup.boss-mode .spd-tp-header-overlay {
+  background: linear-gradient(to top, #12121f 5%, transparent 50%), linear-gradient(to bottom, rgba(249,115,22,0.1) 0%, transparent 40%);
 }
 
 /* Reward popup */

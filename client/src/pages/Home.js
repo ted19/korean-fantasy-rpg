@@ -9,6 +9,8 @@ import MonsterBestiary from './MonsterBestiary';
 import BattleLog from './BattleLog';
 import SrpgBattle from '../srpg/SrpgBattle';
 import StageBattle from '../srpg/StageBattle';
+import DungeonCrawler from '../srpg/DungeonCrawler';
+import CrawlerBattle from '../srpg/CrawlerBattle';
 import SpecialDungeonArea from './SpecialDungeonArea';
 import PrologueArea from './PrologueArea';
 
@@ -67,6 +69,10 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [battleBlockMsg, setBattleBlockMsg] = useState(null);
   const [specialBattleCtx, setSpecialBattleCtx] = useState(null);
   const [returnSpecialType, setReturnSpecialType] = useState(null);
+  // 던전 크롤러 상태
+  const [dungeonCrawler, setDungeonCrawler] = useState(null); // { dungeonKey, stage, dbMonsters }
+  const [crawlerEncounter, setCrawlerEncounter] = useState(null); // 크롤러에서 조우한 전투 데이터
+  const [crawlerSavedState, setCrawlerSavedState] = useState(null); // DB에서 로드한 크롤러 상태
   const [villageTarget, setVillageTarget] = useState(null);
   const [villageTargetData, setVillageTargetData] = useState(null);
   const [homeInitialTab, setHomeInitialTab] = useState(null);
@@ -219,6 +225,32 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     }
   };
 
+  // 진영 내 피로도 0인 용병 체크 (서버에서 최신 데이터 조회)
+  const checkFatiguedMercenaries = async () => {
+    try {
+      const [fRes, mRes] = await Promise.all([
+        api.get('/formation/list'),
+        api.get('/mercenary/my'),
+      ]);
+      const freshMercs = mRes.data.mercenaries || [];
+      setMyMercenaries(freshMercs);
+      const main = fRes.data.formations?.find(f => f.slotIndex === 0);
+      if (!main || !main.gridData) return null;
+      const mercIdsInFormation = [];
+      main.gridData.forEach(row => row.forEach(cell => {
+        if (cell && cell.unitId && cell.unitId.startsWith('merc_')) {
+          mercIdsInFormation.push(parseInt(cell.unitId.replace('merc_', '')));
+        }
+      }));
+      if (mercIdsInFormation.length === 0) return null;
+      const fatigued = freshMercs.filter(m => mercIdsInFormation.includes(m.id) && (m.fatigue === 0 || m.fatigue === undefined));
+      if (fatigued.length > 0) return fatigued;
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   // 전투 세션 DB 저장
   const saveBattleSession = async (battleType, context) => {
     try { await api.post('/battle/session/save', { battleType, context }); } catch {}
@@ -246,6 +278,24 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       setReturnDungeonKey(ctx.specialCtx ? null : null);
       setSrpgBattle(true);
       setFighting(true);
+    } else if (s.battleType === 'crawler') {
+      // 던전 크롤러 복귀 - DB에서 저장된 상태 로드
+      const dk = ctx.dungeonKey;
+      Promise.all([
+        api.get(`/dungeon/${dk}`),
+        api.get('/battle/crawler/load'),
+      ]).then(([dRes, cRes]) => {
+        const saved = cRes.data.crawlerState || null;
+        setCrawlerSavedState(saved);
+        setDungeonCrawler({ dungeonKey: dk, stage: ctx.stage || saved?.stage, dbMonsters: dRes.data.monsters || [] });
+        setCrawlerEncounter(ctx.encounter || null);
+        setReturnDungeonKey(dk);
+        setFighting(true);
+        addLog(`${DUNGEON_DISPLAY_NAMES[dk] || dk} 던전 크롤러 복귀!`, 'system');
+      }).catch(() => {
+        clearBattleSession();
+        addLog('던전 복귀에 실패했습니다.', 'damage');
+      });
     } else if (s.battleType === 'srpg' || s.battleType === 'tower') {
       savedEnemySetupRef.current = ctx.enemySetup || null;
       savedRetreatFailedRef.current = ctx.retreatFailed || false;
@@ -286,6 +336,11 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     if (fighting || srpgBattle) return;
     if (await checkFormationEmpty()) {
       setBattleBlockMsg('__FORMATION__');
+      return;
+    }
+    const fatigued = await checkFatiguedMercenaries();
+    if (fatigued) {
+      setBattleBlockMsg('__FATIGUE__:' + fatigued.map(m => m.name).join(','));
       return;
     }
     if (charState.currentHp <= 0) {
@@ -332,12 +387,31 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
         try {
           await api.post('/stage/use-charge', { contentType: `dungeon_${dungeonKey}_${stage?.stageNumber || 1}` });
-          loadContentCharges();
+          await loadContentCharges();
         } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
       }
     }
     savedEnemySetupRef.current = null; // 새 전투는 적 구성 초기화
     savedRetreatFailedRef.current = false;
+
+    // 던전 전투 → 던전 크롤러 모드로 진입
+    if (isDungeon && dungeonKey) {
+      try {
+        const dRes = await api.get(`/dungeon/${dungeonKey}`);
+        setCrawlerSavedState(null);
+        setDungeonCrawler({ dungeonKey, stage, dbMonsters: dRes.data.monsters || [] });
+        setCrawlerEncounter(null);
+        setReturnDungeonKey(dungeonKey);
+        setFighting(true);
+        saveBattleSession('crawler', { dungeonKey, stage });
+        addLog(`${DUNGEON_DISPLAY_NAMES[dungeonKey] || dungeonKey} 던전 크롤러 모드 진입!`, 'system');
+        return;
+      } catch (err) {
+        console.error('Dungeon crawler init failed:', err);
+        // 실패 시 기존 전투로 fallback
+      }
+    }
+
     setBattleLocation(dungeonKey);
     setBattleStage(stage);
     if (specialCtx) {
@@ -361,6 +435,11 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     if (fighting || srpgBattle) return;
     if (await checkFormationEmpty()) {
       setBattleBlockMsg('__FORMATION__');
+      return;
+    }
+    const fatiguedMercs = await checkFatiguedMercenaries();
+    if (fatiguedMercs) {
+      setBattleBlockMsg('__FATIGUE__:' + fatiguedMercs.map(m => m.name).join(','));
       return;
     }
     if (charState.currentHp <= 0) {
@@ -395,7 +474,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     if (!isSpecial) {
       try {
         await api.post('/stage/use-charge', { contentType: `stage_${groupKey}_${stage.stageNumber}` });
-        loadContentCharges();
+        await loadContentCharges();
       } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
     }
     savedEnemySetupRef.current = null; // 새 전투는 적 구성 초기화
@@ -534,6 +613,142 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       }
     }
   };
+
+  // 던전 크롤러 모드 - 크롤러 내 전투 (CrawlerBattle - Wizardry 스타일)
+  if (dungeonCrawler && crawlerEncounter) {
+    const activeSummonData = mySummons.filter(s => activeSummonIds.includes(s.id));
+    const crawlerStage = {
+      ...(dungeonCrawler.stage || {}),
+      name: crawlerEncounter.isBoss ? '보스 전투' : '던전 조우 전투',
+      monsterCount: crawlerEncounter.monsters?.length || 3,
+    };
+    return (
+      <div className="game-layout-top">
+        <CrawlerBattle
+          stage={crawlerStage}
+          character={character}
+          charState={charState}
+          learnedSkills={learnedSkills}
+          passiveBonuses={passiveBonuses}
+          activeSummons={activeSummonData}
+          activeMercenaries={myMercenaries}
+          monsters={crawlerEncounter.monsters}
+          groupKey={dungeonCrawler.dungeonKey}
+          isBossEncounter={crawlerEncounter.isBoss}
+          onBattleEnd={(result, expGained, goldGained) => {
+            if (result === 'victory') {
+              // 크롤러 상태에서 처치한 몬스터 업데이트 (동기적으로 먼저 반영)
+              const mobId = crawlerEncounter.mobId;
+              setCrawlerSavedState(prev => {
+                if (!prev || !prev.monsters) return prev;
+                const updated = { ...prev, monsters: prev.monsters.map(m =>
+                  m.id === mobId ? { ...m, defeated: true } : m
+                )};
+                api.post('/battle/crawler/save', { crawlerState: updated }).catch(() => {});
+                return updated;
+              });
+              refreshCharState();
+              addLog(`전투 승리! EXP +${expGained}, Gold +${goldGained}`, 'heal');
+            } else if (result === 'defeat') {
+              setDungeonCrawler(null);
+              setCrawlerEncounter(null);
+              setCrawlerSavedState(null);
+              setFighting(false);
+              api.delete('/battle/crawler/clear').catch(() => {});
+              setVillageTarget('inn');
+              setCurrentLocation('village');
+              clearBattleSession();
+              addLog('던전에서 쓰러졌습니다... 마을로 이송됩니다.', 'damage');
+              return;
+            } else if (result === 'retreat') {
+              // 후퇴: 던전 크롤러로 복귀 (전투만 종료)
+              refreshCharState();
+              addLog('전투에서 후퇴했습니다.', 'system');
+            }
+            // 전투 세션에서 encounter 제거 (새로고침 시 전투 재진입 방지)
+            saveBattleSession('crawler', {
+              dungeonKey: dungeonCrawler.dungeonKey,
+              stage: dungeonCrawler.stage,
+            });
+            setCrawlerEncounter(null);
+          }}
+          onLog={addLog}
+        />
+      </div>
+    );
+  }
+
+  // 던전 크롤러 모드 - 탐험 중
+  if (dungeonCrawler && !crawlerEncounter) {
+    return (
+      <div className="game-layout-top">
+        <DungeonCrawler
+          dungeonKey={dungeonCrawler.dungeonKey}
+          stage={dungeonCrawler.stage}
+          dbMonsters={dungeonCrawler.dbMonsters}
+          character={character}
+          charState={charState}
+          activeSummons={mySummons.filter(s => activeSummonIds.includes(s.id))}
+          activeMercenaries={myMercenaries}
+          savedState={crawlerSavedState}
+          onSaveState={(state) => {
+            setCrawlerSavedState(state);
+            api.post('/battle/crawler/save', { crawlerState: state }).catch(() => {});
+          }}
+          onEncounter={(encounterData) => {
+            setCrawlerEncounter(encounterData);
+            saveBattleSession('crawler', {
+              dungeonKey: dungeonCrawler.dungeonKey,
+              stage: dungeonCrawler.stage,
+              encounter: encounterData,
+            });
+          }}
+          onTreasure={(treasureData) => {
+            // 보물 골드 반영
+            if (treasureData.gold) {
+              api.post('/dungeon/clear-stage', {
+                dungeonKey: dungeonCrawler.dungeonKey,
+                stageNumber: dungeonCrawler.stage?.stageNumber || 1,
+                expGained: 0,
+                goldGained: treasureData.gold,
+              }).catch(() => {});
+              refreshCharState();
+            }
+          }}
+          onClear={async () => {
+            // 던전 클리어 - 크롤러 상태도 삭제
+            api.delete('/battle/crawler/clear').catch(() => {});
+            try {
+              await api.post('/dungeon/clear-stage', {
+                dungeonKey: dungeonCrawler.dungeonKey,
+                stageNumber: dungeonCrawler.stage?.stageNumber || 1,
+                expGained: 0,
+                goldGained: 0,
+              });
+            } catch {}
+            addLog('던전을 클리어했습니다!', 'heal');
+            refreshCharState();
+            setDungeonCrawler(null);
+            setCrawlerEncounter(null);
+            setCrawlerSavedState(null);
+            setFighting(false);
+            setCurrentLocation('dungeon');
+            clearBattleSession();
+          }}
+          onRetreat={() => {
+            setDungeonCrawler(null);
+            setCrawlerEncounter(null);
+            setCrawlerSavedState(null);
+            setFighting(false);
+            setCurrentLocation('dungeon');
+            clearBattleSession();
+            api.delete('/battle/crawler/clear').catch(() => {});
+            addLog('던전에서 귀환했습니다.', 'system');
+          }}
+        />
+      </div>
+    );
+  }
 
   // 스테이지 카드 전투 모드
   if (srpgBattle && battleStageGroup && battleStage) {
@@ -774,7 +989,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
                   />
                   <div className="resume-stage-info">
                     <div className="resume-stage-name">{stageName}</div>
-                    <div className="resume-stage-desc">{battleResumePrompt.battleType === 'stage' ? '스테이지 전투' : battleResumePrompt.battleType === 'tower' ? '무한의 탑' : '던전 전투'}</div>
+                    <div className="resume-stage-desc">{battleResumePrompt.battleType === 'stage' ? '스테이지 전투' : battleResumePrompt.battleType === 'tower' ? '무한의 탑' : battleResumePrompt.battleType === 'crawler' ? '던전 크롤러' : '던전 전투'}</div>
                     <div className="resume-no-stamina">행동력 소모 없이 복귀 가능</div>
                   </div>
                 </div>
@@ -820,8 +1035,59 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       {/* 전투 불가 팝업 */}
       {battleBlockMsg && (
         <div className="battle-block-overlay" onClick={() => setBattleBlockMsg(null)}>
-          <div className={`battle-block-popup ${battleBlockMsg === '__FORMATION__' ? 'formation-popup' : battleBlockMsg.includes('행동력') ? 'stamina-popup' : ''}`} onClick={e => e.stopPropagation()}>
-            {battleBlockMsg === '__FORMATION__' ? (
+          <div className={`battle-block-popup ${battleBlockMsg === '__FORMATION__' ? 'formation-popup' : battleBlockMsg.startsWith('__FATIGUE__') ? 'fatigue-popup' : battleBlockMsg.includes('행동력') ? 'stamina-popup' : ''}`} onClick={e => e.stopPropagation()}>
+            {battleBlockMsg.startsWith('__FATIGUE__') ? (
+              <>
+                <div className="fatigue-popup-bg">
+                  <img src="/ui/battle/fatigue_bg.png" alt="" />
+                  <div className="fatigue-popup-bg-overlay" />
+                </div>
+                <div className="fatigue-popup-particles">
+                  <div className="fatigue-particle" />
+                  <div className="fatigue-particle" />
+                  <div className="fatigue-particle" />
+                  <div className="fatigue-particle" />
+                  <div className="fatigue-particle" />
+                  <div className="fatigue-particle" />
+                </div>
+                <div className="fatigue-popup-content">
+                  <div className="fatigue-popup-icon-wrap">
+                    <div className="fatigue-popup-icon-glow" />
+                    <img src="/ui/battle/fatigue_icon.png" alt="" className="fatigue-popup-icon-img" />
+                  </div>
+                  <div className="fatigue-popup-title">피로한 용병</div>
+                  <div className="fatigue-popup-divider"><span /></div>
+                  <div className="fatigue-popup-desc">
+                    진영에 배치된 용병이 극도로 피로하여<br/>전투에 참여할 수 없습니다.
+                  </div>
+                  <div className="fatigue-popup-names">
+                    {battleBlockMsg.replace('__FATIGUE__:', '').split(',').map((name, i) => (
+                      <div key={i} className="fatigue-popup-name-tag">
+                        <span className="fatigue-tag-zzz">💤</span>
+                        <span className="fatigue-tag-name">{name}</span>
+                        <span className="fatigue-tag-status">피로</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="fatigue-popup-hint">
+                    <span className="fatigue-hint-icon">🏨</span>
+                    여관에서 휴식시키거나 진영에서 제외해주세요
+                  </div>
+                  <div className="fatigue-popup-actions">
+                    <button className="fatigue-popup-go-btn" onClick={() => {
+                      setBattleBlockMsg(null);
+                      setVillageTarget('inn');
+                      setVillageTargetData({ initialTab: 'my' });
+                      setCurrentLocation('village');
+                    }}>
+                      <span className="fatigue-go-shimmer" />
+                      <span className="fatigue-go-text">🏨 여관으로 이동</span>
+                    </button>
+                    <button className="fatigue-popup-close-btn" onClick={() => setBattleBlockMsg(null)}>닫기</button>
+                  </div>
+                </div>
+              </>
+            ) : battleBlockMsg === '__FORMATION__' ? (
               <>
                 <div className="formation-popup-bg">
                   <img src="/ui/formation_required_bg.png" alt="" />

@@ -369,4 +369,37 @@ router.post('/unequip', auth, async (req, res) => {
   }
 });
 
+// 물약 사용
+router.post('/use-potion', auth, async (req, res) => {
+  try {
+    const { invId } = req.body;
+    if (!invId) return res.status(400).json({ message: '물약 정보가 필요합니다.' });
+
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT * FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT * FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
+    const charId = chars[0].id;
+
+    const [rows] = await pool.query(
+      `SELECT i.id as inv_id, i.item_id, i.quantity, it.effect_hp, it.effect_mp, it.name
+       FROM inventory i JOIN items it ON i.item_id = it.id
+       WHERE i.id = ? AND i.character_id = ? AND it.type = 'potion' AND i.quantity > 0`,
+      [invId, charId]
+    );
+    if (rows.length === 0) return res.status(400).json({ message: '사용할 수 없는 물약입니다.' });
+
+    const potion = rows[0];
+    await pool.query('UPDATE inventory SET quantity = quantity - 1 WHERE id = ?', [invId]);
+
+    res.json({ message: `${potion.name} 사용!`, effect_hp: potion.effect_hp || 0, effect_mp: potion.effect_mp || 0 });
+  } catch (err) {
+    console.error('Use potion error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 module.exports = router;

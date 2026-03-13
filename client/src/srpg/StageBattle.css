@@ -361,7 +361,20 @@
 }
 
 .cb-card.player { border-color: rgba(79, 195, 247, 0.15); }
+.cb-card.player:not(.dead) .cb-card-img { animation: allyBob 2.8s ease-in-out infinite; }
+.cb-card.player:nth-child(2):not(.dead) .cb-card-img { animation-delay: 0.2s; }
+.cb-card.player:nth-child(3):not(.dead) .cb-card-img { animation-delay: 0.4s; }
+.cb-card.player:nth-child(4):not(.dead) .cb-card-img { animation-delay: 0.6s; }
+.cb-card.player:nth-child(5):not(.dead) .cb-card-img { animation-delay: 0.8s; }
+@keyframes allyBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
 .cb-card.enemy { border-color: rgba(239, 83, 80, 0.15); }
+.cb-card.enemy:not(.dead) .cb-card-img { animation: monsterBob 2.4s ease-in-out infinite; }
+.cb-card.enemy:nth-child(2):not(.dead) .cb-card-img { animation-delay: 0.3s; }
+.cb-card.enemy:nth-child(3):not(.dead) .cb-card-img { animation-delay: 0.6s; }
+.cb-card.enemy:nth-child(4):not(.dead) .cb-card-img { animation-delay: 0.9s; }
+.cb-card.enemy:nth-child(5):not(.dead) .cb-card-img { animation-delay: 1.2s; }
+@keyframes monsterBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
 .cb-card.current {
   box-shadow: 0 0 20px rgba(212, 168, 67, 0.35), 0 4px 16px rgba(0,0,0,0.5);

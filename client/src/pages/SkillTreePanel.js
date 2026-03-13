@@ -245,34 +245,44 @@ function SkillTreePanel({ charState, onLog, onSkillsUpdate }) {
       {resetConfirm && (
         <div className="skt-reset-overlay" onClick={() => setResetConfirm(false)}>
           <div className="skt-reset-popup" onClick={e => e.stopPropagation()}>
-            <div className="skt-reset-icon-wrap">
-              <span className="skt-reset-icon">⚠️</span>
-            </div>
-            <div className="skt-reset-title">스킬 트리 초기화</div>
-            <div className="skt-reset-desc">
-              모든 해금된 스킬이 초기화되고<br/>
-              스킬 포인트가 반환됩니다.
-            </div>
-            <div className="skt-reset-info">
-              <div className="skt-reset-info-row">
-                <span>해금된 스킬</span>
-                <span className="skt-reset-val">{treeData.unlocked.length}개</span>
-              </div>
-              <div className="skt-reset-info-row">
-                <span>반환 포인트</span>
-                <span className="skt-reset-val point">+{treeData.nodes.filter(n => treeData.unlocked.includes(n.id)).reduce((s, n) => s + (n.point_cost || 1), 0)}P</span>
-              </div>
-              <div className="skt-reset-info-row cost">
-                <span>초기화 비용</span>
-                <span className="skt-reset-val gold">{500 + treeData.unlocked.length * 100}G</span>
+            {/* AI image header + circular icon */}
+            <div className="skt-reset-header">
+              <img src="/ui/skill_reset_bg.png" alt="" className="skt-reset-header-img" onError={e => { e.target.style.display = 'none'; }} />
+              <div className="skt-reset-header-overlay" />
+              <div className="skt-reset-circle-wrap">
+                <div className="skt-reset-circle">
+                  <img src="/ui/skill_reset_icon.png" alt="" className="skt-reset-circle-img" />
+                </div>
               </div>
             </div>
-            <div className="skt-reset-warn">⚡ 이 작업은 되돌릴 수 없습니다!</div>
-            <div className="skt-reset-btns">
-              <button className="skt-reset-cancel" onClick={() => setResetConfirm(false)}>취소</button>
-              <button className="skt-reset-confirm" onClick={handleReset} disabled={loading}>
-                {loading ? '처리 중...' : '초기화'}
-              </button>
+
+            <div className="skt-reset-body">
+              <div className="skt-reset-title">스킬 트리 초기화</div>
+              <div className="skt-reset-desc">
+                모든 해금된 스킬이 초기화되고<br/>
+                스킬 포인트가 반환됩니다.
+              </div>
+              <div className="skt-reset-info">
+                <div className="skt-reset-info-row">
+                  <span>🔮 해금된 스킬</span>
+                  <span className="skt-reset-val">{treeData.unlocked.length}개</span>
+                </div>
+                <div className="skt-reset-info-row">
+                  <span>💠 반환 포인트</span>
+                  <span className="skt-reset-val point">+{treeData.nodes.filter(n => treeData.unlocked.includes(n.id)).reduce((s, n) => s + (n.point_cost || 1), 0)}P</span>
+                </div>
+                <div className="skt-reset-info-row cost">
+                  <span>💰 초기화 비용</span>
+                  <span className="skt-reset-val gold">{500 + treeData.unlocked.length * 100}G</span>
+                </div>
+              </div>
+              <div className="skt-reset-warn">⚡ 이 작업은 되돌릴 수 없습니다!</div>
+              <div className="skt-reset-btns">
+                <button className="skt-reset-cancel" onClick={() => setResetConfirm(false)}>취소</button>
+                <button className="skt-reset-confirm" onClick={handleReset} disabled={loading}>
+                  {loading ? '처리 중...' : '초기화 실행'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

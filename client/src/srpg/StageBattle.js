@@ -1147,10 +1147,10 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
             <div className="elite-alert-icon">{eliteAlert.tier.icon}</div>
             <div className="elite-alert-img-wrap">
               <img
-                src={`/monsters/${eliteAlert.monsterId}_full.png`}
+                src={`/monsters_nobg/${eliteAlert.monsterId}_full.png`}
                 alt={eliteAlert.name}
                 className="elite-alert-img"
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={(e) => { e.target.src = `/monsters/${eliteAlert.monsterId}_full.png`; e.target.onerror = () => { e.target.style.display = 'none'; }; }}
               />
               <div className="elite-alert-aura" />
             </div>
@@ -1884,7 +1884,7 @@ function TurnPortrait({ unit }) {
 // ========== 유닛 카드 (세로 직사각형) ==========
 
 function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drops, animClass, hitClass }) {
-  const [imgErr, setImgErr] = useState(false);
+  const [imgErr, setImgErr] = useState(0);
   const hpPct = unit.maxHp > 0 ? (unit.hp / unit.maxHp) * 100 : 0;
   const mpPct = unit.maxMp > 0 ? (unit.mp / unit.maxMp) * 100 : 0;
   const isDead = unit.hp <= 0;
@@ -1920,12 +1920,12 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
         {unit.portraitEffect && (
           <div className={`cb-portrait-effect cb-effect-${unit.portraitEffect}`} />
         )}
-        {unit.imageUrl && !imgErr ? (
+        {unit.imageUrl && imgErr < 2 ? (
           <img
-            src={unit.imageUrl}
+            src={imgErr === 0 ? unit.imageUrl : unit.imageUrl.replace('/monsters_nobg/', '/monsters/').replace('/summons_nobg/', '/summons/')}
             alt={unit.name}
             className="cb-card-img"
-            onError={() => setImgErr(true)}
+            onError={() => setImgErr(prev => prev + 1)}
           />
         ) : (
           <span className="cb-card-emoji">{unit.icon}</span>

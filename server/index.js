@@ -21,10 +21,28 @@ const db = require('./db');
 
 const path = require('path');
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3000;
 
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:4000';
+
+// Private Network Access preflight 처리 (외부 → loopback 요청 허용)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS' && req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
+
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('iptime.org')) {
+      callback(null, true);
+    } else {
+      callback(null, CORS_ORIGIN);
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // X-Char-Id 헤더 기반으로 선택된 캐릭터 ID를 req에 주입

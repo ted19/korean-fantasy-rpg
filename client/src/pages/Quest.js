@@ -108,6 +108,8 @@ function Quest({ charState, onCharStateUpdate, onLog }) {
     }
   };
 
+  const [rewardPopup, setRewardPopup] = useState(null);
+
   const handleReward = async (questId) => {
     try {
       const res = await api.post('/quest/reward', { questId });
@@ -120,6 +122,9 @@ function Quest({ charState, onCharStateUpdate, onLog }) {
         currentHp: c.current_hp ?? c.hp,
         currentMp: c.current_mp ?? c.mp,
       });
+      if (res.data.reward) {
+        setRewardPopup(res.data.reward);
+      }
       loadData();
     } catch (err) {
       onLog(err.response?.data?.message || '보상 수령 실패', 'damage');
@@ -366,6 +371,82 @@ function Quest({ charState, onCharStateUpdate, onLog }) {
       <div className="quest-scroll">
         {category === 'main' ? renderMainQuests() : renderCardList()}
       </div>
+
+      {/* 보상 수령 팝업 */}
+      {rewardPopup && (
+        <div className="qreward-overlay" onClick={() => setRewardPopup(null)}>
+          <div className="qreward-popup" onClick={e => e.stopPropagation()}>
+            {/* 배경 */}
+            <div className="qreward-bg">
+              <img src="/ui/quest/reward_bg.png" alt="" className="qreward-bg-img" onError={e => { e.target.style.display = 'none'; }} />
+              <div className="qreward-bg-overlay" />
+            </div>
+            {/* 파티클 */}
+            <div className="qreward-particles">
+              <img src="/ui/quest/reward_particles.png" alt="" className="qreward-particles-img" onError={e => { e.target.style.display = 'none'; }} />
+              {[...Array(14)].map((_, i) => <div key={i} className="qreward-particle" style={{ '--pi': i }} />)}
+            </div>
+            {/* 빛줄기 */}
+            <div className="qreward-light-rays" />
+            {/* 콘텐츠 */}
+            <div className="qreward-content">
+              {/* 프레임 */}
+              <img src="/ui/quest/reward_frame.png" alt="" className="qreward-frame" onError={e => { e.target.style.display = 'none'; }} />
+              {/* 아이콘 */}
+              <div className="qreward-icon-wrap">
+                <img src="/ui/quest/reward_icon.png" alt="" className="qreward-icon-img" onError={e => { e.target.textContent = '🎁'; }} />
+                <div className="qreward-icon-glow" />
+                <div className="qreward-icon-sparkles">
+                  {[...Array(6)].map((_, i) => <span key={i} style={{ '--si': i }} />)}
+                </div>
+              </div>
+              {/* 타이틀 */}
+              <div className="qreward-title">보상 획득!</div>
+              <div className="qreward-quest-name">{rewardPopup.questTitle}</div>
+              {/* 배너 */}
+              <div className="qreward-banner-wrap">
+                <img src="/ui/quest/reward_banner.png" alt="" onError={e => { e.target.style.display = 'none'; }} />
+              </div>
+              {/* 보상 목록 */}
+              <div className="qreward-rewards">
+                {rewardPopup.exp > 0 && (
+                  <div className="qreward-row">
+                    <span className="qreward-row-icon">⭐</span>
+                    <span className="qreward-row-label">경험치</span>
+                    <span className="qreward-row-val exp">+{rewardPopup.exp.toLocaleString()}</span>
+                  </div>
+                )}
+                {rewardPopup.gold > 0 && (
+                  <div className="qreward-row">
+                    <span className="qreward-row-icon">💰</span>
+                    <span className="qreward-row-label">골드</span>
+                    <span className="qreward-row-val gold">+{rewardPopup.gold.toLocaleString()}</span>
+                  </div>
+                )}
+                {rewardPopup.itemName && (
+                  <div className="qreward-row">
+                    <span className="qreward-row-icon">📦</span>
+                    <span className="qreward-row-label">{rewardPopup.itemName}</span>
+                    <span className="qreward-row-val item">x{rewardPopup.itemQty}</span>
+                  </div>
+                )}
+                {rewardPopup.levelUp && (
+                  <div className="qreward-row levelup">
+                    <span className="qreward-row-icon">🎉</span>
+                    <span className="qreward-row-label">레벨 업!</span>
+                    <span className="qreward-row-val level">Lv.{rewardPopup.levelUp}</span>
+                  </div>
+                )}
+              </div>
+              {/* 닫기 버튼 */}
+              <button className="qreward-close-btn" onClick={() => setRewardPopup(null)}>
+                <span className="qreward-close-shimmer" />
+                <span className="qreward-close-text">확인</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

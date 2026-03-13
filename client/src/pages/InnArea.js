@@ -46,8 +46,8 @@ function MercImg({ src, fallback, className }) {
   return <img src={src} alt="" className={className} onError={() => setErr(true)} />;
 }
 
-function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged }) {
-  const [tab, setTab] = useState('templates');
+function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, initialTab }) {
+  const [tab, setTab] = useState(initialTab || 'templates');
   const [templates, setTemplates] = useState([]);
   const [myMercs, setMyMercs] = useState([]);
   const [mercSlots, setMercSlots] = useState({ current: 0, max: 1, next: null });

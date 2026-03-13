@@ -1264,6 +1264,28 @@
 .pm2d-area:active { cursor: grabbing; }
 .pm2d-grid, .pm2d-tile { cursor: pointer; }
 
+/* Tower theme - stone wall background around map */
+.pm2d-area.pm2d-tower {
+  background-color: #1a1a28;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.pm2d-area.pm2d-tower::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(10,10,20,0.7) 80%);
+  pointer-events: none;
+  z-index: 0;
+}
+.pm2d-area.pm2d-tower .pm2d-grid {
+  position: relative;
+  z-index: 1;
+  border-color: rgba(180,170,150,0.25);
+  box-shadow: 0 0 50px rgba(0,0,0,0.6), 0 0 20px rgba(140,120,90,0.15);
+}
+
 .pm2d-grid {
   --tile-size: 104px;
   display: grid;
@@ -1575,7 +1597,8 @@
   z-index: 1;
 }
 .pm2d-unit.ally .pm2d-unit-sprite { border-color: var(--cyan, #22d3ee); }
-.pm2d-unit.enemy .pm2d-unit-sprite { border-color: var(--red, #ef4444); }
+.pm2d-unit.enemy .pm2d-unit-sprite { border-color: var(--red, #ef4444); animation: monsterBob 2.4s ease-in-out infinite; }
+@keyframes monsterBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 .pm2d-unit.active-unit .pm2d-unit-sprite {
   border-color: var(--gold, #ffd700);
   box-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
@@ -1592,18 +1615,115 @@
   z-index: 0;
   animation: pm2dAuraPulse 2s ease-in-out infinite;
 }
-.pm2d-unit.ally .pm2d-unit-aura {
-  background: radial-gradient(circle, rgba(34, 211, 238, 0.45) 0%, rgba(34, 211, 238, 0.15) 45%, transparent 70%);
-  box-shadow: 0 0 16px rgba(34, 211, 238, 0.4), 0 0 4px rgba(34, 211, 238, 0.2);
+/* --- 속성별 오라 --- */
+.pm2d-unit-aura.elem-neutral {
+  background: radial-gradient(circle, rgba(200, 200, 220, 0.4) 0%, rgba(200, 200, 220, 0.12) 45%, transparent 70%);
+  box-shadow: 0 0 14px rgba(200, 200, 220, 0.35);
 }
-.pm2d-unit.enemy .pm2d-unit-aura {
-  background: radial-gradient(circle, rgba(239, 68, 68, 0.45) 0%, rgba(239, 68, 68, 0.15) 45%, transparent 70%);
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.4), 0 0 4px rgba(239, 68, 68, 0.2);
+.pm2d-unit-aura.elem-fire {
+  background: radial-gradient(circle, rgba(255, 80, 0, 0.5) 0%, rgba(255, 140, 0, 0.15) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(255, 80, 0, 0.45);
+  animation: pm2dAuraFire 1.2s ease-in-out infinite alternate !important;
 }
+@keyframes pm2dAuraFire {
+  0% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); filter: brightness(1); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); filter: brightness(1.15); }
+}
+.pm2d-unit-aura.elem-water {
+  background: radial-gradient(circle, rgba(30, 144, 255, 0.5) 0%, rgba(100, 180, 255, 0.15) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(30, 144, 255, 0.4);
+  animation: pm2dAuraWater 2.5s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraWater {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); filter: hue-rotate(10deg); }
+}
+.pm2d-unit-aura.elem-earth {
+  background: radial-gradient(circle, rgba(180, 140, 60, 0.45) 0%, rgba(140, 110, 50, 0.12) 45%, transparent 70%);
+  box-shadow: 0 0 14px rgba(180, 140, 60, 0.35);
+}
+.pm2d-unit-aura.elem-wind {
+  background: radial-gradient(circle, rgba(130, 220, 200, 0.45) 0%, rgba(180, 240, 230, 0.12) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(130, 220, 200, 0.4);
+  animation: pm2dAuraWind 2s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraWind {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1) translateX(0); }
+  25% { transform: translate(-50%, -50%) scale(1.04) translateX(2px); }
+  75% { opacity: 0.9; transform: translate(-50%, -50%) scale(1.04) translateX(-2px); }
+}
+.pm2d-unit-aura.elem-light {
+  background: radial-gradient(circle, rgba(255, 255, 180, 0.5) 0%, rgba(255, 230, 128, 0.15) 45%, transparent 70%);
+  box-shadow: 0 0 18px rgba(255, 230, 128, 0.45);
+  animation: pm2dAuraLight 2s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraLight {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+}
+.pm2d-unit-aura.elem-dark {
+  background: radial-gradient(circle, rgba(100, 0, 140, 0.5) 0%, rgba(60, 0, 80, 0.15) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(100, 0, 140, 0.4);
+  animation: pm2dAuraDark 3s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraDark {
+  0%, 100% { opacity: 0.5; filter: hue-rotate(0deg); transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.9; filter: hue-rotate(20deg); transform: translate(-50%, -50%) scale(1.06); }
+}
+.pm2d-unit-aura.elem-poison {
+  background: radial-gradient(circle, rgba(0, 180, 50, 0.45) 0%, rgba(50, 200, 80, 0.12) 45%, transparent 70%);
+  box-shadow: 0 0 14px rgba(0, 180, 50, 0.4);
+  animation: pm2dAuraPoison 2s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraPoison {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1) translateY(0); }
+  50% { opacity: 0.9; transform: translate(-50%, -50%) scale(1.04) translateY(-2px); }
+}
+.pm2d-unit-aura.elem-lightning {
+  background: radial-gradient(circle, rgba(255, 255, 80, 0.45) 0%, rgba(200, 200, 50, 0.12) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(255, 255, 80, 0.4);
+  animation: pm2dAuraLightning 1.5s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraLightning {
+  0%, 85%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
+  88% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); filter: brightness(1.4); }
+  91% { opacity: 0.3; }
+  94% { opacity: 0.9; filter: brightness(1.2); }
+}
+.pm2d-unit-aura.elem-ice {
+  background: radial-gradient(circle, rgba(150, 220, 255, 0.45) 0%, rgba(200, 240, 255, 0.12) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(150, 220, 255, 0.4);
+  animation: pm2dAuraIce 3s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraIce {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); filter: hue-rotate(0deg); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); filter: hue-rotate(15deg); }
+}
+.pm2d-unit-aura.elem-blood {
+  background: radial-gradient(circle, rgba(180, 0, 0, 0.5) 0%, rgba(120, 0, 0, 0.15) 45%, transparent 70%);
+  box-shadow: 0 0 16px rgba(180, 0, 0, 0.4);
+  animation: pm2dAuraBlood 1.5s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraBlood {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+}
+.pm2d-unit-aura.elem-spirit {
+  background: radial-gradient(circle, rgba(180, 130, 255, 0.45) 0%, rgba(130, 200, 255, 0.12) 40%, transparent 70%);
+  box-shadow: 0 0 16px rgba(180, 130, 255, 0.4);
+  animation: pm2dAuraSpirit 3s ease-in-out infinite !important;
+}
+@keyframes pm2dAuraSpirit {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); filter: hue-rotate(0deg); }
+  33% { opacity: 0.9; transform: translate(-50%, -50%) scale(1.05); filter: hue-rotate(25deg); }
+  66% { opacity: 0.7; transform: translate(-50%, -50%) scale(1.02); filter: hue-rotate(-15deg); }
+}
+
+/* 액티브 유닛 (속성 오라 위에 골드 오버라이드) */
 .pm2d-unit.active-unit .pm2d-unit-aura {
-  background: radial-gradient(circle, rgba(255, 215, 0, 0.4) 0%, rgba(255, 215, 0, 0.12) 50%, transparent 70%);
-  box-shadow: 0 0 16px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.2);
-  animation: pm2dAuraPulse 1.2s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.4) 0%, rgba(255, 215, 0, 0.12) 50%, transparent 70%) !important;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.2) !important;
+  animation: pm2dAuraPulse 1.2s ease-in-out infinite !important;
 }
 /* 엘리트 몬스터 오라 */
 .pm2d-unit.elite .pm2d-unit-aura {

@@ -202,7 +202,7 @@ export function createSummonUnit(summon, spawnPos) {
     acted: false,
     moved: false,
     icon: summon.icon || '👻',
-    imageUrl: `/summons/${summon.template_id}_icon.png`,
+    imageUrl: `/summons_nobg/${summon.template_id}_full.png`,
     color: '#81c784',
     weaponType: 'default',
     weaponName: null,
@@ -239,7 +239,7 @@ export function createMercenaryUnit(merc, spawnPos) {
     acted: false,
     moved: false,
     icon: '🗡️',
-    imageUrl: `/mercenaries/${merc.template_id}_icon.png`,
+    imageUrl: `/mercenaries/${merc.template_id}_full.png`,
     color: '#ffb347',
     weaponType,
     weaponName: null,
@@ -429,10 +429,30 @@ export function getAttackRange(unit, mapData, skillRange = null, weaponOverride 
 // 스킬 사거리
 export function getSkillRange(skill) {
   if (!skill) return null; // null = 무기 기본 범위 사용
-  if (skill.type === 'heal') return 3;
+  if (skill.type === 'heal') return skill.skill_range || skill.range_val || 3;
   if (skill.type === 'buff') return 0;
+  // skill_range (스킬트리) / range_val (몬스터스킬) 우선
+  if (skill.skill_range) return skill.skill_range;
+  if (skill.range_val) return skill.range_val;
   if (skill.damage_multiplier >= 2.0) return 2;
   return 1;
+}
+
+// AoE 스킬의 영향 범위 타일 (대상 타일 중심)
+export function getAoeTiles(centerX, centerZ, radius, mapData) {
+  const tiles = [{ x: centerX, z: centerZ }];
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dz = -radius; dz <= radius; dz++) {
+      if (dx === 0 && dz === 0) continue;
+      if (Math.abs(dx) + Math.abs(dz) > radius) continue;
+      const nx = centerX + dx;
+      const nz = centerZ + dz;
+      if (nx < 0 || nx >= mapData.width || nz < 0 || nz >= mapData.height) continue;
+      const tile = getTileAt(mapData, nx, nz);
+      if (tile) tiles.push({ x: nx, z: nz });
+    }
+  }
+  return tiles;
 }
 
 // ========== 높이차 데미지 보정 ==========

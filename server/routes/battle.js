@@ -1330,4 +1330,75 @@ router.post('/session/retreat-failed', auth, async (req, res) => {
   }
 });
 
+// ========== 던전 크롤러 탐험 상태 저장 (별도 테이블) ==========
+router.post('/crawler/save', auth, async (req, res) => {
+  try {
+    const { crawlerState } = req.body;
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.status(404).json({ message: '캐릭터 없음' });
+    const cid = chars[0].id;
+    const dk = crawlerState?.dungeonKey || 'unknown';
+
+    await pool.query(
+      `INSERT INTO crawler_states (character_id, dungeon_key, state_json)
+       VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE dungeon_key = VALUES(dungeon_key), state_json = VALUES(state_json)`,
+      [cid, dk, JSON.stringify(crawlerState)]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Crawler save error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// 던전 크롤러 탐험 상태 로드
+router.get('/crawler/load', auth, async (req, res) => {
+  try {
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.json({ crawlerState: null });
+    const cid = chars[0].id;
+
+    const [rows] = await pool.query(
+      'SELECT state_json FROM crawler_states WHERE character_id = ?',
+      [cid]
+    );
+    if (rows.length === 0) return res.json({ crawlerState: null });
+
+    res.json({ crawlerState: JSON.parse(rows[0].state_json) });
+  } catch (err) {
+    console.error('Crawler load error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// 던전 크롤러 탐험 상태 삭제 (던전 클리어 또는 퇴각 시)
+router.delete('/crawler/clear', auth, async (req, res) => {
+  try {
+    const [chars] = await pool.query(
+      req.selectedCharId
+        ? 'SELECT id FROM characters WHERE id = ? AND user_id = ?'
+        : 'SELECT id FROM characters WHERE user_id = ? ORDER BY id LIMIT 1',
+      req.selectedCharId ? [req.selectedCharId, req.user.id] : [req.user.id]
+    );
+    if (chars.length === 0) return res.json({ success: true });
+    const cid = chars[0].id;
+
+    await pool.query('DELETE FROM crawler_states WHERE character_id = ?', [cid]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Crawler clear error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
 module.exports = router;

@@ -4,7 +4,7 @@ import { buildMapFromDungeon } from './mapData';
 import { generateTowerMap } from './towerMapGenerator';
 import {
   createPlayerUnit, createSummonUnit, createMercenaryUnit, createMonsterUnit,
-  getMovementRange, getAttackRange, getSkillRange,
+  getMovementRange, getAttackRange, getSkillRange, getAoeTiles,
   calcDamage, calcHeal, determineTurnOrder, aiDecide,
   checkBattleEnd, generateEnemies, getWeaponInfo, getTerrainEffect, getTileTurnEffect,
   getJointAttackAllies, calcJointDamage,
@@ -34,13 +34,13 @@ function getUnitPortrait(unit) {
   }
   if (unit.id.startsWith('summon_')) {
     const tid = unit.templateId || unit.summonId;
-    return tid ? `/summons/${tid}_icon.png` : null;
+    return tid ? `/summons_nobg/${tid}_full.png` : null;
   }
   if (unit.id.startsWith('merc_')) {
     const tid = unit.templateId || unit.mercId;
-    return tid ? `/mercenaries/${tid}_icon.png` : null;
+    return tid ? `/mercenaries/${tid}_full.png` : null;
   }
-  if (unit.monsterId) return `/monsters/${unit.monsterId}_icon.png`;
+  if (unit.monsterId) return `/monsters_nobg/${unit.monsterId}_icon.png`;
   return null;
 }
 
@@ -250,17 +250,18 @@ export default function SrpgBattle({
         };
         allUnits.push(createPlayerUnit(playerData, learnedSkills, map.playerSpawns[0], equippedWeapon, passiveBonuses));
 
-        // 진형에 배치된 유닛만 참전 (진형이 있는 경우)
+        // 진형에 배치된 유닛만 참전 (진형이 있는 경우, 타워전투 제외)
         let spawnIdx = 1;
         const formationUnitIds = new Set();
-        if (formationGrid) {
+        const useFormation = formationGrid && !use2DMap; // 타워전투에서는 진형 무시, 모든 동료 참전
+        if (useFormation) {
           formationGrid.forEach(row => row.forEach(cell => {
             if (cell && cell.unitId) formationUnitIds.add(cell.unitId);
           }));
         }
 
         // 소환수
-        const battleSummons = formationGrid
+        const battleSummons = useFormation
           ? freshSummons.filter(s => formationUnitIds.has(`summon_${s.id}`))
           : freshSummons;
         battleSummonIdsRef.current = battleSummons.map(s => s.id);
@@ -274,7 +275,7 @@ export default function SrpgBattle({
         }
 
         // 용병
-        const battleMercs = formationGrid
+        const battleMercs = useFormation
           ? freshMercenaries.filter(m => formationUnitIds.has(`merc_${m.id}`))
           : freshMercenaries;
         battleMercIdsRef.current = battleMercs.map(m => m.id);
@@ -688,15 +689,31 @@ export default function SrpgBattle({
         if (movedUnit && movedUnit.hp > 0 && targetUnit && targetUnit.hp > 0) {
           const skill = decision.skill;
           if (skill) playSkillCutIn(movedUnit, skill);
-          const result = calcDamage(movedUnit, targetUnit, skill, mapRef.current);
-          const dmg = result.damage;
+
+          // AoE 스킬: 대상 중심으로 범위 내 모든 적에게 피해
+          const isAoe = skill && skill.type === 'aoe';
+          const enemyTeam = movedUnit.team === 'player' ? 'enemy' : 'player';
+          let aiAoeTargets = [targetUnit];
+          if (isAoe && mapRef.current) {
+            const aoeRadius = 1;
+            const aoeTiles = getAoeTiles(targetUnit.x, targetUnit.z, aoeRadius, mapRef.current);
+            const found = unitsRef.current.filter(u => u.hp > 0 && u.team === enemyTeam && aoeTiles.some(t => t.x === u.x && t.z === u.z));
+            if (found.length > 0) aiAoeTargets = found;
+          }
+
+          const aiAoeResults = aiAoeTargets.map(tgt => ({
+            target: tgt,
+            result: calcDamage(movedUnit, tgt, skill, mapRef.current),
+          }));
+
           let lifeStealAmt = 0;
 
           setUnits(prev => {
             const updated = prev.map(u => {
-              if (u.id === decision.target.id) {
-                if (result.evaded) return u;
-                const newHp = Math.max(0, u.hp - dmg);
+              const hit = aiAoeResults.find(r => r.target.id === u.id);
+              if (hit) {
+                if (hit.result.evaded) return u;
+                const newHp = Math.max(0, u.hp - hit.result.damage);
                 return { ...u, hp: newHp };
               }
               if (u.id === movedUnit.id) {
@@ -706,7 +723,8 @@ export default function SrpgBattle({
                 if (skill) {
                   newMp -= (skill.mp_cost || 0);
                   cd[skill.id] = skill.cooldown || 0;
-                  if (!result.evaded && skill.heal_amount > 0) {
+                  const mainResult = aiAoeResults[0]?.result;
+                  if (mainResult && !mainResult.evaded && skill.heal_amount > 0) {
                     lifeStealAmt = Math.min(skill.heal_amount, u.maxHp - u.hp);
                     newHp = Math.min(u.maxHp, u.hp + skill.heal_amount);
                   }
@@ -722,8 +740,6 @@ export default function SrpgBattle({
             return updated;
           });
 
-          // 로그/이펙트는 setUnits 바깥에서
-          const target = unitsRef.current.find(u => u.id === decision.target.id);
           const skillName = skill ? `${skill.icon || '✨'}[${skill.name}]` : '공격';
 
           if (lifeStealAmt > 0) {
@@ -731,29 +747,38 @@ export default function SrpgBattle({
             addPopup(movedUnit.x, movedUnit.z, `+${lifeStealAmt}`, 'heal');
           }
 
-          if (result.evaded) {
-            addLog(`[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${decision.target.icon}${decision.target.name}이(가) 회피!`, 'system');
-            addPopup(decision.target.x, decision.target.z, 'MISS', 'system');
-          } else {
-            let extra = result.heightInfo.label ? ` (${result.heightInfo.label})` : '';
-            if (result.elementLabel) extra += ` [${result.elementLabel}]`;
-            addLog(
-              `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${decision.target.icon}${decision.target.name}에게 ${dmg} 데미지!${extra} (HP: ${target?.hp}/${target?.maxHp})`,
-              'damage'
-            );
-            addPopup(decision.target.x, decision.target.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
-            if (result.elementLabel) addPopup(decision.target.x, decision.target.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
-            if (result.isCrit) addLog(`치명타!`, 'damage');
-            if (movedUnit.team === 'player' && decision.target.team === 'enemy') {
-              trackContribution(movedUnit.id, dmg);
+          for (const { target: aoeTgt, result } of aiAoeResults) {
+            const tgtAfter = unitsRef.current.find(u => u.id === aoeTgt.id);
+            if (result.evaded) {
+              addLog(`[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${aoeTgt.icon}${aoeTgt.name}이(가) 회피!`, 'system');
+              addPopup(aoeTgt.x, aoeTgt.z, 'MISS', 'system');
+            } else {
+              let extra = result.heightInfo.label ? ` (${result.heightInfo.label})` : '';
+              if (result.elementLabel) extra += ` [${result.elementLabel}]`;
+              addLog(
+                `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${skillName}! ${aoeTgt.icon}${aoeTgt.name}에게 ${result.damage} 데미지!${extra} (HP: ${tgtAfter?.hp}/${tgtAfter?.maxHp})`,
+                'damage'
+              );
+              addPopup(aoeTgt.x, aoeTgt.z, result.isCrit ? `💥${result.damage}` : `-${result.damage}`, 'damage');
+              if (result.elementLabel) addPopup(aoeTgt.x, aoeTgt.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
+              if (result.isCrit) addLog(`치명타!`, 'damage');
+              if (movedUnit.team === 'player') trackContribution(movedUnit.id, result.damage);
+              const { effectType: fx, color: fxColor } = getAttackEffect(movedUnit, skill, result.isCrit);
+              addEffect(aoeTgt.x, aoeTgt.z, fx, fxColor);
+              if (result.isCrit && fx !== 'crit') addEffect(aoeTgt.x, aoeTgt.z, 'crit', '#ffdd00');
             }
-            const { effectType: fx, color: fxColor } = getAttackEffect(movedUnit, skill, result.isCrit);
-            addEffect(decision.target.x, decision.target.z, fx, fxColor);
-            if (result.isCrit && fx !== 'crit') addEffect(decision.target.x, decision.target.z, 'crit', '#ffdd00');
+          }
 
-            // AI 협공 처리 (대상이 살아있고 회피하지 않았을 때)
+          if (isAoe && aiAoeTargets.length > 1) {
+            const totalDmg = aiAoeResults.reduce((sum, r) => sum + (r.result.evaded ? 0 : r.result.damage), 0);
+            addLog(`  → 광역 공격! ${aiAoeTargets.length}명에게 총 ${totalDmg} 데미지!`, 'damage');
+          }
+
+          // 협공 처리 (단일 대상 공격시만, AoE 제외)
+          if (!isAoe) {
+            const mainResult = aiAoeResults[0]?.result;
             const tgtAfterAI = unitsRef.current.find(u => u.id === decision.target.id);
-            if (tgtAfterAI && tgtAfterAI.hp > 0 && !result.evaded) {
+            if (tgtAfterAI && tgtAfterAI.hp > 0 && mainResult && !mainResult.evaded) {
               const jointAllies = getJointAttackAllies(movedUnit, decision.target, unitsRef.current);
               if (jointAllies.length > 0) {
                 let totalJointDmg = 0;
@@ -785,10 +810,16 @@ export default function SrpgBattle({
               }
             }
           }
-          const tgtFinalAI = unitsRef.current.find(u => u.id === decision.target.id);
-          if (tgtFinalAI && tgtFinalAI.hp <= 0) {
-            addLog(`${decision.target.icon}${decision.target.name} 쓰러짐!`, 'system');
-            if (movedUnit.team === 'player') trackContribution(movedUnit.id, 0, true);
+
+          // 처치 확인
+          for (const { target: aoeTgt, result } of aiAoeResults) {
+            if (!result.evaded) {
+              const tgtFinalAI = unitsRef.current.find(u => u.id === aoeTgt.id);
+              if (tgtFinalAI && tgtFinalAI.hp <= 0) {
+                addLog(`${aoeTgt.icon}${aoeTgt.name} 쓰러짐!`, 'system');
+                if (movedUnit.team === 'player') trackContribution(movedUnit.id, 0, true);
+              }
+            }
           }
         }
       }
@@ -908,22 +939,40 @@ export default function SrpgBattle({
       if (targetUnit && targetUnit.team === 'enemy') {
         const skill = selectedSkill;
         if (skill) playSkillCutIn(activeUnit, skill);
-        const result = calcDamage(activeUnit, targetUnit, skill, mapRef.current);
-        const dmg = result.damage;
+
+        // AoE 스킬: 대상 타일 중심으로 범위 내 모든 적에게 피해
+        const isAoe = skill && skill.type === 'aoe';
+        let aoeTargets = [targetUnit];
+        if (isAoe && mapRef.current) {
+          const aoeRadius = 1; // AoE 영향 반경
+          const aoeTiles = getAoeTiles(tile.x, tile.z, aoeRadius, mapRef.current);
+          aoeTargets = units.filter(u => u.hp > 0 && u.team === 'enemy' && aoeTiles.some(t => t.x === u.x && t.z === u.z));
+          if (aoeTargets.length === 0) aoeTargets = [targetUnit];
+        }
+
+        // 각 대상에 대해 데미지 계산
+        const aoeResults = aoeTargets.map(tgt => ({
+          target: tgt,
+          result: calcDamage(activeUnit, tgt, skill, mapRef.current),
+        }));
+
         let lifeStealAmt = 0;
 
         setUnits(prev => {
           const updated = prev.map(u => {
-            if (u.id === targetUnit.id) {
-              if (result.evaded) return u;
-              const newHp = Math.max(0, u.hp - dmg);
+            // AoE 대상들에게 피해 적용
+            const hit = aoeResults.find(r => r.target.id === u.id);
+            if (hit) {
+              if (hit.result.evaded) return u;
+              const newHp = Math.max(0, u.hp - hit.result.damage);
               return { ...u, hp: newHp };
             }
             if (u.id === activeUnit.id) {
               let newMp = u.mp;
               let newHp = u.hp;
               if (skill) newMp -= skill.mp_cost;
-              if (!result.evaded && skill && skill.heal_amount > 0) {
+              const mainResult = aoeResults[0]?.result;
+              if (mainResult && !mainResult.evaded && skill && skill.heal_amount > 0) {
                 lifeStealAmt = Math.min(skill.heal_amount, u.maxHp - u.hp);
                 newHp = Math.min(u.maxHp, u.hp + skill.heal_amount);
               }
@@ -935,8 +984,6 @@ export default function SrpgBattle({
           return updated;
         });
 
-        // 로그/이펙트는 setUnits 바깥에서
-        const target = unitsRef.current.find(u => u.id === targetUnit.id);
         const skillName = skill ? `[${skill.name}]` : '공격';
 
         if (lifeStealAmt > 0) {
@@ -944,33 +991,45 @@ export default function SrpgBattle({
           addPopup(activeUnit.x, activeUnit.z, `+${lifeStealAmt}`, 'heal');
         }
 
-        if (result.evaded) {
-          addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${targetUnit.icon}${targetUnit.name}이(가) 회피!`, 'system');
-          addPopup(targetUnit.x, targetUnit.z, 'MISS', 'system');
-        } else {
-          let extra = '';
-          if (result.heightInfo.label) extra += ` ${result.heightInfo.label}`;
-          if (result.terrainDef !== 0) extra += ` 지형방어${result.terrainDef > 0 ? '+' : ''}${result.terrainDef}`;
-          if (result.elementLabel) extra += ` [${result.elementLabel}]`;
-          addLog(
-            `[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${targetUnit.icon}${targetUnit.name}에게 ${dmg} 데미지!${extra} (HP: ${target?.hp}/${target?.maxHp})`,
-            'normal'
-          );
-          addPopup(targetUnit.x, targetUnit.z, result.isCrit ? `💥${dmg}` : `-${dmg}`, 'damage');
-          if (result.elementLabel) addPopup(targetUnit.x, targetUnit.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
-          if (result.isCrit) addLog(`치명타!`, 'damage');
-          trackContribution(activeUnit.id, dmg);
-          const { effectType: fx, color: fxColor } = getAttackEffect(activeUnit, skill, result.isCrit);
-          addEffect(targetUnit.x, targetUnit.z, fx, fxColor);
-          if (result.isCrit && fx !== 'crit') addEffect(targetUnit.x, targetUnit.z, 'crit', '#ffdd00');
+        // 각 대상에 대해 로그/이펙트 출력
+        for (const { target: aoeTgt, result } of aoeResults) {
+          const tgtAfter = unitsRef.current.find(u => u.id === aoeTgt.id);
+          if (result.evaded) {
+            addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${aoeTgt.icon}${aoeTgt.name}이(가) 회피!`, 'system');
+            addPopup(aoeTgt.x, aoeTgt.z, 'MISS', 'system');
+          } else {
+            let extra = '';
+            if (result.heightInfo.label) extra += ` ${result.heightInfo.label}`;
+            if (result.terrainDef !== 0) extra += ` 지형방어${result.terrainDef > 0 ? '+' : ''}${result.terrainDef}`;
+            if (result.elementLabel) extra += ` [${result.elementLabel}]`;
+            addLog(
+              `[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 ${skillName}! ${aoeTgt.icon}${aoeTgt.name}에게 ${result.damage} 데미지!${extra} (HP: ${tgtAfter?.hp}/${tgtAfter?.maxHp})`,
+              'normal'
+            );
+            addPopup(aoeTgt.x, aoeTgt.z, result.isCrit ? `💥${result.damage}` : `-${result.damage}`, 'damage');
+            if (result.elementLabel) addPopup(aoeTgt.x, aoeTgt.z, result.elementLabel, result.elementMult > 1 ? 'element' : 'element-weak');
+            if (result.isCrit) addLog(`치명타!`, 'damage');
+            trackContribution(activeUnit.id, result.damage);
+            const { effectType: fx, color: fxColor } = getAttackEffect(activeUnit, skill, result.isCrit);
+            addEffect(aoeTgt.x, aoeTgt.z, fx, fxColor);
+            if (result.isCrit && fx !== 'crit') addEffect(aoeTgt.x, aoeTgt.z, 'crit', '#ffdd00');
+          }
+        }
 
-          // 협공 처리 (대상이 아직 살아있을 때)
+        if (isAoe && aoeTargets.length > 1) {
+          const totalDmg = aoeResults.reduce((sum, r) => sum + (r.result.evaded ? 0 : r.result.damage), 0);
+          addLog(`  → 광역 공격! ${aoeTargets.length}명에게 총 ${totalDmg} 데미지!`, 'damage');
+        }
+
+        // 협공 처리 (단일 대상 공격시만, AoE는 제외)
+        if (!isAoe) {
+          const mainResult = aoeResults[0]?.result;
           const tgtAfterMain = unitsRef.current.find(u => u.id === targetUnit.id);
-          if (tgtAfterMain && tgtAfterMain.hp > 0 && !result.evaded) {
+          if (tgtAfterMain && tgtAfterMain.hp > 0 && mainResult && !mainResult.evaded) {
             const jointAllies = getJointAttackAllies(activeUnit, targetUnit, unitsRef.current);
             if (jointAllies.length > 0) {
               let totalJointDmg = 0;
-              const jointUpdates = []; // {allyId, dmg}
+              const jointUpdates = [];
               for (const ally of jointAllies) {
                 const jDmg = calcJointDamage(ally, targetUnit, mapRef.current);
                 totalJointDmg += jDmg;
@@ -981,7 +1040,6 @@ export default function SrpgBattle({
                   if (u.id === targetUnit.id) {
                     return { ...u, hp: Math.max(0, u.hp - totalJointDmg) };
                   }
-                  // 협공 아군에게 attackAnim 설정 (모션용)
                   const ju = jointUpdates.find(j => j.allyId === u.id);
                   if (ju) return { ...u, attackAnim: { tx: targetUnit.x, tz: targetUnit.z } };
                   return u;
@@ -998,10 +1056,16 @@ export default function SrpgBattle({
               addLog(`  → 협공 총 추가 데미지: ${totalJointDmg}`, 'damage');
             }
           }
-          const tgtFinal = unitsRef.current.find(u => u.id === targetUnit.id);
-          if (tgtFinal && tgtFinal.hp <= 0) {
-            addLog(`${targetUnit.icon}${targetUnit.name} 처치!`, 'heal');
-            trackContribution(activeUnit.id, 0, true);
+        }
+
+        // 처치 확인
+        for (const { target: aoeTgt, result } of aoeResults) {
+          if (!result.evaded) {
+            const tgtFinal = unitsRef.current.find(u => u.id === aoeTgt.id);
+            if (tgtFinal && tgtFinal.hp <= 0) {
+              addLog(`${aoeTgt.icon}${aoeTgt.name} 처치!`, 'heal');
+              trackContribution(activeUnit.id, 0, true);
+            }
           }
         }
 
@@ -1279,10 +1343,10 @@ export default function SrpgBattle({
             <div className="elite-alert-icon">{eliteAlert.tier.icon}</div>
             <div className="elite-alert-img-wrap">
               <img
-                src={`/monsters/${eliteAlert.monsterId}_full.png`}
+                src={`/monsters_nobg/${eliteAlert.monsterId}_full.png`}
                 alt={eliteAlert.name}
                 className="elite-alert-img"
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={(e) => { e.target.src = `/monsters/${eliteAlert.monsterId}_full.png`; e.target.onerror = () => { e.target.style.display = 'none'; }; }}
               />
               <div className="elite-alert-aura" />
             </div>
@@ -1317,6 +1381,7 @@ export default function SrpgBattle({
             potions={potions}
             location={location}
             movingUnit={movingUnit}
+            dungeonTheme={use2DMap ? 'tower' : undefined}
           />
       </div>
 

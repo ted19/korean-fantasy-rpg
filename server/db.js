@@ -922,7 +922,7 @@ async function initialize() {
       ('킬러비',       ${dMap.forest}, '🐝', 35, 14, 1, 5, 15, 9, 10, ${cMap['곤충/벌레']}, 2, '치명적인 독침을 가진 벌'),
       ('전갈',         ${dMap.cave}, '🦂', 60, 16, 5, 3, 30, 20, 8, ${cMap['곤충/벌레']}, 3, '꼬리의 맹독이 위험한 전갈'),
       ('여왕 개미',    ${dMap.swamp}, '🐜', 100, 12, 10, 2, 45, 35, 6, ${cMap['곤충/벌레']}, 4, '개미 군단의 여왕'),
-      ('장수풍뎅이',   ${dMap.forest}, '🪲', 80, 13, 8, 2, 35, 25, 8, ${cMap['곤충/벌레']}, 3, '단단한 갑각의 장수풍뎅이'),
+      ('코뿔소',       ${dMap.forest}, '🦏', 120, 18, 12, 2, 50, 35, 6, ${cMap['곤충/벌레']}, 4, '거대한 뿔로 돌진하는 코뿔소'),
       ('독 거미 여왕', ${dMap.swamp}, '🕷️', 130, 22, 5, 3, 70, 55, 5, ${cMap['곤충/벌레']}, 5, '독거미 무리의 우두머리'),
       ('사마귀 전사',  ${dMap.forest}, '🦗', 70, 18, 3, 4, 40, 28, 8, ${cMap['곤충/벌레']}, 3, '낫 같은 팔을 가진 사마귀')
     `);
@@ -1923,7 +1923,7 @@ async function initialize() {
   // 몬스터별 AI 타입 + MP 설정 (항상 실행 - 누락 방지)
   const aiTypeUpdates = [
     "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('들쥐','야생 늑대','멧돼지','독사','흑곰','설표','지하 도마뱀','삼두견','백호','산토끼')",
-    "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('독거미','거대 지네','독나방','킬러비','전갈','사마귀 전사','장수풍뎅이')",
+    "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('독거미','거대 지네','독나방','킬러비','전갈','사마귀 전사','코뿔소')",
     "UPDATE monsters SET ai_type='defensive' WHERE name IN ('골렘','마법 갑옷','가디언','트렌트','대지의 정령','돌 도깨비','불가사리','가고일','마나 골렘')",
     "UPDATE monsters SET ai_type='ranged' WHERE name IN ('원혼','흑마법사','네크로맨서','대마법사','불의 정령','번개 정령','빛의 정령','어둠의 정령','서큐버스','불 도깨비')",
     "UPDATE monsters SET ai_type='support' WHERE name IN ('여왕 개미','물의 정령','유니콘','처녀귀신','독 거미 여왕','연못 도깨비','인어 전사','해마 기사')",
@@ -2177,7 +2177,7 @@ async function initialize() {
     [['어둠의 수호자'], ['암흑 구체','번개 강타','대치유','포효']],
     [['거대 지네'], ['물기','독 공격']],
     [['독나방'], ['독안개','독 공격']],
-    [['장수풍뎅이'], ['돌진','방어 태세']],
+    [['코뿔소'], ['돌진','방어 태세']],
     [['들쥐','산토끼'], ['물기']],
     [['야생 늑대','흑곰','설표','회색 곰','삼두견'], ['물기','할퀴기','포효']],
     [['멧돼지'], ['돌진']],
@@ -6082,9 +6082,22 @@ async function initialize() {
     CREATE TABLE IF NOT EXISTS battle_sessions (
       id INT AUTO_INCREMENT PRIMARY KEY,
       character_id INT NOT NULL UNIQUE,
-      battle_type ENUM('srpg','stage','tower') NOT NULL,
-      context_json TEXT NOT NULL,
+      battle_type ENUM('srpg','stage','tower','crawler') NOT NULL,
+      context_json MEDIUMTEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    )
+  `);
+
+  // 던전 크롤러 탐험 상태 (전투 세션과 별도 저장)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crawler_states (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      character_id INT NOT NULL UNIQUE,
+      dungeon_key VARCHAR(50) NOT NULL,
+      state_json MEDIUMTEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
     )
   `);
