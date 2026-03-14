@@ -367,6 +367,9 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
     setManagedSkills(prev => prev.map(s => s.id === nodeId ? { ...s, auto_priority: priority } : s));
     try {
       await api.put('/skill/auto-priority', { node_id: nodeId, priority });
+      // 전투용 learnedSkills도 즉시 갱신
+      const res = await api.get('/skill/active-skills');
+      if (onSkillsUpdate) onSkillsUpdate(res.data.skills || []);
     } catch {
       if (onLog) onLog('우선도 변경 실패');
     }
@@ -502,7 +505,10 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                               title={p.label}
                               onClick={async () => {
                                 setSummonSkillList(prev => prev.map(s => s.id === sk.id ? { ...s, auto_priority: p.value } : s));
-                                try { await api.put(`/summon/${selectedSummon.id}/skill-priority`, { skill_id: sk.id, priority: p.value }); }
+                                try {
+                                  await api.put(`/summon/${selectedSummon.id}/skill-priority`, { skill_id: sk.id, priority: p.value });
+                                  loadMySummons(); if (onSummonsChanged) onSummonsChanged();
+                                }
                                 catch { if (onLog) onLog('우선도 변경 실패'); }
                               }}
                             >{p.icon}</button>
@@ -580,7 +586,10 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                               title={p.label}
                               onClick={async () => {
                                 setMercSkillList(prev => prev.map(s => s.id === sk.id ? { ...s, auto_priority: p.value } : s));
-                                try { await api.put(`/mercenary/${selectedMerc.id}/skill-priority`, { skill_id: sk.id, priority: p.value }); }
+                                try {
+                                  await api.put(`/mercenary/${selectedMerc.id}/skill-priority`, { skill_id: sk.id, priority: p.value });
+                                  if (onMercenariesChanged) onMercenariesChanged();
+                                }
                                 catch { if (onLog) onLog('우선도 변경 실패'); }
                               }}
                             >{p.icon}</button>

@@ -10,6 +10,11 @@
 
 const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
 
+const ELEMENT_AURA = {
+  fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: '',
+  light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
+};
+
 export function createCardPlayerUnit(char, skills, passiveBonuses) {
   const classInfo = getClassInfo(char.class_type);
   const classKey = CLASS_IMAGE_MAP[char.class_type] || 'monk';
@@ -59,7 +64,7 @@ export function createCardPlayerUnit(char, skills, passiveBonuses) {
     gridRow: 0,
     gridCol: 0,
     element: char.element || 'neutral',
-    portraitEffect: null,
+    portraitEffect: ELEMENT_AURA[char.element] || '',
   };
 }
 
@@ -100,6 +105,7 @@ export function createCardSummonUnit(summon) {
     gridRow: 0,
     gridCol: 0,
     element: summon.element || 'neutral',
+    portraitEffect: ELEMENT_AURA[summon.element] || '',
   };
 }
 
@@ -140,7 +146,7 @@ export function createCardMercenaryUnit(merc) {
     gridRow: 0,
     gridCol: 0,
     element: merc.element || 'neutral',
-    portraitEffect: null,
+    portraitEffect: ELEMENT_AURA[merc.element] || '',
   };
 }
 
@@ -181,6 +187,7 @@ export function createCardMonsterUnit(monster, index) {
     gridRow: 0,
     gridCol: 0,
     element: monster.element || 'neutral',
+    portraitEffect: ELEMENT_AURA[monster.element] || '',
     eliteTier: monster.eliteTier || null,
   };
 }
