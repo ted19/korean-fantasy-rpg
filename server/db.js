@@ -209,7 +209,10 @@ async function initialize() {
       ('용린 금강장', 'weapon', 'weapon', '2h', '승려 전용. 범위3 직선 창.', 900, 450, 30, 0, 18, 10, 5, '승려'),
       ('청동 검', 'weapon', 'weapon', '1h', '기본적인 검. 범위1 마름모.', 100, 50, 0, 0, 8, 0, 1, NULL),
       ('강철 검', 'weapon', 'weapon', '1h', '단단한 강철 검. 범위1 마름모.', 350, 175, 0, 0, 15, 0, 3, NULL),
-      ('용살 검', 'weapon', 'weapon', '1h', '용을 베는 전설의 검. 범위1 마름모.', 1100, 550, 0, 0, 24, 0, 6, NULL)
+      ('용살 검', 'weapon', 'weapon', '1h', '용을 베는 전설의 검. 범위1 마름모.', 1100, 550, 0, 0, 24, 0, 6, NULL),
+      ('사혼의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 영혼을 거두는 낫.', 50, 25, 0, 5, 6, 0, 1, '저승사자'),
+      ('명계의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 명계의 기운이 깃든 낫.', 200, 100, 0, 15, 13, 0, 3, '저승사자'),
+      ('황천의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 황천의 어둠이 깃든 대낫.', 800, 400, 0, 30, 26, 0, 6, '저승사자')
     `);
   } else {
     // 기존 DB에 slot/weapon_hand 값 업데이트
@@ -311,14 +314,26 @@ async function initialize() {
     ('용의 둥지 도전', '용의 둥지 스테이지를 3개 클리어하세요.', 'main', 'clear_dungeon', 'dragon', 3, 1500, 1200, NULL, 0, 7, 22, 5, 3, '🐉'),
     ('전설의 모험가', '레벨 15를 달성하세요.', 'main', 'level', '15', 1, 2000, 1500, NULL, 0, 5, 23, 5, 4, '👑'),
 
-    -- ========== 일일 퀘스트 ==========
+    -- ========== 일일 퀘스트 (초급 Lv1+) ==========
     ('일일 사냥', '아무 던전에서 몬스터 10마리를 처치하세요.', 'daily', 'hunt_location', 'any', 10, 100, 80, NULL, 0, 1, NULL, 0, 1, '⚔️'),
     ('스테이지 도전', '스테이지 전투를 2회 완료하세요.', 'daily', 'clear_stage', 'any', 2, 120, 100, NULL, 0, 1, NULL, 0, 2, '🗺️'),
     ('던전 탐험', '던전 스테이지를 2회 클리어하세요.', 'daily', 'clear_dungeon', 'any', 2, 120, 100, NULL, 0, 1, NULL, 0, 3, '🏰'),
-    ('정예 사냥꾼', '아무 던전에서 몬스터 20마리를 처치하세요.', 'daily', 'hunt_location', 'any', 20, 200, 150, NULL, 0, 3, NULL, 0, 4, '🎯'),
-    ('소재 수집가', '재료를 5개 획득하세요.', 'daily', 'collect_material', 'any', 5, 80, 120, NULL, 0, 1, NULL, 0, 5, '🧪'),
+    ('소재 수집가', '재료를 5개 획득하세요.', 'daily', 'collect_material', 'any', 5, 80, 120, NULL, 0, 1, NULL, 0, 4, '🧪'),
+    -- 일일 퀘스트 (중급 Lv5+)
+    ('정예 사냥꾼', '아무 던전에서 몬스터 20마리를 처치하세요.', 'daily', 'hunt_location', 'any', 20, 300, 200, NULL, 0, 5, NULL, 0, 5, '🎯'),
+    ('던전 탐험가', '던전 스테이지를 4회 클리어하세요.', 'daily', 'clear_dungeon', 'any', 4, 350, 250, NULL, 0, 5, NULL, 0, 6, '🗝️'),
+    -- 일일 퀘스트 (상급 Lv10+)
+    ('숙련 전사', '몬스터 35마리를 처치하세요.', 'daily', 'hunt_location', 'any', 35, 600, 400, NULL, 0, 10, NULL, 0, 7, '🗡️'),
+    ('스테이지 정복', '스테이지 전투를 5회 완료하세요.', 'daily', 'clear_stage', 'any', 5, 500, 350, NULL, 0, 10, NULL, 0, 8, '🏴'),
+    ('소재 장인', '재료를 12개 획득하세요.', 'daily', 'collect_material', 'any', 12, 400, 500, NULL, 0, 10, NULL, 0, 9, '⚗️'),
+    -- 일일 퀘스트 (고급 Lv20+)
+    ('대량 학살자', '몬스터 50마리를 처치하세요.', 'daily', 'hunt_location', 'any', 50, 1200, 800, NULL, 0, 20, NULL, 0, 10, '💀'),
+    ('던전 마니아', '던전 스테이지를 6회 클리어하세요.', 'daily', 'clear_dungeon', 'any', 6, 1000, 700, NULL, 0, 20, NULL, 0, 11, '🔥'),
+    -- 일일 퀘스트 (최상급 Lv35+)
+    ('전장의 지배자', '몬스터 80마리를 처치하세요.', 'daily', 'hunt_location', 'any', 80, 2500, 1500, NULL, 0, 35, NULL, 0, 12, '👑'),
+    ('완벽한 하루', '스테이지 8회 + 던전 4회를 클리어하세요.', 'daily', 'clear_stage', 'any', 8, 2000, 1200, NULL, 0, 35, NULL, 0, 13, '✨'),
 
-    -- ========== 현상금 의뢰 (Bounty) ==========
+    -- ========== 현상금 의뢰 (Bounty) - 초반 ==========
     ('들쥐 퇴치 의뢰', '들쥐를 10마리 처치하세요.', 'bounty', 'hunt', '들쥐', 10, 120, 80, NULL, 0, 1, NULL, 0, 1, '🐀'),
     ('야생 늑대 현상금', '야생 늑대를 8마리 처치하세요.', 'bounty', 'hunt', '야생 늑대', 8, 180, 120, NULL, 0, 1, NULL, 0, 2, '🐺'),
     ('독거미 구제', '독거미를 10마리 처치하세요.', 'bounty', 'hunt', '독거미', 10, 200, 150, 13, 2, 1, NULL, 0, 3, '🕷️'),
@@ -330,18 +345,45 @@ async function initialize() {
     ('사원 정화 의뢰', '폐허 사원에서 몬스터 10마리를 처치하세요.', 'bounty', 'hunt_location', 'temple', 10, 500, 400, NULL, 0, 4, NULL, 0, 9, '🏛️'),
     ('원혼 퇴마 의뢰', '원혼을 6마리 처치하세요.', 'bounty', 'hunt', '원혼', 6, 500, 400, 15, 2, 4, NULL, 0, 10, '👻'),
     ('어둠의 수호자 현상금', '어둠의 수호자를 3마리 처치하세요.', 'bounty', 'hunt', '어둠의 수호자', 3, 800, 600, NULL, 0, 5, NULL, 0, 11, '💀'),
+    -- 현상금 의뢰 (중반 Lv7+)
+    ('산악 정령 토벌', '영혼의 산에서 몬스터 15마리를 처치하세요.', 'bounty', 'hunt_location', 'mountain', 15, 700, 500, NULL, 0, 7, NULL, 0, 12, '🏔️'),
+    ('해저 탐사 의뢰', '해저 유적에서 몬스터 12마리를 처치하세요.', 'bounty', 'hunt_location', 'ocean', 12, 800, 600, NULL, 0, 8, NULL, 0, 13, '🌊'),
+    ('정령 숲 소탕', '정령의 숲에서 몬스터 15마리를 처치하세요.', 'bounty', 'hunt_location', 'spirit_forest', 15, 900, 700, NULL, 0, 10, NULL, 0, 14, '🧚'),
+    ('마계 척후 의뢰', '마계 균열에서 몬스터 10마리를 처치하세요.', 'bounty', 'hunt_location', 'demon', 10, 1200, 900, NULL, 0, 15, NULL, 0, 15, '😈'),
+    ('용의 비늘 수집', '용의 둥지에서 몬스터 8마리를 처치하세요.', 'bounty', 'hunt_location', 'dragon', 8, 1500, 1200, NULL, 0, 18, NULL, 0, 16, '🐉'),
+    -- 현상금 의뢰 (후반 Lv10+)
+    ('슬라임 동굴 완전정복', '슬라임 동굴을 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'slime_cave', 10, 600, 500, NULL, 0, 5, NULL, 0, 17, '🟢'),
+    ('도깨비 마을 완전정복', '도깨비 마을을 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'goblin', 10, 900, 700, NULL, 0, 8, NULL, 0, 18, '👺'),
+    ('사원 완전정복', '폐허 사원을 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'temple', 10, 1500, 1100, NULL, 0, 12, NULL, 0, 19, '🏛️'),
+    ('용의 둥지 완전정복', '용의 둥지를 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'dragon', 10, 2500, 2000, NULL, 0, 18, NULL, 0, 20, '🐉'),
 
-    -- ========== 업적 (Achievement) ==========
+    -- ========== 업적 (Achievement) - 킬 ==========
     ('첫 발걸음', '첫 번째 전투에서 승리하세요.', 'achievement', 'hunt_location', 'any', 1, 50, 30, NULL, 0, 1, NULL, 0, 1, '🏅'),
     ('10킬 달성', '몬스터를 총 10마리 처치하세요.', 'achievement', 'hunt_location', 'any', 10, 100, 80, NULL, 0, 1, NULL, 0, 2, '🎖️'),
     ('50킬 달성', '몬스터를 총 50마리 처치하세요.', 'achievement', 'hunt_location', 'any', 50, 300, 200, NULL, 0, 1, NULL, 0, 3, '🏆'),
     ('100킬 달성', '몬스터를 총 100마리 처치하세요.', 'achievement', 'hunt_location', 'any', 100, 500, 400, NULL, 0, 1, NULL, 0, 4, '💎'),
     ('300킬 달성', '몬스터를 총 300마리 처치하세요.', 'achievement', 'hunt_location', 'any', 300, 1000, 800, NULL, 0, 1, NULL, 0, 5, '🌟'),
-    ('던전 마스터', '던전 스테이지를 총 30개 클리어하세요.', 'achievement', 'clear_dungeon', 'any', 30, 500, 400, NULL, 0, 1, NULL, 0, 6, '🏰'),
-    ('스테이지 정복자', '스테이지를 총 30개 클리어하세요.', 'achievement', 'clear_stage', 'any', 30, 500, 400, NULL, 0, 1, NULL, 0, 7, '🗺️'),
-    ('레벨 10 달성', '레벨 10에 도달하세요.', 'achievement', 'level', '10', 1, 500, 300, NULL, 0, 1, NULL, 0, 8, '⭐'),
-    ('레벨 20 달성', '레벨 20에 도달하세요.', 'achievement', 'level', '20', 1, 1000, 600, NULL, 0, 1, NULL, 0, 9, '🌟'),
-    ('소재 수집가', '재료를 총 50개 수집하세요.', 'achievement', 'collect_material', 'any', 50, 300, 250, NULL, 0, 1, NULL, 0, 10, '🧪')
+    ('500킬 달성', '몬스터를 총 500마리 처치하세요.', 'achievement', 'hunt_location', 'any', 500, 2000, 1500, NULL, 0, 1, NULL, 0, 6, '⚡'),
+    ('1000킬 달성', '몬스터를 총 1000마리 처치하세요.', 'achievement', 'hunt_location', 'any', 1000, 5000, 3000, NULL, 0, 1, NULL, 0, 7, '🔱'),
+    ('전설의 사냥꾼', '몬스터를 총 3000마리 처치하세요.', 'achievement', 'hunt_location', 'any', 3000, 10000, 8000, NULL, 0, 1, NULL, 0, 8, '👑'),
+    -- 업적 - 던전/스테이지
+    ('던전 마스터', '던전 스테이지를 총 30개 클리어하세요.', 'achievement', 'clear_dungeon', 'any', 30, 500, 400, NULL, 0, 1, NULL, 0, 10, '🏰'),
+    ('던전 정복자', '던전 스테이지를 총 100개 클리어하세요.', 'achievement', 'clear_dungeon', 'any', 100, 2000, 1500, NULL, 0, 1, NULL, 0, 11, '🔥'),
+    ('던전의 왕', '던전 스테이지를 총 300개 클리어하세요.', 'achievement', 'clear_dungeon', 'any', 300, 5000, 4000, NULL, 0, 1, NULL, 0, 12, '👑'),
+    ('스테이지 정복자', '스테이지를 총 30개 클리어하세요.', 'achievement', 'clear_stage', 'any', 30, 500, 400, NULL, 0, 1, NULL, 0, 13, '🗺️'),
+    ('스테이지 마스터', '스테이지를 총 100개 클리어하세요.', 'achievement', 'clear_stage', 'any', 100, 2000, 1500, NULL, 0, 1, NULL, 0, 14, '🗺️'),
+    ('역사의 정복자', '스테이지를 총 300개 클리어하세요.', 'achievement', 'clear_stage', 'any', 300, 5000, 4000, NULL, 0, 1, NULL, 0, 15, '🗺️'),
+    -- 업적 - 레벨
+    ('레벨 10 달성', '레벨 10에 도달하세요.', 'achievement', 'level', '10', 1, 500, 300, NULL, 0, 1, NULL, 0, 20, '⭐'),
+    ('레벨 20 달성', '레벨 20에 도달하세요.', 'achievement', 'level', '20', 1, 1000, 600, NULL, 0, 1, NULL, 0, 21, '🌟'),
+    ('레벨 30 달성', '레벨 30에 도달하세요.', 'achievement', 'level', '30', 1, 2000, 1200, NULL, 0, 1, NULL, 0, 22, '💫'),
+    ('레벨 50 달성', '레벨 50에 도달하세요.', 'achievement', 'level', '50', 1, 5000, 3000, NULL, 0, 1, NULL, 0, 23, '🌠'),
+    ('레벨 70 달성', '레벨 70에 도달하세요.', 'achievement', 'level', '70', 1, 8000, 5000, NULL, 0, 1, NULL, 0, 24, '☀️'),
+    ('레벨 100 달성', '최고 레벨에 도달하세요.', 'achievement', 'level', '100', 1, 15000, 10000, NULL, 0, 1, NULL, 0, 25, '👑'),
+    -- 업적 - 소재
+    ('소재 수집가', '재료를 총 50개 수집하세요.', 'achievement', 'collect_material', 'any', 50, 300, 250, NULL, 0, 1, NULL, 0, 30, '🧪'),
+    ('소재 장인', '재료를 총 200개 수집하세요.', 'achievement', 'collect_material', 'any', 200, 1000, 800, NULL, 0, 1, NULL, 0, 31, '⚗️'),
+    ('소재 대가', '재료를 총 500개 수집하세요.', 'achievement', 'collect_material', 'any', 500, 3000, 2000, NULL, 0, 1, NULL, 0, 32, '🔮')
   `);
   } // end if (!questsExist)
 
@@ -369,6 +411,46 @@ async function initialize() {
       UNIQUE KEY unique_char_daily (character_id)
     )
   `);
+
+  // 기존 일일 '정예 사냥꾼' 보상 상향 (Lv3→Lv5, EXP 200→300, Gold 150→200)
+  await pool.query("UPDATE quests SET required_level = 5, reward_exp = 300, reward_gold = 200 WHERE title = '정예 사냥꾼' AND category = 'daily'").catch(() => {});
+
+  // 기존 DB용 새 퀘스트 일괄 INSERT (title+category 중복 체크)
+  const [existQ] = await pool.query("SELECT title FROM quests WHERE title = '던전 탐험가' AND category = 'daily'");
+  if (existQ.length === 0) {
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('던전 탐험가', '던전 스테이지를 4회 클리어하세요.', 'daily', 'clear_dungeon', 'any', 4, 350, 250, NULL, 0, 5, NULL, 0, 6, '🗝️'),
+    ('숙련 전사', '몬스터 35마리를 처치하세요.', 'daily', 'hunt_location', 'any', 35, 600, 400, NULL, 0, 10, NULL, 0, 7, '🗡️'),
+    ('스테이지 정복', '스테이지 전투를 5회 완료하세요.', 'daily', 'clear_stage', 'any', 5, 500, 350, NULL, 0, 10, NULL, 0, 8, '🏴'),
+    ('소재 장인', '재료를 12개 획득하세요.', 'daily', 'collect_material', 'any', 12, 400, 500, NULL, 0, 10, NULL, 0, 9, '⚗️'),
+    ('대량 학살자', '몬스터 50마리를 처치하세요.', 'daily', 'hunt_location', 'any', 50, 1200, 800, NULL, 0, 20, NULL, 0, 10, '💀'),
+    ('던전 마니아', '던전 스테이지를 6회 클리어하세요.', 'daily', 'clear_dungeon', 'any', 6, 1000, 700, NULL, 0, 20, NULL, 0, 11, '🔥'),
+    ('전장의 지배자', '몬스터 80마리를 처치하세요.', 'daily', 'hunt_location', 'any', 80, 2500, 1500, NULL, 0, 35, NULL, 0, 12, '👑'),
+    ('완벽한 하루', '스테이지 8회 + 던전 4회를 클리어하세요.', 'daily', 'clear_stage', 'any', 8, 2000, 1200, NULL, 0, 35, NULL, 0, 13, '✨'),
+    ('산악 정령 토벌', '영혼의 산에서 몬스터 15마리를 처치하세요.', 'bounty', 'hunt_location', 'mountain', 15, 700, 500, NULL, 0, 7, NULL, 0, 12, '🏔️'),
+    ('해저 탐사 의뢰', '해저 유적에서 몬스터 12마리를 처치하세요.', 'bounty', 'hunt_location', 'ocean', 12, 800, 600, NULL, 0, 8, NULL, 0, 13, '🌊'),
+    ('정령 숲 소탕', '정령의 숲에서 몬스터 15마리를 처치하세요.', 'bounty', 'hunt_location', 'spirit_forest', 15, 900, 700, NULL, 0, 10, NULL, 0, 14, '🧚'),
+    ('마계 척후 의뢰', '마계 균열에서 몬스터 10마리를 처치하세요.', 'bounty', 'hunt_location', 'demon', 10, 1200, 900, NULL, 0, 15, NULL, 0, 15, '😈'),
+    ('용의 비늘 수집', '용의 둥지에서 몬스터 8마리를 처치하세요.', 'bounty', 'hunt_location', 'dragon', 8, 1500, 1200, NULL, 0, 18, NULL, 0, 16, '🐉'),
+    ('슬라임 동굴 완전정복', '슬라임 동굴을 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'slime_cave', 10, 600, 500, NULL, 0, 5, NULL, 0, 17, '🟢'),
+    ('도깨비 마을 완전정복', '도깨비 마을을 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'goblin', 10, 900, 700, NULL, 0, 8, NULL, 0, 18, '👺'),
+    ('사원 완전정복', '폐허 사원을 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'temple', 10, 1500, 1100, NULL, 0, 12, NULL, 0, 19, '🏛️'),
+    ('용의 둥지 완전정복', '용의 둥지를 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'dragon', 10, 2500, 2000, NULL, 0, 18, NULL, 0, 20, '🐉'),
+    ('500킬 달성', '몬스터를 총 500마리 처치하세요.', 'achievement', 'hunt_location', 'any', 500, 2000, 1500, NULL, 0, 1, NULL, 0, 6, '⚡'),
+    ('1000킬 달성', '몬스터를 총 1000마리 처치하세요.', 'achievement', 'hunt_location', 'any', 1000, 5000, 3000, NULL, 0, 1, NULL, 0, 7, '🔱'),
+    ('전설의 사냥꾼', '몬스터를 총 3000마리 처치하세요.', 'achievement', 'hunt_location', 'any', 3000, 10000, 8000, NULL, 0, 1, NULL, 0, 8, '👑'),
+    ('던전 정복자', '던전 스테이지를 총 100개 클리어하세요.', 'achievement', 'clear_dungeon', 'any', 100, 2000, 1500, NULL, 0, 1, NULL, 0, 11, '🔥'),
+    ('던전의 왕', '던전 스테이지를 총 300개 클리어하세요.', 'achievement', 'clear_dungeon', 'any', 300, 5000, 4000, NULL, 0, 1, NULL, 0, 12, '👑'),
+    ('스테이지 마스터', '스테이지를 총 100개 클리어하세요.', 'achievement', 'clear_stage', 'any', 100, 2000, 1500, NULL, 0, 1, NULL, 0, 14, '🗺️'),
+    ('역사의 정복자', '스테이지를 총 300개 클리어하세요.', 'achievement', 'clear_stage', 'any', 300, 5000, 4000, NULL, 0, 1, NULL, 0, 15, '🗺️'),
+    ('레벨 30 달성', '레벨 30에 도달하세요.', 'achievement', 'level', '30', 1, 2000, 1200, NULL, 0, 1, NULL, 0, 22, '💫'),
+    ('레벨 50 달성', '레벨 50에 도달하세요.', 'achievement', 'level', '50', 1, 5000, 3000, NULL, 0, 1, NULL, 0, 23, '🌠'),
+    ('레벨 70 달성', '레벨 70에 도달하세요.', 'achievement', 'level', '70', 1, 8000, 5000, NULL, 0, 1, NULL, 0, 24, '☀️'),
+    ('레벨 100 달성', '최고 레벨에 도달하세요.', 'achievement', 'level', '100', 1, 15000, 10000, NULL, 0, 1, NULL, 0, 25, '👑'),
+    ('소재 장인', '재료를 총 200개 수집하세요.', 'achievement', 'collect_material', 'any', 200, 1000, 800, NULL, 0, 1, NULL, 0, 31, '⚗️'),
+    ('소재 대가', '재료를 총 500개 수집하세요.', 'achievement', 'collect_material', 'any', 500, 3000, 2000, NULL, 0, 1, NULL, 0, 32, '🔮')
+  `).catch(() => {});
+  } // end quest duplicate guard
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS skills (
@@ -484,7 +566,7 @@ async function initialize() {
       summon_type VARCHAR(20) DEFAULT NULL,
       template_id INT DEFAULT NULL,
       description VARCHAR(200) NOT NULL,
-      type ENUM('attack', 'heal', 'buff') NOT NULL,
+      type ENUM('attack', 'heal', 'buff', 'debuff', 'aoe') NOT NULL,
       mp_cost INT NOT NULL DEFAULT 0,
       damage_multiplier FLOAT DEFAULT 1.0,
       heal_amount INT DEFAULT 0,
@@ -496,17 +578,21 @@ async function initialize() {
       is_common TINYINT(1) DEFAULT 0
     )
   `);
+  // ENUM 확장 (기존 DB 호환)
+  await pool.query("ALTER TABLE summon_skills MODIFY COLUMN type ENUM('attack', 'heal', 'buff', 'debuff', 'aoe') NOT NULL").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS summon_learned_skills (
       id INT AUTO_INCREMENT PRIMARY KEY,
       summon_id INT NOT NULL,
       skill_id INT NOT NULL,
+      auto_priority INT NOT NULL DEFAULT 100,
       FOREIGN KEY (summon_id) REFERENCES character_summons(id) ON DELETE CASCADE,
       FOREIGN KEY (skill_id) REFERENCES summon_skills(id),
       UNIQUE KEY unique_summon_skill (summon_id, skill_id)
     )
   `);
+  try { await pool.query('ALTER TABLE summon_learned_skills ADD COLUMN auto_priority INT NOT NULL DEFAULT 100'); } catch(e) { if (!e.message.includes('Duplicate column')) throw e; }
 
   const [existingSummonSkills] = await pool.query('SELECT COUNT(*) as cnt FROM summon_skills');
   if (existingSummonSkills[0].cnt === 0) {
@@ -537,6 +623,55 @@ async function initialize() {
       ('독거미 맹독', NULL, 7, '치명적인 맹독을 뿜어 적을 공격한다.', 'attack', 16, 2.5, 0, NULL, 0, 0, 3, 1, 0),
       ('리치의 저주', NULL, 12, '강력한 저주를 걸어 적에게 막대한 피해를 입힌다.', 'attack', 30, 5.0, 0, NULL, 0, 0, 5, 3, 0)
     `);
+  }
+
+  // 소환수 스킬 보충 (디버프/AoE) - 중복 방지
+  {
+    const summonDebuffSkills = [
+      ['약화의 기운', null, null, '적의 방어력을 약화시키는 기운을 내뿜는다.', 'debuff', 10, 0, 0, 'defense', -5, 3, 2, 2, 1],
+      ['원한의 저주', '귀신', null, '원한으로 적의 공격력을 저주한다.', 'debuff', 12, 0, 0, 'attack', -6, 3, 3, 2, 0],
+      ['독의 폭발', '몬스터', null, '독기를 터뜨려 주변 적을 공격한다.', 'aoe', 18, 2.0, 0, null, 0, 0, 3, 2, 0],
+      ['포식의 포효', '몬스터', null, '포효로 적의 전의를 꺾는다.', 'debuff', 10, 0, 0, 'attack', -5, 3, 2, 2, 0],
+      ['원소 흡수', '정령', null, '적의 원소를 흡수하여 방어를 약화시킨다.', 'debuff', 14, 0, 0, 'defense', -7, 3, 3, 2, 0],
+      ['원소 폭풍', '정령', null, '원소의 폭풍으로 주변 적을 공격한다.', 'aoe', 20, 2.5, 0, null, 0, 0, 4, 2, 0],
+      ['죽음의 저주', '언데드', null, '죽음의 기운으로 적의 공격력을 저주한다.', 'debuff', 15, 0, 0, 'attack', -8, 3, 4, 3, 0],
+      ['해골 폭발', '언데드', null, '해골을 폭발시켜 주변 적을 공격한다.', 'aoe', 16, 2.3, 0, null, 0, 0, 3, 2, 0],
+    ];
+    for (const [name, summonType, templateId, desc, type, mpCost, dmgMul, healAmt, buffStat, buffVal, buffDur, reqLv, cd, isCommon] of summonDebuffSkills) {
+      const [existing] = await pool.query(
+        'SELECT id FROM summon_skills WHERE name = ? AND (summon_type <=> ?)',
+        [name, summonType]
+      );
+      if (existing.length === 0) {
+        await pool.query(
+          `INSERT INTO summon_skills (name, summon_type, template_id, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [name, summonType, templateId, desc, type, mpCost, dmgMul, healAmt, buffStat, buffVal, buffDur, reqLv, cd, isCommon]
+        ).catch(() => {});
+      }
+    }
+  }
+
+  // 중복 소환수 스킬 정리
+  {
+    const [dupes] = await pool.query(
+      'SELECT name, summon_type, MIN(id) as keep_id, COUNT(*) as cnt FROM summon_skills GROUP BY name, summon_type HAVING cnt > 1'
+    );
+    for (const d of dupes) {
+      const [dupeIds] = await pool.query(
+        'SELECT id FROM summon_skills WHERE name = ? AND (summon_type <=> ?) AND id != ?',
+        [d.name, d.summon_type, d.keep_id]
+      );
+      for (const dup of dupeIds) {
+        await pool.query(
+          'DELETE mls FROM summon_learned_skills mls INNER JOIN summon_learned_skills mls2 ON mls.summon_id = mls2.summon_id WHERE mls.skill_id = ? AND mls2.skill_id = ?',
+          [dup.id, d.keep_id]
+        ).catch(() => {});
+        await pool.query('UPDATE IGNORE summon_learned_skills SET skill_id = ? WHERE skill_id = ?', [d.keep_id, dup.id]).catch(() => {});
+        await pool.query('DELETE FROM summon_learned_skills WHERE skill_id = ?', [dup.id]).catch(() => {});
+        await pool.query('DELETE FROM summon_skills WHERE id = ?', [dup.id]).catch(() => {});
+      }
+    }
   }
 
   const [existingSummons] = await pool.query('SELECT COUNT(*) as cnt FROM summon_templates');
@@ -591,9 +726,17 @@ async function initialize() {
       VALUES
       ('풍수사', 8, 8, 2.0, 1.2, 0.8, 0.7, 2.8, 2.2, 0.15, 0.15),
       ('무당',  10, 6, 2.0, 1.5, 1.8, 1.2, 2.2, 1.8, 0.2, 0.2),
-      ('승려', 14, 4, 2.5, 2.5, 2.5, 2.5, 1.0, 1.5, 0.15, 0.08)
+      ('승려', 14, 4, 2.5, 2.5, 2.5, 2.5, 1.0, 1.5, 0.15, 0.08),
+      ('저승사자', 9, 5, 2.5, 1.0, 2.2, 0.5, 2.2, 0.8, 0.3, 0.25)
     `);
   }
+  // 저승사자 성장률 패치 (기존 DB에 없으면 추가)
+  await pool.query(`INSERT IGNORE INTO class_growth_rates
+    (class_type, hp_per_level, mp_per_level, attack_per_level, defense_per_level,
+     phys_attack_per_level, phys_defense_per_level, mag_attack_per_level, mag_defense_per_level,
+     crit_rate_per_10level, evasion_per_10level)
+    VALUES ('저승사자', 9, 5, 2.5, 1.0, 2.2, 0.5, 2.2, 0.8, 0.3, 0.25)
+  `).catch(() => {});
 
   // 소환수 타입별 성장률
   await pool.query(`
@@ -1915,10 +2058,35 @@ async function initialize() {
       ('생명력 흡수','attack', 1.3, 15, NULL, 0, 10, 2, 1, 'diamond', '공격하며 생명력을 흡수한다.', '🩸'),
       ('꼬리 휘두르기','aoe', 1.3, 0, NULL, 0, 8, 2, 1, 'cross', '거대한 꼬리를 휘두른다.', '💫'),
       ('마법 화살',  'attack', 1.4, 0, NULL, 0, 5, 1, 4, 'line', '마법 화살을 발사한다.', '🏹'),
-      ('저주',       'debuff', 0, 0, 'attack', -4, 12, 3, 3, 'diamond', '적의 공격력을 낮춘다.', '🔮')
+      ('저주',       'debuff', 0, 0, 'attack', -4, 12, 3, 3, 'diamond', '적의 공격력을 낮춘다.', '🔮'),
+      ('마비의 눈길','debuff', 0, 0, 'defense', -5, 10, 2, 3, 'diamond', '눈빛으로 적의 방어를 무너뜨린다.', '👁️'),
+      ('공포의 포효','debuff', 0, 0, 'attack', -6, 15, 3, 2, 'cross', '공포스러운 포효로 적의 의지를 꺾는다.', '😱'),
+      ('기력 흡수',  'debuff', 0, 0, 'attack', -3, 8, 2, 2, 'diamond', '적의 기력을 빨아들인다.', '💜'),
+      ('속박의 거미줄','debuff', 0, 0, 'defense', -4, 6, 2, 3, 'diamond', '거미줄로 적을 속박한다.', '🕸️'),
+      ('폭풍 브레스','aoe',   2.0, 0, NULL, 0, 18, 3, 2, 'cross', '폭풍 같은 숨결을 내뿜는다.', '🌊'),
+      ('암흑 폭발',  'aoe',   1.8, 0, NULL, 0, 14, 3, 2, 'diamond', '어둠의 기운을 폭발시킨다.', '🌑'),
+      ('치유의 안개','heal',  0, 40, NULL, 0, 15, 3, 3, 'cross', '치유의 안개를 뿌려 아군을 회복한다.', '🌿'),
+      ('광폭화',     'buff',  0, 0, 'attack', 8, 12, 3, 0, 'diamond', '광폭화하여 공격력이 대폭 상승한다.', '🔴'),
+      ('정령 보호',  'buff',  0, 0, 'defense', 7, 10, 3, 0, 'diamond', '정령의 가호로 방어력이 오른다.', '🟢'),
+      ('빙결',       'debuff', 0, 0, 'defense', -4, 10, 2, 2, 'diamond', '얼음으로 적을 얼려 방어력을 낮춘다.', '🧊')
     `);
 
   }
+
+  // 몬스터 스킬 중복 제거 (name UNIQUE 제약 추가 전 중복 데이터 정리)
+  await pool.query(`
+    DELETE ms1 FROM monster_skills ms1
+    INNER JOIN monster_skills ms2
+    WHERE ms1.id > ms2.id AND ms1.name = ms2.name
+  `).catch(() => {});
+  // name에 UNIQUE 제약 추가 (중복 방지)
+  await pool.query(`ALTER TABLE monster_skills ADD UNIQUE INDEX idx_mskill_name (name)`).catch(() => {});
+
+  // 빙결 스킬 패치 (기존 DB에도 추가)
+  await pool.query(
+    `INSERT IGNORE INTO monster_skills (name, type, damage_multiplier, heal_amount, buff_stat, buff_value, mp_cost, cooldown, range_val, pattern, description, icon)
+     VALUES ('빙결', 'debuff', 0, 0, 'defense', -4, 10, 2, 2, 'diamond', '얼음으로 적을 얼려 방어력을 낮춘다.', '🧊')`
+  ).catch(() => {});
 
   // 몬스터별 AI 타입 + MP 설정 (항상 실행 - 누락 방지)
   const aiTypeUpdates = [
@@ -2428,6 +2596,46 @@ async function initialize() {
   ];
 
   for (const [monsterNames, skillNames] of skillAssignments) {
+    for (const mName of monsterNames) {
+      if (!mMap[mName]) continue;
+      for (const mId of mMap[mName]) {
+        for (const sName of skillNames) {
+          if (!sMap[sName]) continue;
+          await pool.query(
+            'INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)',
+            [mId, sMap[sName]]
+          ).catch(() => {});
+        }
+      }
+    }
+  }
+
+  // 신규 몬스터 스킬 할당 (디버프/유틸 보강)
+  const newSkillAssignments = [
+    // 디버프 스킬 배포: 방어형, 보스, 지원형 몬스터에 추가
+    [['골렘','마법 갑옷','가디언','돌 도깨비','마나 골렘'], ['마비의 눈길']],
+    [['백호','흑곰','설표','코뿔소'], ['공포의 포효']],
+    [['독거미','거대 지네','독나방','전갈'], ['속박의 거미줄']],
+    [['원혼','흑마법사','네크로맨서','처녀귀신'], ['기력 흡수']],
+    [['서큐버스','불 도깨비'], ['기력 흡수','마비의 눈길']],
+    // 보스 전용 강화 스킬
+    [['어둠의 수호자','마왕','리치왕','암흑룡','발록','다크 세라핌'], ['공포의 포효','암흑 폭발']],
+    [['용왕','크라켄','바다 용','히드라','화룡','빙룡','뇌룡'], ['폭풍 브레스','공포의 포효']],
+    [['정령왕','이무기','세계수의 파편'], ['정령 보호','폭풍 브레스']],
+    [['깨비대왕','점액 군주','균류 군주','킹 슬라임'], ['광폭화']],
+    // 지원형 보강
+    [['여왕 개미','물의 정령','유니콘','인어 전사'], ['치유의 안개','정령 보호']],
+    [['독 거미 여왕','연못 도깨비','해마 기사'], ['치유의 안개']],
+    // 원거리형 보강
+    [['대마법사','불의 정령','번개 정령','빛의 정령','어둠의 정령'], ['암흑 폭발']],
+    // 약화의 주문: 저주/마법 계열 몬스터
+    [['저주받은 승려','야차','구미호','임프','서큐버스'], ['약화의 주문']],
+    // 자폭: 자폭 컨셉에 맞는 몬스터 (폭발/독포자/장난)
+    [['독버섯','초록 슬라임','임프','꼬마 도깨비'], ['자폭']],
+    // 빙결: 얼음/물 계열 몬스터
+    [['얼음 골렘','빙룡','물의 정령','인어 전사','해마 기사'], ['빙결']],
+  ];
+  for (const [monsterNames, skillNames] of newSkillAssignments) {
     for (const mName of monsterNames) {
       if (!mMap[mName]) continue;
       for (const mId of mMap[mName]) {
@@ -4458,6 +4666,7 @@ async function initialize() {
       "('영혼 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 영혼의 힘이 깃든 부적.', 650, 325, 0, 35, 14, 0, 5, '풍수사')",
       "('무녀 방울', 'weapon', 'weapon', '1h', '무당 전용. 무녀의 축복을 받은 방울.', 600, 300, 0, 20, 12, 5, 4, '무당')",
       "('금강 법륜', 'weapon', 'weapon', '2h', '승려 전용. 금강 법륜.', 650, 325, 35, 0, 13, 12, 5, '승려')",
+      "('혈혼의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 피로 물든 혼의 낫.', 650, 325, 0, 20, 16, 0, 5, '저승사자')",
       "('암흑 갑옷', 'chest', 'chest', NULL, '어둠의 기운이 깃든 갑옷.', 500, 250, 35, 5, 0, 12, 5, NULL)",
       "('암흑 투구', 'helmet', 'helmet', NULL, '어둠의 기운이 깃든 투구.', 300, 150, 22, 3, 0, 7, 5, NULL)",
       "('암흑 장화', 'boots', 'boots', NULL, '어둠의 기운이 깃든 장화.', 250, 125, 12, 0, 2, 5, 4, NULL)",
@@ -4469,7 +4678,7 @@ async function initialize() {
       await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
     }
     // 희귀 등급 설정
-    const rareNames = ['비전 활','뇌신 검','영혼 부적','무녀 방울','금강 법륜','암흑 갑옷','암흑 투구','암흑 장화','암흑 방패','마법석 반지','신목 목걸이'];
+    const rareNames = ['비전 활','뇌신 검','영혼 부적','무녀 방울','금강 법륜','혈혼의 낫','암흑 갑옷','암흑 투구','암흑 장화','암흑 방패','마법석 반지','신목 목걸이'];
     for (const nm of rareNames) {
       await pool.query("UPDATE items SET grade='희귀', max_enhance=10 WHERE name=?", [nm]).catch(() => {});
     }
@@ -4479,6 +4688,7 @@ async function initialize() {
     await pool.query("UPDATE items SET effect_phys_attack=3, effect_mag_attack=10, effect_crit_rate=1 WHERE name='영혼 부적'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_attack=6, effect_mag_attack=7, effect_evasion=1 WHERE name='무녀 방울'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_attack=10, effect_mag_attack=2, effect_phys_defense=4 WHERE name='금강 법륜'").catch(() => {});
+    await pool.query("UPDATE items SET effect_phys_attack=12, effect_mag_attack=3, effect_crit_rate=3 WHERE name='혈혼의 낫'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_defense=8, effect_mag_defense=5, effect_evasion=1 WHERE name='암흑 갑옷'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_defense=5, effect_mag_defense=3 WHERE name='암흑 투구'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_defense=3, effect_mag_defense=2, effect_evasion=2 WHERE name='암흑 장화'").catch(() => {});
@@ -4500,6 +4710,7 @@ async function initialize() {
       ['영혼 부적', 900, 5, [['귀혼석', 6], ['마력 결정', 5], ['정령석', 4]]],
       ['무녀 방울', 800, 4, [['철 조각', 8], ['귀혼석', 5], ['정령석', 3]]],
       ['금강 법륜', 900, 5, [['철 조각', 12], ['마력 결정', 5], ['악마의 핵', 2]]],
+      ['혈혼의 낫', 850, 5, [['철 조각', 10], ['귀혼석', 5], ['암흑의 정수', 1]]],
       ['암흑 갑옷', 800, 5, [['가죽 조각', 10], ['악마의 핵', 3], ['암흑의 정수', 1]]],
       ['암흑 투구', 500, 5, [['철 조각', 8], ['악마의 핵', 2], ['뼈 파편', 5]]],
       ['암흑 장화', 400, 4, [['가죽 조각', 8], ['악마의 핵', 2]]],
@@ -4532,6 +4743,7 @@ async function initialize() {
       "('태극 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 태극의 힘이 깃든 부적.', 5000, 2500, 0, 80, 40, 0, 8, '풍수사')",
       "('만신 방울', 'weapon', 'weapon', '2h', '무당 전용. 만신의 축복을 받은 방울.', 5000, 2500, 0, 50, 35, 15, 8, '무당')",
       "('금강경 목탁', 'weapon', 'weapon', '2h', '승려 전용. 금강경의 힘이 깃든 목탁.', 5000, 2500, 80, 0, 28, 35, 8, '승려')",
+      "('영혼 수확자', 'weapon', 'weapon', '2h', '저승사자 전용. 영혼을 거두어들이는 대낫.', 5000, 2500, 0, 40, 38, 0, 8, '저승사자')",
       // 방어구
       "('천룡 갑옷', 'chest', 'chest', NULL, '천룡의 비늘로 만든 전설의 갑옷.', 4000, 2000, 80, 20, 0, 30, 8, NULL)",
       "('천룡 투구', 'helmet', 'helmet', NULL, '천룡의 뿔로 만든 전설의 투구.', 2500, 1250, 50, 10, 0, 18, 8, NULL)",
@@ -4551,6 +4763,7 @@ async function initialize() {
       "('천부인 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 천부인의 힘이 깃든 신물.', 15000, 7500, 0, 150, 70, 0, 13, '풍수사')",
       "('무녀신의 방울', 'weapon', 'weapon', '2h', '무당 전용. 무녀신이 사용하던 방울.', 15000, 7500, 0, 90, 60, 30, 13, '무당')",
       "('석가의 목탁', 'weapon', 'weapon', '2h', '승려 전용. 깨달음의 목탁.', 15000, 7500, 150, 0, 50, 60, 13, '승려')",
+      "('사신의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 사신이 휘두르던 대낫.', 15000, 7500, 0, 80, 68, 0, 13, '저승사자')",
       // 방어구
       "('신룡황 갑옷', 'chest', 'chest', NULL, '신룡황의 비늘로 주조한 신화의 갑옷.', 12000, 6000, 150, 40, 0, 55, 13, NULL)",
       "('신룡황 투구', 'helmet', 'helmet', NULL, '신룡황의 뿔로 만든 신화의 투구.', 8000, 4000, 90, 20, 0, 35, 13, NULL)",
@@ -4566,13 +4779,13 @@ async function initialize() {
     }
 
     // 전설 등급 설정
-    const legendNames = ['천마검','파천궁','태극 부적','만신 방울','금강경 목탁','천룡 갑옷','천룡 투구','천룡 장화','천룡 방패','용왕의 반지','선녀의 목걸이'];
+    const legendNames = ['천마검','파천궁','태극 부적','만신 방울','금강경 목탁','영혼 수확자','천룡 갑옷','천룡 투구','천룡 장화','천룡 방패','용왕의 반지','선녀의 목걸이'];
     for (const nm of legendNames) {
       await pool.query("UPDATE items SET grade='전설', max_enhance=15 WHERE name=? AND grade='일반'", [nm]).catch(() => {});
     }
 
     // 신화 등급 설정
-    const mythNames = ['천제의 신검','신궁 해모수','천부인 부적','무녀신의 방울','석가의 목탁','신룡황 갑옷','신룡황 투구','신룡황 장화','신룡황 방패','환인의 반지','삼신의 목걸이'];
+    const mythNames = ['천제의 신검','신궁 해모수','천부인 부적','무녀신의 방울','석가의 목탁','사신의 대낫','신룡황 갑옷','신룡황 투구','신룡황 장화','신룡황 방패','환인의 반지','삼신의 목걸이'];
     for (const nm of mythNames) {
       await pool.query("UPDATE items SET grade='신화', max_enhance=20 WHERE name=?", [nm]).catch(() => {});
     }
@@ -4584,6 +4797,7 @@ async function initialize() {
     await pool.query("UPDATE items SET effect_phys_attack=10, effect_mag_attack=32, effect_crit_rate=2 WHERE name='태극 부적'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_attack=18, effect_mag_attack=20, effect_crit_rate=2, effect_evasion=2 WHERE name='만신 방울'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_attack=22, effect_mag_attack=5, effect_phys_defense=8, effect_mag_defense=5 WHERE name='금강경 목탁'").catch(() => {});
+    await pool.query("UPDATE items SET effect_phys_attack=28, effect_mag_attack=8, effect_crit_rate=5 WHERE name='영혼 수확자'").catch(() => {});
     // 전설 방어구
     await pool.query("UPDATE items SET effect_phys_defense=20, effect_mag_defense=12, effect_evasion=2 WHERE name='천룡 갑옷'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_defense=12, effect_mag_defense=8, effect_evasion=1 WHERE name='천룡 투구'").catch(() => {});
@@ -4599,6 +4813,7 @@ async function initialize() {
     await pool.query("UPDATE items SET effect_phys_attack=18, effect_mag_attack=58, effect_crit_rate=4 WHERE name='천부인 부적'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_attack=32, effect_mag_attack=35, effect_crit_rate=3, effect_evasion=4 WHERE name='무녀신의 방울'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_attack=40, effect_mag_attack=10, effect_phys_defense=15, effect_mag_defense=10 WHERE name='석가의 목탁'").catch(() => {});
+    await pool.query("UPDATE items SET effect_phys_attack=52, effect_mag_attack=15, effect_crit_rate=8 WHERE name='사신의 대낫'").catch(() => {});
     // 신화 방어구
     await pool.query("UPDATE items SET effect_phys_defense=38, effect_mag_defense=22, effect_evasion=3 WHERE name='신룡황 갑옷'").catch(() => {});
     await pool.query("UPDATE items SET effect_phys_defense=22, effect_mag_defense=15, effect_evasion=2 WHERE name='신룡황 투구'").catch(() => {});
@@ -4624,6 +4839,7 @@ async function initialize() {
       ['태극 부적', 5000, 8, [['용의 심장', 2], ['정령석', 10], ['마력 결정', 12], ['암흑의 정수', 4]]],
       ['만신 방울', 5000, 8, [['귀혼석', 12], ['정령석', 8], ['용의 비늘', 6], ['별의 파편', 3]]],
       ['금강경 목탁', 5000, 8, [['용의 심장', 2], ['철 조각', 30], ['불꽃 정수', 6], ['마력 결정', 8]]],
+      ['영혼 수확자', 5000, 8, [['용의 심장', 2], ['귀혼석', 10], ['암흑의 정수', 5], ['철 조각', 20]]],
       // 전설 방어구
       ['천룡 갑옷', 4000, 8, [['용의 비늘', 15], ['용의 심장', 1], ['암흑의 정수', 5], ['철 조각', 25]]],
       ['천룡 투구', 2500, 8, [['용의 비늘', 10], ['불꽃 정수', 5], ['철 조각', 15]]],
@@ -4638,6 +4854,7 @@ async function initialize() {
       ['천부인 부적', 20000, 13, [['용의 심장', 5], ['천상의 정수', 5], ['태초의 결정', 3], ['정령석', 20]]],
       ['무녀신의 방울', 20000, 13, [['용의 심장', 4], ['불사조의 깃털', 3], ['태초의 결정', 2], ['귀혼석', 20], ['천상의 정수', 3]]],
       ['석가의 목탁', 20000, 13, [['용의 심장', 5], ['태초의 결정', 3], ['천상의 정수', 4], ['마신의 눈물', 5]]],
+      ['사신의 대낫', 20000, 13, [['용의 심장', 4], ['태초의 결정', 3], ['암흑의 정수', 8], ['귀혼석', 20], ['천상의 정수', 3]]],
       // 신화 방어구
       ['신룡황 갑옷', 18000, 13, [['용의 심장', 4], ['태초의 결정', 3], ['천상의 정수', 4], ['불사조의 깃털', 3], ['용의 비늘', 25]]],
       ['신룡황 투구', 12000, 13, [['용의 심장', 3], ['태초의 결정', 2], ['천상의 정수', 3], ['용의 비늘', 15]]],
@@ -4960,7 +5177,7 @@ async function initialize() {
       class_type VARCHAR(20) DEFAULT NULL,
       template_id INT DEFAULT NULL,
       description VARCHAR(200) NOT NULL,
-      type ENUM('attack', 'heal', 'buff') NOT NULL,
+      type ENUM('attack', 'heal', 'buff', 'debuff', 'aoe') NOT NULL,
       mp_cost INT NOT NULL DEFAULT 0,
       damage_multiplier FLOAT DEFAULT 1.0,
       heal_amount INT DEFAULT 0,
@@ -4972,17 +5189,21 @@ async function initialize() {
       is_common TINYINT(1) DEFAULT 0
     )
   `);
+  // ENUM 확장 (기존 DB 호환)
+  await pool.query("ALTER TABLE mercenary_skills MODIFY COLUMN type ENUM('attack', 'heal', 'buff', 'debuff', 'aoe') NOT NULL").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mercenary_learned_skills (
       id INT AUTO_INCREMENT PRIMARY KEY,
       mercenary_id INT NOT NULL,
       skill_id INT NOT NULL,
+      auto_priority INT NOT NULL DEFAULT 100,
       FOREIGN KEY (mercenary_id) REFERENCES character_mercenaries(id) ON DELETE CASCADE,
       FOREIGN KEY (skill_id) REFERENCES mercenary_skills(id),
       UNIQUE KEY unique_merc_skill (mercenary_id, skill_id)
     )
   `);
+  try { await pool.query('ALTER TABLE mercenary_learned_skills ADD COLUMN auto_priority INT NOT NULL DEFAULT 100'); } catch(e) { if (!e.message.includes('Duplicate column')) throw e; }
 
   // 용병 장비 테이블
   await pool.query(`
@@ -5001,70 +5222,125 @@ async function initialize() {
   if (existingMercSkills[0].cnt === 0) {
     await pool.query(`INSERT INTO mercenary_skills (name, class_type, template_id, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common) VALUES
       ('강타', NULL, NULL, '힘을 모아 강하게 내려친다.', 'attack', 5, 1.5, 0, NULL, 0, 0, 1, 0, 1),
-      ('방어 태세', NULL, NULL, '방어 태세를 취하여 방어력을 올린다.', 'buff', 8, 0, 0, 'defense', 6, 3, 1, 2, 1),
-      ('기합', NULL, NULL, '기합을 넣어 공격력을 높인다.', 'buff', 10, 0, 0, 'attack', 5, 3, 2, 2, 1),
-      ('생명력 회복', NULL, NULL, '내공으로 체력을 소량 회복한다.', 'heal', 12, 0, 25, NULL, 0, 0, 3, 2, 1),
+      ('방어 태세', NULL, NULL, '방어 태세를 취하여 방어력을 올린다.', 'buff', 8, 0, 0, 'defense', 6, 3, 5, 2, 1),
+      ('기합', NULL, NULL, '기합을 넣어 공격력을 높인다.', 'buff', 10, 0, 0, 'attack', 5, 3, 35, 2, 1),
+      ('생명력 회복', NULL, NULL, '내공으로 체력을 소량 회복한다.', 'heal', 12, 0, 25, NULL, 0, 0, 45, 2, 1),
 
       ('검풍', '검사', NULL, '검기를 날려 적을 벤다.', 'attack', 8, 2.0, 0, NULL, 0, 0, 1, 0, 0),
-      ('쾌속 연참', '검사', NULL, '빠른 연속 베기로 적을 공격한다.', 'attack', 15, 2.8, 0, NULL, 0, 0, 3, 1, 0),
-      ('일섬', '검사', NULL, '일도양단의 일격을 날린다.', 'attack', 25, 4.0, 0, NULL, 0, 0, 5, 2, 0),
+      ('쾌속 연참', '검사', NULL, '빠른 연속 베기로 적을 공격한다.', 'attack', 15, 2.8, 0, NULL, 0, 0, 30, 1, 0),
+      ('일섬', '검사', NULL, '일도양단의 일격을 날린다.', 'attack', 25, 4.0, 0, NULL, 0, 0, 50, 2, 0),
 
       ('창격', '창병', NULL, '창으로 강하게 찔러 적을 공격한다.', 'attack', 7, 1.8, 0, NULL, 0, 0, 1, 0, 0),
-      ('철벽 방어', '창병', NULL, '창을 세워 단단한 방벽을 만든다.', 'buff', 12, 0, 0, 'defense', 10, 3, 3, 2, 0),
-      ('관통 찌르기', '창병', NULL, '적의 방어를 무시하는 관통 일격.', 'attack', 22, 3.5, 0, NULL, 0, 0, 5, 2, 0),
+      ('철벽 방어', '창병', NULL, '창을 세워 단단한 방벽을 만든다.', 'buff', 12, 0, 0, 'defense', 10, 3, 30, 2, 0),
+      ('관통 찌르기', '창병', NULL, '적의 방어를 무시하는 관통 일격.', 'attack', 22, 3.5, 0, NULL, 0, 0, 50, 2, 0),
 
       ('관통 사격', '궁수', NULL, '화살로 적을 정확히 관통한다.', 'attack', 6, 1.8, 0, NULL, 0, 0, 1, 0, 0),
-      ('속사', '궁수', NULL, '빠르게 여러 발의 화살을 쏜다.', 'attack', 14, 2.5, 0, NULL, 0, 0, 3, 1, 0),
-      ('집중 조준', '궁수', NULL, '급소를 노리는 치명적 사격.', 'attack', 20, 3.8, 0, NULL, 0, 0, 5, 2, 0),
+      ('속사', '궁수', NULL, '빠르게 여러 발의 화살을 쏜다.', 'attack', 14, 2.5, 0, NULL, 0, 0, 30, 1, 0),
+      ('집중 조준', '궁수', NULL, '급소를 노리는 치명적 사격.', 'attack', 20, 3.8, 0, NULL, 0, 0, 50, 2, 0),
 
       ('부적 공격', '도사', NULL, '부적에 담긴 기운으로 적을 공격한다.', 'attack', 8, 2.0, 0, NULL, 0, 0, 1, 0, 0),
-      ('결계', '도사', NULL, '보호 결계를 펼쳐 방어력을 높인다.', 'buff', 15, 0, 0, 'defense', 8, 4, 3, 2, 0),
-      ('뇌전부', '도사', NULL, '번개를 부르는 강력한 부적 술법.', 'attack', 25, 3.8, 0, NULL, 0, 0, 5, 2, 0),
+      ('결계', '도사', NULL, '보호 결계를 펼쳐 방어력을 높인다.', 'buff', 15, 0, 0, 'defense', 8, 4, 30, 2, 0),
+      ('뇌전부', '도사', NULL, '번개를 부르는 강력한 부적 술법.', 'attack', 25, 3.8, 0, NULL, 0, 0, 50, 2, 0),
 
       ('분쇄격', '무사', NULL, '묵직한 일격으로 적을 내려친다.', 'attack', 8, 2.2, 0, NULL, 0, 0, 1, 0, 0),
-      ('전투 함성', '무사', NULL, '함성을 질러 공격력을 크게 높인다.', 'buff', 15, 0, 0, 'attack', 10, 3, 3, 2, 0),
-      ('파쇄격', '무사', NULL, '전력을 다한 파괴적 일격.', 'attack', 28, 4.2, 0, NULL, 0, 0, 5, 2, 0),
+      ('전투 함성', '무사', NULL, '함성을 질러 공격력을 크게 높인다.', 'buff', 15, 0, 0, 'attack', 10, 3, 30, 2, 0),
+      ('파쇄격', '무사', NULL, '전력을 다한 파괴적 일격.', 'attack', 28, 4.2, 0, NULL, 0, 0, 50, 2, 0),
 
       ('치유의 손길', '치유사', NULL, '따뜻한 빛으로 상처를 치유한다.', 'heal', 10, 0, 40, NULL, 0, 0, 1, 1, 0),
-      ('축복', '치유사', NULL, '동료에게 축복을 내려 방어력을 높인다.', 'buff', 15, 0, 0, 'defense', 8, 4, 3, 2, 0),
-      ('대치유', '치유사', NULL, '강력한 치유 마법으로 대량의 체력을 회복한다.', 'heal', 30, 0, 80, NULL, 0, 0, 5, 3, 0),
+      ('축복', '치유사', NULL, '동료에게 축복을 내려 방어력을 높인다.', 'buff', 15, 0, 0, 'defense', 8, 4, 30, 2, 0),
+      ('대치유', '치유사', NULL, '강력한 치유 마법으로 대량의 체력을 회복한다.', 'heal', 30, 0, 80, NULL, 0, 0, 50, 3, 0),
 
       ('급소 찌르기', '자객', NULL, '적의 급소를 노려 빠르게 찌른다.', 'attack', 6, 2.0, 0, NULL, 0, 0, 1, 0, 0),
-      ('그림자 습격', '자객', NULL, '그림자 속에서 기습하여 큰 피해를 입힌다.', 'attack', 16, 3.0, 0, NULL, 0, 0, 3, 1, 0),
-      ('암살', '자객', NULL, '치명적인 암살 공격을 가한다.', 'attack', 28, 4.5, 0, NULL, 0, 0, 5, 2, 0),
+      ('그림자 습격', '자객', NULL, '그림자 속에서 기습하여 큰 피해를 입힌다.', 'attack', 16, 3.0, 0, NULL, 0, 0, 30, 1, 0),
+      ('암살', '자객', NULL, '치명적인 암살 공격을 가한다.', 'attack', 28, 4.5, 0, NULL, 0, 0, 50, 2, 0),
 
       ('화염구', '마법사', NULL, '화염 구체를 발사하여 적을 불태운다.', 'attack', 10, 2.2, 0, NULL, 0, 0, 1, 0, 0),
-      ('마력 집중', '마법사', NULL, '마력을 집중하여 마법 공격력을 높인다.', 'buff', 15, 0, 0, 'attack', 8, 3, 3, 2, 0),
-      ('화염 폭풍', '마법사', NULL, '거대한 화염 폭풍을 일으킨다.', 'attack', 30, 4.5, 0, NULL, 0, 0, 5, 2, 0)
+      ('마력 집중', '마법사', NULL, '마력을 집중하여 마법 공격력을 높인다.', 'buff', 15, 0, 0, 'attack', 8, 3, 30, 2, 0),
+      ('화염 폭풍', '마법사', NULL, '거대한 화염 폭풍을 일으킨다.', 'attack', 30, 4.5, 0, NULL, 0, 0, 50, 2, 0)
     `);
   }
 
-  // 용병 스킬 required_level 10배 확대 (1→10, 2→20, ...) - 아직 변환 안 된 경우만
+  // 용병 스킬 보충 (디버프/유틸리티) - 기존 DB에도 추가 (중복 방지)
   {
-    const [msCheck] = await pool.query('SELECT MAX(required_level) as mx FROM mercenary_skills');
-    if (msCheck[0].mx <= 5) {
-      await pool.query("UPDATE mercenary_skills SET required_level = CASE WHEN required_level = 1 THEN 1 ELSE required_level * 10 END").catch(() => {});
+    const mercDebuffSkills = [
+      ['위협', null, null, '적을 위협하여 공격력을 낮춘다.', 'debuff', 10, 0, 0, 'attack', -5, 3, 10, 2, 1],
+      ['방어 약화', null, null, '적의 약점을 간파하여 방어력을 낮춘다.', 'debuff', 12, 0, 0, 'defense', -5, 3, 20, 2, 1],
+      ['검기 폭발', '검사', null, '검기를 방출하여 주변 적을 공격한다.', 'aoe', 20, 2.5, 0, null, 0, 0, 15, 2, 0],
+      ['창 돌풍', '창병', null, '창을 회전시켜 주변을 쓸어낸다.', 'aoe', 18, 2.3, 0, null, 0, 0, 15, 2, 0],
+      ['화살비', '궁수', null, '하늘에서 화살비를 내린다.', 'aoe', 22, 2.5, 0, null, 0, 0, 15, 2, 0],
+      ['봉인술', '도사', null, '부적으로 적의 공격력을 봉인한다.', 'debuff', 15, 0, 0, 'attack', -8, 3, 15, 2, 0],
+      ['전의 상실', '무사', null, '위압감으로 적의 전의를 꺾는다.', 'debuff', 12, 0, 0, 'defense', -7, 3, 15, 2, 0],
+      ['정화', '치유사', null, '정화의 빛으로 적의 버프를 약화시킨다.', 'debuff', 14, 0, 0, 'attack', -6, 3, 15, 2, 0],
+      ['독 바르기', '자객', null, '무기에 독을 발라 적의 방어를 녹인다.', 'debuff', 10, 0, 0, 'defense', -8, 3, 15, 2, 0],
+      ['얼음 마법', '마법사', null, '적을 얼려 방어력을 낮춘다.', 'debuff', 18, 0, 0, 'defense', -10, 3, 15, 2, 0],
+    ];
+    for (const [name, classType, templateId, desc, type, mpCost, dmgMul, healAmt, buffStat, buffVal, buffDur, reqLv, cd, isCommon] of mercDebuffSkills) {
+      // 이름+클래스 조합으로 중복 체크
+      const [existing] = await pool.query(
+        'SELECT id FROM mercenary_skills WHERE name = ? AND (class_type <=> ?)',
+        [name, classType]
+      );
+      if (existing.length === 0) {
+        await pool.query(
+          `INSERT INTO mercenary_skills (name, class_type, template_id, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [name, classType, templateId, desc, type, mpCost, dmgMul, healAmt, buffStat, buffVal, buffDur, reqLv, cd, isCommon]
+        ).catch(() => {});
+      } else {
+        // 이미 존재하면 required_level 동기화
+        await pool.query(
+          'UPDATE mercenary_skills SET required_level = ? WHERE name = ? AND (class_type <=> ?)',
+          [reqLv, name, classType]
+        ).catch(() => {});
+      }
     }
-    // 첫번째 스킬(원래 required_level=1)이 10으로 잘못 변경된 경우 → 1로 복구
-    await pool.query("UPDATE mercenary_skills SET required_level = 1 WHERE required_level = 10").catch(() => {});
   }
 
-  // 기존 용병들에게 레벨에 맞는 스킬 자동 부여 (마이그레이션)
-  const [existingMercs] = await pool.query(
-    `SELECT cm.id, cm.level, mt.class_type FROM character_mercenaries cm
-     JOIN mercenary_templates mt ON cm.template_id = mt.id`
-  );
-  for (const em of existingMercs) {
-    const [learnableSkills] = await pool.query(
-      `SELECT id FROM mercenary_skills
-       WHERE required_level <= ? AND (is_common = 1 OR class_type = ?)
-       AND id NOT IN (SELECT skill_id FROM mercenary_learned_skills WHERE mercenary_id = ?)`,
-      [em.level, em.class_type, em.id]
+  // 첫 시드 스킬의 required_level도 동기화
+  const seedLevelFixes = [
+    ['방어 태세', null, 5], ['기합', null, 35], ['생명력 회복', null, 45],
+    ['쾌속 연참', '검사', 30], ['일섬', '검사', 50],
+    ['철벽 방어', '창병', 30], ['관통 찌르기', '창병', 50],
+    ['속사', '궁수', 30], ['집중 조준', '궁수', 50],
+    ['결계', '도사', 30], ['뇌전부', '도사', 50],
+    ['전투 함성', '무사', 30], ['파쇄격', '무사', 50],
+    ['축복', '치유사', 30], ['대치유', '치유사', 50],
+    ['그림자 습격', '자객', 30], ['암살', '자객', 50],
+    ['마력 집중', '마법사', 30], ['화염 폭풍', '마법사', 50],
+  ];
+  for (const [name, cls, lv] of seedLevelFixes) {
+    await pool.query('UPDATE mercenary_skills SET required_level = ? WHERE name = ? AND (class_type <=> ?)', [lv, name, cls]).catch(() => {});
+  }
+
+  // 중복 용병 스킬 정리: 같은 이름+클래스 조합에서 가장 낮은 ID만 남기고 나머지 삭제
+  {
+    const [dupes] = await pool.query(
+      `SELECT name, class_type, MIN(id) as keep_id, COUNT(*) as cnt
+       FROM mercenary_skills
+       GROUP BY name, class_type
+       HAVING cnt > 1`
     );
-    for (const sk of learnableSkills) {
-      await pool.query('INSERT IGNORE INTO mercenary_learned_skills (mercenary_id, skill_id) VALUES (?, ?)', [em.id, sk.id]).catch(() => {});
+    for (const d of dupes) {
+      const [dupeIds] = await pool.query(
+        'SELECT id FROM mercenary_skills WHERE name = ? AND (class_type <=> ?) AND id != ?',
+        [d.name, d.class_type, d.keep_id]
+      );
+      for (const dup of dupeIds) {
+        // keep_id가 이미 있는 용병은 중복 제거, 없으면 교체
+        await pool.query(
+          'DELETE mls FROM mercenary_learned_skills mls INNER JOIN mercenary_learned_skills mls2 ON mls.mercenary_id = mls2.mercenary_id WHERE mls.skill_id = ? AND mls2.skill_id = ?',
+          [dup.id, d.keep_id]
+        ).catch(() => {});
+        await pool.query('UPDATE IGNORE mercenary_learned_skills SET skill_id = ? WHERE skill_id = ?', [d.keep_id, dup.id]).catch(() => {});
+        await pool.query('DELETE FROM mercenary_learned_skills WHERE skill_id = ?', [dup.id]).catch(() => {});
+        await pool.query('DELETE FROM mercenary_skills WHERE id = ?', [dup.id]).catch(() => {});
+      }
     }
   }
+
+  // (제거됨) 레벨 10배 확대 마이그레이션 - seedLevelFixes에서 정확한 값으로 관리
+
+  // (제거됨) 기존 용병 자동 스킬 부여 마이그레이션 — 스킬은 수동 습득 방식으로 변경
 
   // ========== 스킬 트리 시스템 ==========
   // characters에 skill_points, total_skill_points 컬럼 추가
@@ -5122,11 +5398,19 @@ async function initialize() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       character_id INT NOT NULL,
       node_id INT NOT NULL,
+      auto_priority INT NOT NULL DEFAULT 100,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
       FOREIGN KEY (node_id) REFERENCES skill_tree_nodes(id) ON DELETE CASCADE,
       UNIQUE KEY unique_char_node (character_id, node_id)
     )
   `);
+
+  // auto_priority 컬럼 마이그레이션
+  try {
+    await pool.query('ALTER TABLE character_skill_nodes ADD COLUMN auto_priority INT NOT NULL DEFAULT 100');
+  } catch(e) {
+    if (!e.message.includes('Duplicate column')) throw e;
+  }
 
   // 스킬 트리 노드 시드 (81개: 클래스당 27개 = 3브랜치 x 9노드)
   const [existingTreeNodes] = await pool.query('SELECT COUNT(*) as cnt FROM skill_tree_nodes');
@@ -5143,7 +5427,7 @@ async function initialize() {
 
       ('풍수사','geomancy','풍수지리',1,'ps_geo_1','풍수결계','풍수 결계를 펼쳐 방어력을 높인다.','🌀','active','buff',12,0,'magical',0,'defense',8,3,2,0,NULL,0,0, 1,1, 1,1),
       ('풍수사','geomancy','풍수지리',2,'ps_geo_2a','대지의 축복','대지의 기운으로 HP를 회복한다.','🌿','active','heal',15,0,'magical',40,NULL,0,0,1,0,NULL,0,0, 0,2, 1,3),
-      ('풍수사','geomancy','풍수지리',2,'ps_geo_2b','수맥감응','수맥의 기운을 감지하여 MP를 회복한다.','💧','active','heal',0,0,'magical',0,'mp',15,1,2,0,NULL,0,0, 1,2, 1,3),
+      ('풍수사','geomancy','풍수지리',2,'ps_geo_2b','수맥감응','수맥의 기운을 감지하여 MP를 회복한다.','💧','active','buff',0,0,'magical',0,'mp',15,1,2,0,NULL,0,0, 1,2, 1,3),
       ('풍수사','geomancy','풍수지리',2,'ps_geo_2c','바람길','바람의 길을 열어 회피율을 높인다.','💨','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'evasion',3,0, 2,2, 1,3),
       ('풍수사','geomancy','풍수지리',3,'ps_geo_3a','산맥호위','산맥의 기운으로 물방을 강화한다.','⛰️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'phys_defense',5,0, 0,3, 1,5),
       ('풍수사','geomancy','풍수지리',3,'ps_geo_3b','기운회복','자연의 기운을 흡수하여 체력을 회복한다.','💚','active','heal',25,0,'magical',60,NULL,0,0,2,0,NULL,0,0, 2,3, 1,5),
@@ -5596,7 +5880,7 @@ async function initialize() {
   }
 
   // ========== 코스메틱 초상화 효과 시스템 ==========
-  await pool.query(`ALTER TABLE items MODIFY COLUMN type ENUM('weapon','armor','potion','helmet','chest','boots','ring','necklace','shield','cosmetic') NOT NULL`).catch(() => {});
+  await pool.query(`ALTER TABLE items MODIFY COLUMN type ENUM('weapon','armor','potion','helmet','chest','boots','ring','necklace','shield','cosmetic','talisman') NOT NULL`).catch(() => {});
   await pool.query("ALTER TABLE items ADD COLUMN cosmetic_effect VARCHAR(30) DEFAULT NULL").catch(() => {});
 
   await pool.query(`
@@ -5718,7 +6002,7 @@ async function initialize() {
   await pool.query("UPDATE items SET price = 550, sell_price = 275 WHERE name = '신목 목걸이'").catch(() => {});
 
   // -- 용병 가격 하향 --
-  await pool.query("UPDATE mercenary_templates SET price = 1000, sell_price = 100 WHERE name = '검사 이준'").catch(() => {});
+  await pool.query("UPDATE mercenary_templates SET price = 3000, sell_price = 300 WHERE name = '검사 이준'").catch(() => {});
   await pool.query("UPDATE mercenary_templates SET price = 6000, sell_price = 600 WHERE name = '창병 박무'").catch(() => {});
   await pool.query("UPDATE mercenary_templates SET price = 8000, sell_price = 800 WHERE name = '궁수 한소이'").catch(() => {});
   await pool.query("UPDATE mercenary_templates SET price = 10000, sell_price = 1000 WHERE name = '도사 최현'").catch(() => {});
@@ -5745,8 +6029,62 @@ async function initialize() {
     await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
   }
 
-  // -- 장비 티어 확장 (Lv20 고급, Lv28 고급, Lv38 희귀, Lv50 영웅, Lv65 영웅, Lv80 전설, Lv95 초월) --
+  // -- 장비 티어 확장 (Lv7~Lv95) --
   const tierExpansion = [
+    // ===== Lv7 고급 (T2.5) =====
+    // 공용 무기
+    "('청동 장검', 'weapon', 'weapon', '1h', '청동으로 제련한 장검. 범위1 마름모.', 1200, 600, 0, 0, 24, 0, 7, NULL)",
+    "('청동 장궁', 'weapon', 'weapon', '2h', '청동으로 만든 활. 범위4 직선.', 1300, 650, 0, 0, 22, 0, 7, NULL)",
+    // 클래스 무기
+    "('풍운 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 풍운의 기운이 깃든 부적.', 1200, 600, 0, 45, 20, 0, 7, '풍수사')",
+    "('귀신 방울', 'weapon', 'weapon', '2h', '무당 전용. 귀신을 다스리는 방울.', 1100, 550, 0, 28, 18, 8, 7, '무당')",
+    "('참선 목탁', 'weapon', 'weapon', '2h', '승려 전용. 참선의 힘이 깃든 목탁.', 1200, 600, 45, 0, 17, 16, 7, '승려')",
+    "('업보의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 업보를 청산하는 낫.', 1200, 600, 0, 25, 22, 0, 7, '저승사자')",
+    // 방어구
+    "('청동 갑옷', 'chest', 'chest', NULL, '청동 판금으로 만든 갑옷.', 900, 450, 48, 8, 0, 15, 7, NULL)",
+    "('청동 투구', 'helmet', 'helmet', NULL, '청동으로 만든 투구.', 600, 300, 30, 5, 0, 9, 7, NULL)",
+    "('청동 장화', 'boots', 'boots', NULL, '청동 장식이 달린 장화.', 500, 250, 18, 0, 3, 6, 7, NULL)",
+    "('청동 방패', 'shield', 'shield', NULL, '청동으로 만든 방패.', 700, 350, 28, 0, 0, 18, 7, NULL)",
+    // 액세서리
+    "('옥 반지', 'ring', 'ring', NULL, '영롱한 옥으로 만든 반지.', 800, 400, 0, 25, 8, 0, 7, NULL)",
+    "('은빛 목걸이', 'necklace', 'necklace', NULL, '은빛이 흐르는 목걸이.', 900, 450, 20, 20, 6, 6, 7, NULL)",
+
+    // ===== Lv10 희귀 (T3.5) =====
+    // 공용 무기
+    "('백은 검', 'weapon', 'weapon', '1h', '백은으로 벼린 검. 범위1 마름모.', 2500, 1250, 0, 0, 32, 0, 10, NULL)",
+    "('백은 궁', 'weapon', 'weapon', '2h', '백은으로 만든 활. 범위4 직선.', 2700, 1350, 0, 0, 30, 0, 10, NULL)",
+    // 클래스 무기
+    "('천문 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 별의 기운이 담긴 부적.', 2500, 1250, 0, 55, 28, 0, 10, '풍수사')",
+    "('영매 방울', 'weapon', 'weapon', '2h', '무당 전용. 영혼과 소통하는 방울.', 2500, 1250, 0, 35, 25, 10, 10, '무당')",
+    "('법력 목탁', 'weapon', 'weapon', '2h', '승려 전용. 법력이 깃든 목탁.', 2500, 1250, 55, 0, 20, 22, 10, '승려')",
+    "('명부의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 명부의 기운이 깃든 낫.', 2500, 1250, 0, 35, 30, 0, 10, '저승사자')",
+    // 방어구
+    "('백은 갑옷', 'chest', 'chest', NULL, '백은 판금으로 만든 갑옷.', 2200, 1100, 65, 12, 0, 20, 10, NULL)",
+    "('백은 투구', 'helmet', 'helmet', NULL, '백은으로 만든 투구.', 1400, 700, 38, 6, 0, 12, 10, NULL)",
+    "('백은 장화', 'boots', 'boots', NULL, '백은 장식이 달린 장화.', 1200, 600, 25, 0, 4, 8, 10, NULL)",
+    "('백은 방패', 'shield', 'shield', NULL, '백은으로 만든 방패.', 1600, 800, 35, 0, 0, 22, 10, NULL)",
+    // 액세서리
+    "('자수정 반지', 'ring', 'ring', NULL, '자수정이 박힌 반지.', 1500, 750, 0, 30, 10, 0, 10, NULL)",
+    "('수정 목걸이', 'necklace', 'necklace', NULL, '맑은 수정이 달린 목걸이.', 1800, 900, 25, 25, 8, 8, 10, NULL)",
+
+    // ===== Lv15 영웅 (T3.8) =====
+    // 공용 무기
+    "('황금 검', 'weapon', 'weapon', '1h', '황금빛 검. 범위1 마름모.', 3500, 1750, 0, 0, 38, 0, 15, NULL)",
+    "('황금 궁', 'weapon', 'weapon', '2h', '황금빛 활. 범위4 직선.', 3800, 1900, 0, 0, 35, 0, 15, NULL)",
+    // 클래스 무기
+    "('도참 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 도참의 비밀이 담긴 부적.', 3500, 1750, 0, 68, 35, 0, 15, '풍수사')",
+    "('접신 방울', 'weapon', 'weapon', '2h', '무당 전용. 신령이 접신한 방울.', 3500, 1750, 0, 45, 32, 12, 15, '무당')",
+    "('범종 목탁', 'weapon', 'weapon', '2h', '승려 전용. 범종의 울림이 깃든 목탁.', 3500, 1750, 68, 0, 25, 28, 15, '승려')",
+    "('삼도천의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 삼도천을 건너는 자의 낫.', 3500, 1750, 0, 38, 36, 0, 15, '저승사자')",
+    // 방어구
+    "('황금 갑옷', 'chest', 'chest', NULL, '황금 장식의 갑옷.', 3000, 1500, 82, 18, 0, 25, 15, NULL)",
+    "('황금 투구', 'helmet', 'helmet', NULL, '황금 장식의 투구.', 2000, 1000, 48, 8, 0, 15, 15, NULL)",
+    "('황금 장화', 'boots', 'boots', NULL, '황금 장식의 장화.', 1700, 850, 32, 0, 5, 10, 15, NULL)",
+    "('황금 방패', 'shield', 'shield', NULL, '황금으로 강화된 방패.', 2300, 1150, 45, 0, 0, 22, 15, NULL)",
+    // 액세서리
+    "('홍옥 반지', 'ring', 'ring', NULL, '붉은 홍옥이 박힌 반지.', 2100, 1050, 0, 35, 12, 0, 15, NULL)",
+    "('금 목걸이', 'necklace', 'necklace', NULL, '순금으로 만든 목걸이.', 2500, 1250, 30, 30, 10, 10, 15, NULL)",
+
     // ===== Lv20 고급 (T4) =====
     // 공용 무기
     "('명월도', 'weapon', 'weapon', '1h', '달빛이 깃든 검. 범위1 마름모.', 2000, 1000, 0, 0, 30, 0, 20, NULL)",
@@ -5755,6 +6093,7 @@ async function initialize() {
     "('영기 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 영혼의 기운이 깃든 부적.', 2000, 1000, 0, 60, 30, 0, 20, '풍수사')",
     "('신명 방울', 'weapon', 'weapon', '2h', '무당 전용. 신명의 축복이 깃든 방울.', 2000, 1000, 0, 40, 28, 10, 20, '무당')",
     "('파사 목탁', 'weapon', 'weapon', '2h', '승려 전용. 사악한 기운을 깨는 목탁.', 2000, 1000, 60, 0, 22, 25, 20, '승려')",
+    "('망자의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 망자를 인도하는 대낫.', 2000, 1000, 0, 30, 32, 0, 20, '저승사자')",
     // 방어구
     "('비룡 갑옷', 'chest', 'chest', NULL, '비룡의 가죽으로 만든 갑옷.', 1800, 900, 70, 15, 0, 22, 20, NULL)",
     "('비룡 투구', 'helmet', 'helmet', NULL, '비룡의 뿔로 만든 투구.', 1200, 600, 40, 8, 0, 13, 20, NULL)",
@@ -5769,6 +6108,7 @@ async function initialize() {
     "('혼백 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 혼백의 힘이 깃든 부적.', 3500, 1750, 0, 70, 36, 0, 28, '풍수사')",
     "('태을 방울', 'weapon', 'weapon', '2h', '무당 전용. 태을성의 축복을 받은 방울.', 3500, 1750, 0, 50, 33, 13, 28, '무당')",
     "('열반 목탁', 'weapon', 'weapon', '2h', '승려 전용. 열반의 경지에 이른 목탁.', 3500, 1750, 70, 0, 28, 30, 28, '승려')",
+    "('원혼의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 원한에 찬 혼이 깃든 낫.', 3500, 1750, 0, 40, 40, 0, 28, '저승사자')",
     "('백호 갑옷', 'chest', 'chest', NULL, '백호의 가죽으로 만든 갑옷.', 3000, 1500, 85, 20, 0, 28, 28, NULL)",
     "('백호 투구', 'helmet', 'helmet', NULL, '백호의 뿔로 만든 투구.', 2000, 1000, 50, 10, 0, 16, 28, NULL)",
     "('백호 장화', 'boots', 'boots', NULL, '백호의 발톱이 달린 장화.', 1700, 850, 35, 0, 5, 12, 28, NULL)",
@@ -5782,6 +6122,7 @@ async function initialize() {
     "('천기 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 천기의 비밀이 담긴 부적.', 6000, 3000, 0, 90, 48, 0, 38, '풍수사')",
     "('강신 방울', 'weapon', 'weapon', '2h', '무당 전용. 강력한 신령이 깃든 방울.', 6000, 3000, 0, 65, 43, 18, 38, '무당')",
     "('금강 법구', 'weapon', 'weapon', '2h', '승려 전용. 금강의 힘이 깃든 법구.', 6000, 3000, 90, 0, 35, 40, 38, '승려')",
+    "('나락의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 나락의 어둠이 깃든 대낫.', 6000, 3000, 0, 50, 50, 0, 38, '저승사자')",
     "('현무 갑옷', 'chest', 'chest', NULL, '현무의 등껍질로 만든 갑옷.', 5000, 2500, 110, 25, 0, 35, 38, NULL)",
     "('현무 투구', 'helmet', 'helmet', NULL, '현무의 뿔로 만든 투구.', 3300, 1650, 65, 12, 0, 20, 38, NULL)",
     "('현무 장화', 'boots', 'boots', NULL, '현무의 가죽으로 만든 장화.', 2800, 1400, 45, 0, 7, 15, 38, NULL)",
@@ -5795,6 +6136,7 @@ async function initialize() {
     "('태허 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 우주의 기운이 담긴 부적.', 10000, 5000, 0, 120, 62, 0, 50, '풍수사')",
     "('천무 방울', 'weapon', 'weapon', '2h', '무당 전용. 천상의 춤이 깃든 방울.', 10000, 5000, 0, 80, 55, 24, 50, '무당')",
     "('대각 목탁', 'weapon', 'weapon', '2h', '승려 전용. 대각의 경지에 이른 목탁.', 10000, 5000, 120, 0, 45, 52, 50, '승려')",
+    "('저승 심판자', 'weapon', 'weapon', '2h', '저승사자 전용. 생사를 심판하는 대낫.', 10000, 5000, 0, 65, 65, 0, 50, '저승사자')",
     "('봉황 갑옷', 'chest', 'chest', NULL, '봉황의 깃털로 만든 갑옷.', 8000, 4000, 140, 30, 0, 42, 50, NULL)",
     "('봉황 투구', 'helmet', 'helmet', NULL, '봉황의 깃으로 만든 투구.', 5500, 2750, 82, 15, 0, 25, 50, NULL)",
     "('봉황 장화', 'boots', 'boots', NULL, '봉황의 발톱이 달린 장화.', 4500, 2250, 55, 0, 8, 18, 50, NULL)",
@@ -5808,6 +6150,7 @@ async function initialize() {
     "('구천 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 구천의 신령이 깃든 부적.', 18000, 9000, 0, 160, 85, 0, 65, '풍수사')",
     "('무극 방울', 'weapon', 'weapon', '2h', '무당 전용. 무극의 경지에 이른 방울.', 18000, 9000, 0, 110, 75, 32, 65, '무당')",
     "('보리 법구', 'weapon', 'weapon', '2h', '승려 전용. 깨달음의 법구.', 18000, 9000, 160, 0, 60, 68, 65, '승려')",
+    "('윤회의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 윤회의 힘이 깃든 대낫.', 18000, 9000, 0, 90, 88, 0, 65, '저승사자')",
     "('기린 갑옷', 'chest', 'chest', NULL, '기린의 가죽으로 만든 전설의 갑옷.', 15000, 7500, 180, 40, 0, 52, 65, NULL)",
     "('기린 투구', 'helmet', 'helmet', NULL, '기린의 뿔로 만든 투구.', 10000, 5000, 105, 20, 0, 32, 65, NULL)",
     "('기린 장화', 'boots', 'boots', NULL, '기린의 발굽으로 만든 장화.', 8500, 4250, 70, 0, 12, 23, 65, NULL)",
@@ -5821,6 +6164,7 @@ async function initialize() {
     "('천지 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 천지의 이치가 담긴 부적.', 30000, 15000, 0, 200, 110, 0, 80, '풍수사')",
     "('만신전 방울', 'weapon', 'weapon', '2h', '무당 전용. 만 신령의 축복을 받은 방울.', 30000, 15000, 0, 140, 95, 42, 80, '무당')",
     "('해탈 법구', 'weapon', 'weapon', '2h', '승려 전용. 해탈의 경지에 이른 법구.', 30000, 15000, 200, 0, 78, 85, 80, '승려')",
+    "('무상의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 무상함을 깨닫게 하는 대낫.', 30000, 15000, 0, 110, 108, 0, 80, '저승사자')",
     "('이무기 갑옷', 'chest', 'chest', NULL, '이무기의 비늘로 만든 신화의 갑옷.', 25000, 12500, 220, 50, 0, 65, 80, NULL)",
     "('이무기 투구', 'helmet', 'helmet', NULL, '이무기의 뿔로 만든 투구.', 17000, 8500, 130, 25, 0, 40, 80, NULL)",
     "('이무기 장화', 'boots', 'boots', NULL, '이무기의 발톱이 달린 장화.', 14000, 7000, 85, 0, 15, 28, 80, NULL)",
@@ -5834,6 +6178,7 @@ async function initialize() {
     "('만물 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 만물의 이치가 담긴 부적.', 50000, 25000, 0, 250, 145, 0, 95, '풍수사')",
     "('창세 방울', 'weapon', 'weapon', '2h', '무당 전용. 창세의 진동이 깃든 방울.', 50000, 25000, 0, 180, 125, 55, 95, '무당')",
     "('열반 법륜', 'weapon', 'weapon', '2h', '승려 전용. 완전한 깨달음의 법륜.', 50000, 25000, 250, 0, 100, 110, 95, '승려')",
+    "('영멸의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 영혼마저 소멸시키는 궁극의 낫.', 50000, 25000, 0, 130, 140, 0, 95, '저승사자')",
     "('천제 갑옷', 'chest', 'chest', NULL, '하늘의 제왕이 착용한 갑옷.', 40000, 20000, 280, 60, 0, 80, 95, NULL)",
     "('천제 투구', 'helmet', 'helmet', NULL, '하늘의 제왕이 쓴 투구.', 28000, 14000, 160, 30, 0, 50, 95, NULL)",
     "('천제 장화', 'boots', 'boots', NULL, '구름 위를 걷는 장화.', 23000, 11500, 110, 0, 20, 35, 95, NULL)",
@@ -5847,20 +6192,26 @@ async function initialize() {
 
   // 등급 설정 (고급/영웅/전설/신화/초월)
   const gradeMap = {
-    '고급': ['비룡 갑옷','비룡 투구','비룡 장화','비룡 방패','비취 반지','호박석 목걸이',
-             '명월도','폭풍궁','영기 부적','신명 방울','파사 목탁',
+    '고급': ['청동 장검','청동 장궁','풍운 부적','귀신 방울','참선 목탁','업보의 낫',
+             '청동 갑옷','청동 투구','청동 장화','청동 방패','옥 반지','은빛 목걸이',
+             '비룡 갑옷','비룡 투구','비룡 장화','비룡 방패','비취 반지','호박석 목걸이',
+             '명월도','폭풍궁','영기 부적','신명 방울','파사 목탁','망자의 낫',
              '백호 갑옷','백호 투구','백호 장화','백호 방패','사파이어 반지','월광석 목걸이',
-             '뇌광검','현무궁','혼백 부적','태을 방울','열반 목탁'],
-    '희귀': ['현무 갑옷','현무 투구','현무 장화','현무 방패','루비 반지','천계석 목걸이',
-             '주작도','청룡궁','천기 부적','강신 방울','금강 법구'],
-    '영웅': ['봉황 갑옷','봉황 투구','봉황 장화','봉황 방패','에메랄드 반지','용의 인장 목걸이',
-             '사신검','신수궁','태허 부적','천무 방울','대각 목탁'],
+             '뇌광검','현무궁','혼백 부적','태을 방울','열반 목탁','원혼의 낫'],
+    '희귀': ['백은 검','백은 궁','천문 부적','영매 방울','법력 목탁','명부의 낫',
+             '백은 갑옷','백은 투구','백은 장화','백은 방패','자수정 반지','수정 목걸이',
+             '현무 갑옷','현무 투구','현무 장화','현무 방패','루비 반지','천계석 목걸이',
+             '주작도','청룡궁','천기 부적','강신 방울','금강 법구','나락의 대낫'],
+    '영웅': ['황금 검','황금 궁','도참 부적','접신 방울','범종 목탁','삼도천의 낫',
+             '황금 갑옷','황금 투구','황금 장화','황금 방패','홍옥 반지','금 목걸이',
+             '봉황 갑옷','봉황 투구','봉황 장화','봉황 방패','에메랄드 반지','용의 인장 목걸이',
+             '사신검','신수궁','태허 부적','천무 방울','대각 목탁','저승 심판자'],
     '전설': ['기린 갑옷','기린 투구','기린 장화','기린 방패','다이아몬드 반지','삼족오 목걸이',
-             '하늘의 의지','태양의 활','구천 부적','무극 방울','보리 법구'],
+             '하늘의 의지','태양의 활','구천 부적','무극 방울','보리 법구','윤회의 낫'],
     '신화': ['이무기 갑옷','이무기 투구','이무기 장화','이무기 방패','천의 반지','태극 목걸이',
-             '천상의 검','별의 활','천지 부적','만신전 방울','해탈 법구'],
+             '천상의 검','별의 활','천지 부적','만신전 방울','해탈 법구','무상의 대낫'],
     '초월': ['천제 갑옷','천제 투구','천제 장화','천제 방패','무한의 반지','단군의 목걸이',
-             '개벽의 검','천궁','만물 부적','창세 방울','열반 법륜'],
+             '개벽의 검','천궁','만물 부적','창세 방울','열반 법륜','영멸의 낫'],
   };
   for (const [grade, names] of Object.entries(gradeMap)) {
     const maxEnhance = grade === '초월' ? 25 : grade === '신화' ? 20 : grade === '전설' ? 15 : grade === '영웅' ? 12 : 10;
@@ -5868,6 +6219,31 @@ async function initialize() {
       await pool.query("UPDATE items SET grade = ?, max_enhance = ? WHERE name = ?", [grade, maxEnhance, nm]).catch(() => {});
     }
   }
+
+  // 저승사자 전용 무기 패치 (기존 DB에도 추가)
+  const reaperWeapons = [
+    ['사혼의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 영혼을 거두는 낫.', 50, 25, 0, 5, 6, 0, 1, '저승사자'],
+    ['명계의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 명계의 기운이 깃든 낫.', 200, 100, 0, 15, 13, 0, 3, '저승사자'],
+    ['혈혼의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 피로 물든 혼의 낫.', 650, 325, 0, 20, 16, 0, 5, '저승사자'],
+    ['황천의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 황천의 어둠이 깃든 대낫.', 800, 400, 0, 30, 26, 0, 6, '저승사자'],
+    ['영혼 수확자', 'weapon', 'weapon', '2h', '저승사자 전용. 영혼을 거두어들이는 대낫.', 5000, 2500, 0, 40, 38, 0, 8, '저승사자'],
+    ['사신의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 사신이 휘두르던 대낫.', 15000, 7500, 0, 80, 68, 0, 13, '저승사자'],
+  ];
+  for (const [name, type, slot, hand, desc, price, sell, hp, mp, atk, def, lvl, cls] of reaperWeapons) {
+    await pool.query(
+      `INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, type, slot, hand, desc, price, sell, hp, mp, atk, def, lvl, cls]
+    ).catch(() => {});
+  }
+  // 저승사자 무기 등급 설정
+  await pool.query("UPDATE items SET grade='희귀', max_enhance=10 WHERE name='혈혼의 낫' AND grade='일반'").catch(() => {});
+  await pool.query("UPDATE items SET grade='전설', max_enhance=15 WHERE name='영혼 수확자' AND grade='일반'").catch(() => {});
+  await pool.query("UPDATE items SET grade='신화', max_enhance=20 WHERE name='사신의 대낫' AND grade='일반'").catch(() => {});
+  // 세부 스탯
+  await pool.query("UPDATE items SET effect_phys_attack=12, effect_mag_attack=3, effect_crit_rate=3 WHERE name='혈혼의 낫'").catch(() => {});
+  await pool.query("UPDATE items SET effect_phys_attack=28, effect_mag_attack=8, effect_crit_rate=5 WHERE name='영혼 수확자'").catch(() => {});
+  await pool.query("UPDATE items SET effect_phys_attack=52, effect_mag_attack=15, effect_crit_rate=8 WHERE name='사신의 대낫'").catch(() => {});
 
   // -- 스태미나 공식 개선: 기본 15, Lv당 1/3 증가 --
   // (calcMaxStamina 함수에서 처리 - 코드 변경 필요)
@@ -6102,14 +6478,14 @@ async function initialize() {
     )
   `);
 
-  // 콘텐츠 입장 횟수 (스테이지/던전 각각 3회, 5시간 쿨타임) - 개별 키별 관리
+  // 콘텐츠 입장 횟수 (스테이지/던전 각각 5회, 4시간 쿨타임) - 개별 키별 관리
   await pool.query(`
     CREATE TABLE IF NOT EXISTS content_charges (
       id INT AUTO_INCREMENT PRIMARY KEY,
       character_id INT NOT NULL,
       content_type VARCHAR(50) NOT NULL,
-      charges INT DEFAULT 3,
-      max_charges INT DEFAULT 3,
+      charges INT DEFAULT 5,
+      max_charges INT DEFAULT 5,
       last_recharged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
       UNIQUE KEY unique_char_content (character_id, content_type)
@@ -6117,6 +6493,44 @@ async function initialize() {
   `);
   // content_type ENUM → VARCHAR 마이그레이션
   await pool.query("ALTER TABLE content_charges MODIFY content_type VARCHAR(50) NOT NULL").catch(() => {});
+  // 입장횟수 3→5 마이그레이션 (기존 레코드)
+  await pool.query("UPDATE content_charges SET max_charges = 5, charges = LEAST(charges + 2, 5) WHERE max_charges = 3").catch(() => {});
+
+  // ========== 부적(talisman) 카테고리 추가 ==========
+  // 기존 소모성 부적을 potion → talisman으로 변경
+  await pool.query("UPDATE items SET type = 'talisman' WHERE id IN (10313, 10314) AND type = 'potion'").catch(() => {});
+
+  // 새 부적 아이템 시드
+  {
+    const talismans = [
+      [42601, '치명 부적', 'talisman', '전투 시 치명타율 15% 증가 (3턴).', 300, 150, 0, 0, 0, 0, 0, 0, 15, 0, null, 1, '일반'],
+      [42602, '회피 부적', 'talisman', '전투 시 회피율 15% 증가 (3턴).', 300, 150, 0, 0, 0, 0, 0, 0, 0, 15, null, 1, '일반'],
+      [42603, '속도 부적', 'talisman', '전투 시 선공 확률이 크게 증가한다.', 250, 125, 0, 0, 0, 0, 0, 0, 0, 0, null, 1, '일반'],
+      [42604, '결계 부적', 'talisman', '전투 시 물리/마법 방어력 15% 증가 (3턴).', 350, 175, 0, 0, 0, 0, 0, 0, 0, 0, null, 1, '일반'],
+      [42605, '파괴 부적', 'talisman', '전투 시 물리/마법 공격력 30% 증가 (2턴).', 500, 250, 0, 0, 0, 0, 0, 0, 0, 0, null, 5, '고급'],
+      [42606, '철벽 부적', 'talisman', '전투 시 물리/마법 방어력 30% 증가 (2턴).', 500, 250, 0, 0, 0, 0, 0, 0, 0, 0, null, 5, '고급'],
+      [42607, '재생 부적', 'talisman', '전투 중 매 턴 HP를 5% 회복한다 (5턴).', 400, 200, 0, 0, 0, 0, 0, 0, 0, 0, null, 3, '고급'],
+      [42608, '마력 충전 부적', 'talisman', '전투 중 매 턴 MP를 3% 회복한다 (5턴).', 400, 200, 0, 0, 0, 0, 0, 0, 0, 0, null, 3, '고급'],
+      [42609, '부활 부적', 'talisman', '전투 중 1회 부활 (HP 30%).', 800, 400, 0, 0, 0, 0, 0, 0, 0, 0, null, 10, '희귀'],
+      [42610, '저주 부적', 'talisman', '적 1체의 공격력과 방어력을 20% 감소 (3턴).', 600, 300, 0, 0, 0, 0, 0, 0, 0, 0, null, 8, '희귀'],
+      [42611, '봉인 부적', 'talisman', '적 1체의 스킬 사용을 2턴간 봉인한다.', 700, 350, 0, 0, 0, 0, 0, 0, 0, 0, null, 10, '희귀'],
+      [42612, '천명 부적', 'talisman', '전투 시 모든 능력치 10% 증가 (3턴).', 1200, 600, 0, 0, 0, 0, 0, 0, 0, 0, null, 15, '영웅'],
+      [42613, '파천 부적', 'talisman', '다음 공격의 피해가 2배가 된다.', 1500, 750, 0, 0, 0, 0, 0, 0, 0, 0, null, 20, '영웅'],
+      [42614, '불멸 부적', 'talisman', '3턴간 HP가 1 이하로 떨어지지 않는다.', 2000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, null, 25, '전설'],
+    ];
+    for (const [id, name, type, desc, price, sellPrice, hp, mp, patk, pdef, matk, mdef, crit, eva, classRestrict, reqLv, grade] of talismans) {
+      const [ex] = await pool.query('SELECT id FROM items WHERE id = ?', [id]);
+      if (ex.length === 0) {
+        await pool.query(
+          `INSERT INTO items (id, name, type, description, price, sell_price, effect_hp, effect_mp,
+           effect_phys_attack, effect_phys_defense, effect_mag_attack, effect_mag_defense,
+           effect_crit_rate, effect_evasion, class_restriction, required_level, grade, max_enhance)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+          [id, name, type, desc, price, sellPrice, hp, mp, patk, pdef, matk, mdef, crit, eva, classRestrict, reqLv, grade]
+        ).catch(() => {});
+      }
+    }
+  }
 
   console.log('Database initialized (balance v6 applied)');
 }

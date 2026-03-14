@@ -37,6 +37,7 @@ const TYPE_ICONS = {
   necklace: '📿',
   shield: '🛡️',
   potion: '🧪',
+  talisman: '📜',
 };
 
 const GRADE_COLORS = {
@@ -68,6 +69,7 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
   const [cosmeticInventory, setCosmeticInventory] = useState([]);
   const [showAuraPopup, setShowAuraPopup] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [levelLockPopup, setLevelLockPopup] = useState(null); // { itemName, itemLevel, charLevel }
 
   const loadData = useCallback(async () => {
     try {
@@ -91,6 +93,12 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleEquip = async (itemId, slot) => {
+    // 클라이언트 레벨 체크 → 팝업
+    const item = inventory.find(i => i.item_id === itemId);
+    if (item && item.required_level > (charState?.level || 1)) {
+      setLevelLockPopup({ itemName: item.name, itemLevel: item.required_level, charLevel: charState?.level || 1, grade: item.grade });
+      return;
+    }
     try {
       const res = await api.post('/equipment/equip', { itemId, slot });
       onLog(res.data.message, 'system');
@@ -106,7 +114,12 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
       });
       loadData();
     } catch (err) {
-      onLog(err.response?.data?.message || '장착 실패', 'damage');
+      if (err.response?.data?.message?.includes('레벨')) {
+        const match = err.response.data.message.match(/레벨 (\d+)/);
+        setLevelLockPopup({ itemName: '장비', itemLevel: match ? parseInt(match[1]) : 0, charLevel: charState?.level || 1 });
+      } else {
+        onLog(err.response?.data?.message || '장착 실패', 'damage');
+      }
     }
   };
 
@@ -449,21 +462,31 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                   <div className="inv-mat-list">
                     {potions.map(pot => (
                       <div key={pot.inv_id} className="inv-mat-item" style={{ cursor: 'pointer' }}>
-                        <div className="inv-mat-icon">🧪</div>
+                        <div className="inv-mat-icon">
+                          <EquipImg itemId={pot.item_id} fallback={pot.type === 'talisman' ? '📜' : '🧪'} className="inv-cell-img" />
+                        </div>
                         <div className="inv-mat-info">
                           <div className="inv-mat-name">{pot.name}</div>
                           <div className="inv-mat-desc">
-                            {pot.effect_hp > 0 && <span style={{ color: '#4ade80' }}>HP+{pot.effect_hp} </span>}
-                            {pot.effect_mp > 0 && <span style={{ color: '#60a5fa' }}>MP+{pot.effect_mp}</span>}
+                            {pot.type === 'talisman' ? (
+                              <span style={{ color: '#fbbf24' }}>{pot.description}</span>
+                            ) : (
+                              <>
+                                {pot.effect_hp > 0 && <span style={{ color: '#4ade80' }}>HP+{pot.effect_hp} </span>}
+                                {pot.effect_mp > 0 && <span style={{ color: '#60a5fa' }}>MP+{pot.effect_mp}</span>}
+                              </>
+                            )}
                           </div>
                         </div>
                         <div className="inv-mat-qty">x{pot.quantity}</div>
-                        <button
-                          className="inv-potion-use-btn"
-                          onClick={() => handleUsePotion(pot)}
-                        >
-                          사용
-                        </button>
+                        {pot.type !== 'talisman' && (
+                          <button
+                            className="inv-potion-use-btn"
+                            onClick={() => handleUsePotion(pot)}
+                          >
+                            사용
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -612,6 +635,49 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 레벨 제한 팝업 */}
+      {levelLockPopup && (
+        <div className="equip-lock-overlay" onClick={() => setLevelLockPopup(null)}>
+          <div className="equip-lock-popup" onClick={e => e.stopPropagation()}>
+            <div className="equip-lock-particles">
+              {[...Array(12)].map((_, i) => <div key={i} className="equip-lock-particle" style={{ '--pi': i }} />)}
+            </div>
+            <div className="equip-lock-content">
+              <div className="equip-lock-icon-wrap">
+                <div className="equip-lock-icon">🔒</div>
+                <div className="equip-lock-icon-glow" />
+                <div className="equip-lock-chains">
+                  {[...Array(4)].map((_, i) => <span key={i} className="equip-lock-chain" style={{ '--ci': i }}>⛓️</span>)}
+                </div>
+              </div>
+              <div className="equip-lock-title">장착 불가</div>
+              <div className="equip-lock-subtitle">레벨이 부족합니다</div>
+              <div className="equip-lock-divider"><span>◆</span></div>
+              <div className="equip-lock-item-name" style={{ color: GRADE_COLORS[levelLockPopup.grade] || '#fbbf24' }}>
+                {levelLockPopup.itemName}
+              </div>
+              <div className="equip-lock-levels">
+                <div className="equip-lock-level current">
+                  <span className="equip-lock-level-label">현재 레벨</span>
+                  <span className="equip-lock-level-value">Lv.{levelLockPopup.charLevel}</span>
+                </div>
+                <div className="equip-lock-level-arrow">→</div>
+                <div className="equip-lock-level required">
+                  <span className="equip-lock-level-label">필요 레벨</span>
+                  <span className="equip-lock-level-value">Lv.{levelLockPopup.itemLevel}</span>
+                </div>
+              </div>
+              <div className="equip-lock-remaining">
+                🗡️ {levelLockPopup.itemLevel - levelLockPopup.charLevel}레벨 더 성장하면 장착할 수 있습니다
+              </div>
+              <button className="equip-lock-btn" onClick={() => setLevelLockPopup(null)}>
+                <span className="equip-lock-btn-shimmer" />
+                <span className="equip-lock-btn-text">확인</span>
+              </button>
             </div>
           </div>
         </div>

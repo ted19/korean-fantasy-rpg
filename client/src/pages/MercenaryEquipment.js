@@ -24,7 +24,7 @@ const SLOT_CONFIG = [
 
 const TYPE_ICONS = {
   weapon: '⚔️', chest: '🛡️', helmet: '🪖',
-  boots: '👢', ring: '💍', necklace: '📿', shield: '🛡️', potion: '🧪',
+  boots: '👢', ring: '💍', necklace: '📿', shield: '🛡️', potion: '🧪', talisman: '📜',
 };
 
 const COSMETIC_EFFECT_LABELS = {
@@ -399,16 +399,26 @@ function MercenaryEquipment({ mercenary, onLog, onMercUpdate }) {
                   <div className="inv-mat-list">
                     {potions.map(pot => (
                       <div key={pot.inv_id} className="inv-mat-item">
-                        <div className="inv-mat-icon">🧪</div>
+                        <div className="inv-mat-icon">
+                          <EquipImg itemId={pot.item_id} fallback={pot.type === 'talisman' ? '📜' : '🧪'} className="inv-cell-img" />
+                        </div>
                         <div className="inv-mat-info">
                           <div className="inv-mat-name">{pot.name}</div>
                           <div className="inv-mat-desc">
-                            {pot.effect_hp > 0 && <span style={{ color: '#4ade80' }}>HP+{pot.effect_hp} </span>}
-                            {pot.effect_mp > 0 && <span style={{ color: '#60a5fa' }}>MP+{pot.effect_mp}</span>}
+                            {pot.type === 'talisman' ? (
+                              <span style={{ color: '#fbbf24' }}>{pot.description}</span>
+                            ) : (
+                              <>
+                                {pot.effect_hp > 0 && <span style={{ color: '#4ade80' }}>HP+{pot.effect_hp} </span>}
+                                {pot.effect_mp > 0 && <span style={{ color: '#60a5fa' }}>MP+{pot.effect_mp}</span>}
+                              </>
+                            )}
                           </div>
                         </div>
                         <div className="inv-mat-qty">x{pot.quantity}</div>
-                        <button className="inv-potion-use-btn" onClick={() => handleUsePotion(pot)}>사용</button>
+                        {pot.type !== 'talisman' && (
+                          <button className="inv-potion-use-btn" onClick={() => handleUsePotion(pot)}>사용</button>
+                        )}
                       </div>
                     ))}
                   </div>

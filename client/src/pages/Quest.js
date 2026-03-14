@@ -376,36 +376,31 @@ function Quest({ charState, onCharStateUpdate, onLog }) {
       {rewardPopup && (
         <div className="qreward-overlay" onClick={() => setRewardPopup(null)}>
           <div className="qreward-popup" onClick={e => e.stopPropagation()}>
-            {/* 배경 */}
-            <div className="qreward-bg">
-              <img src="/ui/quest/reward_bg.png" alt="" className="qreward-bg-img" onError={e => { e.target.style.display = 'none'; }} />
-              <div className="qreward-bg-overlay" />
-            </div>
-            {/* 파티클 */}
+            {/* 파티클 (순수 CSS) */}
             <div className="qreward-particles">
-              <img src="/ui/quest/reward_particles.png" alt="" className="qreward-particles-img" onError={e => { e.target.style.display = 'none'; }} />
-              {[...Array(14)].map((_, i) => <div key={i} className="qreward-particle" style={{ '--pi': i }} />)}
+              {[...Array(18)].map((_, i) => <div key={i} className="qreward-particle" style={{ '--pi': i }} />)}
             </div>
             {/* 빛줄기 */}
             <div className="qreward-light-rays" />
             {/* 콘텐츠 */}
             <div className="qreward-content">
-              {/* 프레임 */}
-              <img src="/ui/quest/reward_frame.png" alt="" className="qreward-frame" onError={e => { e.target.style.display = 'none'; }} />
+              {/* 상단 장식선 */}
+              <div className="qreward-top-deco" />
               {/* 아이콘 */}
               <div className="qreward-icon-wrap">
-                <img src="/ui/quest/reward_icon.png" alt="" className="qreward-icon-img" onError={e => { e.target.textContent = '🎁'; }} />
+                <div className="qreward-icon-emoji">🏆</div>
                 <div className="qreward-icon-glow" />
                 <div className="qreward-icon-sparkles">
                   {[...Array(6)].map((_, i) => <span key={i} style={{ '--si': i }} />)}
                 </div>
+                <div className="qreward-icon-ring" />
               </div>
               {/* 타이틀 */}
               <div className="qreward-title">보상 획득!</div>
               <div className="qreward-quest-name">{rewardPopup.questTitle}</div>
-              {/* 배너 */}
-              <div className="qreward-banner-wrap">
-                <img src="/ui/quest/reward_banner.png" alt="" onError={e => { e.target.style.display = 'none'; }} />
+              {/* 구분선 */}
+              <div className="qreward-divider">
+                <span className="qreward-divider-gem">◆</span>
               </div>
               {/* 보상 목록 */}
               <div className="qreward-rewards">

@@ -152,7 +152,7 @@ router.get('/my', auth, async (req, res) => {
     // 각 소환수의 습득 스킬 목록 + 장착 장비 수
     for (const s of summons) {
       const [learned] = await pool.query(
-        `SELECT ss.* FROM summon_learned_skills sls
+        `SELECT ss.*, sls.auto_priority FROM summon_learned_skills sls
          JOIN summon_skills ss ON sls.skill_id = ss.id
          WHERE sls.summon_id = ?`,
         [s.id]
@@ -269,7 +269,7 @@ router.post('/buy', auth, async (req, res) => {
 
     const [defaultSkills] = await conn.query(
       `SELECT id FROM summon_skills
-       WHERE required_level <= 10
+       WHERE required_level <= 1
          AND ((is_common = 1)
            OR (summon_type = ? AND template_id IS NULL)
            OR (template_id = ?))`,
@@ -752,15 +752,17 @@ router.get('/:summonId/skills', auth, async (req, res) => {
     );
 
     const [learned] = await pool.query(
-      `SELECT skill_id FROM summon_learned_skills WHERE summon_id = ?`,
+      `SELECT skill_id, auto_priority FROM summon_learned_skills WHERE summon_id = ?`,
       [summonId]
     );
-    const learnedIds = learned.map((l) => l.skill_id);
+    const learnedMap = {};
+    for (const l of learned) learnedMap[l.skill_id] = l.auto_priority ?? 100;
 
     res.json({
       skills: skills.map((s) => ({
         ...s,
-        learned: learnedIds.includes(s.id),
+        learned: s.id in learnedMap,
+        auto_priority: learnedMap[s.id] ?? 100,
         skill_category: s.is_common ? '공통' : s.template_id ? '고유' : s.summon_type,
         gold_cost: Math.floor(s.required_level * 50 * (1 + (summon.level - 1) * 0.1)),
       })),
@@ -846,6 +848,24 @@ router.post('/:summonId/learn-skill', auth, async (req, res) => {
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   } finally {
     conn.release();
+  }
+});
+
+// PUT /summon/:id/skill-priority - 소환수 스킬 자동전투 우선도
+router.put('/:id/skill-priority', auth, async (req, res) => {
+  try {
+    const summonId = parseInt(req.params.id);
+    const { skill_id, priority } = req.body;
+    if (!skill_id || priority === undefined) return res.status(400).json({ message: '잘못된 요청입니다.' });
+    const p = Math.max(0, Math.min(200, Math.round(Number(priority))));
+    await pool.query(
+      'UPDATE summon_learned_skills SET auto_priority = ? WHERE summon_id = ? AND skill_id = ?',
+      [p, summonId, skill_id]
+    );
+    res.json({ success: true, auto_priority: p });
+  } catch (err) {
+    console.error('Summon skill priority error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });
 

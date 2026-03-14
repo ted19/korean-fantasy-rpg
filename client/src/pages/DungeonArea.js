@@ -539,13 +539,13 @@ function DungeonArea({ character, charState, mySummons, activeSummonIds, onToggl
                   </span>
                 </div>
                 {contentCharges && selectedDungeon && stagePopup && (() => {
-                  const ck = contentCharges[`dungeon_${selectedDungeon.key_name}_${stagePopup.stageNumber}`] || { charges: 3, maxCharges: 3, cooldown: 0 };
+                  const ck = contentCharges[`dungeon_${selectedDungeon.key_name}_${stagePopup.stageNumber}`] || { charges: 5, maxCharges: 5, cooldown: 0 };
                   return (
                   <div className="stage-popup-charges" style={{marginBottom:'8px'}}>
-                    입장 횟수: {[...Array(ck.maxCharges || 3)].map((_, i) => (
-                      <span key={i} className={`charge-pip ${i < (ck.charges ?? 3) ? 'active' : 'empty'}`} />
+                    입장 횟수: {[...Array(ck.maxCharges || 5)].map((_, i) => (
+                      <span key={i} className={`charge-pip ${i < (ck.charges ?? 5) ? 'active' : 'empty'}`} />
                     ))}
-                    <span className="charge-count">{ck.charges ?? 3}/{ck.maxCharges || 3}</span>
+                    <span className="charge-count">{ck.charges ?? 5}/{ck.maxCharges || 5}</span>
                     {ck.charges === 0 && ck.cooldown > 0 && (
                       <span className="charge-cooldown">충전까지 {Math.floor(ck.cooldown / 3600000)}시간 {Math.floor((ck.cooldown % 3600000) / 60000)}분</span>
                     )}
@@ -553,7 +553,7 @@ function DungeonArea({ character, charState, mySummons, activeSummonIds, onToggl
                   );
                 })()}
                 {(() => {
-                  const ck = (selectedDungeon && stagePopup) ? (contentCharges?.[`dungeon_${selectedDungeon.key_name}_${stagePopup.stageNumber}`] || { charges: 3 }) : { charges: 3 };
+                  const ck = (selectedDungeon && stagePopup) ? (contentCharges?.[`dungeon_${selectedDungeon.key_name}_${stagePopup.stageNumber}`] || { charges: 5 }) : { charges: 5 };
                   return (
                   <button
                     className={`dg-popup-start-btn ${((selectedDungeon?.ticketCount || 0) <= 0 || ck.charges === 0) ? 'disabled' : ''}`}

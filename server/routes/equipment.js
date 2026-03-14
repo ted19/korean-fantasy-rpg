@@ -18,6 +18,45 @@ function auth(req, res, next) {
   }
 }
 
+// 강화 보너스 계산: 각 스탯에 enhance_level만큼 누적 보너스 적용
+function calcEnhanceBonus(item, enhanceLevel) {
+  if (!enhanceLevel || enhanceLevel <= 0) return { hp:0, mp:0, atk:0, def:0, patk:0, pdef:0, matk:0, mdef:0, crit:0, eva:0 };
+  // 등급별 보정치
+  const gradeMult = { '일반':1, '고급':1.2, '희귀':1.5, '영웅':1.8, '전설':2.0, '신화':2.5, '초월':3.0 };
+  const mult = gradeMult[item.grade] || 1;
+  // 레벨당 5~12% 누적 (간소화: 레벨당 평균 6%)
+  const pct = enhanceLevel * 0.06 * mult;
+  return {
+    hp: Math.floor((item.effect_hp || 0) * pct),
+    mp: Math.floor((item.effect_mp || 0) * pct),
+    atk: Math.floor((item.effect_attack || 0) * pct),
+    def: Math.floor((item.effect_defense || 0) * pct),
+    patk: Math.floor((item.effect_phys_attack || 0) * pct),
+    pdef: Math.floor((item.effect_phys_defense || 0) * pct),
+    matk: Math.floor((item.effect_mag_attack || 0) * pct),
+    mdef: Math.floor((item.effect_mag_defense || 0) * pct),
+    crit: Math.floor((item.effect_crit_rate || 0) * pct),
+    eva: Math.floor((item.effect_evasion || 0) * pct),
+  };
+}
+
+// 아이템 기본 스탯 + 강화 보너스 합산 배열 반환 (SQL UPDATE용)
+function itemStatArray(item, enhanceLevel) {
+  const bonus = calcEnhanceBonus(item, enhanceLevel);
+  return [
+    (item.effect_hp||0) + bonus.hp,
+    (item.effect_mp||0) + bonus.mp,
+    (item.effect_attack||0) + bonus.atk,
+    (item.effect_defense||0) + bonus.def,
+    (item.effect_phys_attack||0) + bonus.patk,
+    (item.effect_phys_defense||0) + bonus.pdef,
+    (item.effect_mag_attack||0) + bonus.matk,
+    (item.effect_mag_defense||0) + bonus.mdef,
+    (item.effect_crit_rate||0) + bonus.crit,
+    (item.effect_evasion||0) + bonus.eva,
+  ];
+}
+
 const SLOT_NAMES = {
   helmet: '투구',
   chest: '갑옷',
@@ -146,11 +185,13 @@ router.get('/info', auth, async (req, res) => {
     // 물약(소모품)
     const [potions] = await pool.query(
       `SELECT i.id as inv_id, i.item_id, i.quantity, it.name, it.type, it.description, it.price, it.sell_price,
-              it.effect_hp, it.effect_mp, IFNULL(it.grade, '일반') as grade
+              it.effect_hp, it.effect_mp, it.effect_phys_attack, it.effect_phys_defense,
+              it.effect_mag_attack, it.effect_mag_defense, it.effect_crit_rate, it.effect_evasion,
+              IFNULL(it.grade, '일반') as grade
        FROM inventory i
        JOIN items it ON i.item_id = it.id
-       WHERE i.character_id = ? AND it.type = 'potion' AND i.quantity > 0
-       ORDER BY it.name`,
+       WHERE i.character_id = ? AND it.type IN ('potion', 'talisman') AND i.quantity > 0
+       ORDER BY it.type, it.name`,
       [charId]
     );
 
@@ -237,46 +278,53 @@ router.post('/equip', auth, async (req, res) => {
     // 양손 무기 장착 시 방패 자동 해제
     if (slot === 'weapon' && item.weapon_hand === '2h') {
       const [shieldEquip] = await conn.query(
-        `SELECT e.item_id, it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense, it.effect_crit_rate, it.effect_evasion, it.name
+        `SELECT e.item_id, it.*, IFNULL(inv.enhance_level, 0) as enhance_level
          FROM equipment e JOIN items it ON e.item_id = it.id
+         LEFT JOIN inventory inv ON inv.character_id = e.character_id AND inv.item_id = e.item_id
          WHERE e.character_id = ? AND e.slot = 'shield'`,
         [char.id]
       );
       if (shieldEquip.length > 0) {
         const s = shieldEquip[0];
+        const sStats = itemStatArray(s, s.enhance_level);
         await conn.query('DELETE FROM equipment WHERE character_id = ? AND slot = ?', [char.id, 'shield']);
         await conn.query(
           'UPDATE characters SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?, phys_attack = phys_attack - ?, phys_defense = phys_defense - ?, mag_attack = mag_attack - ?, mag_defense = mag_defense - ?, crit_rate = crit_rate - ?, evasion = evasion - ? WHERE id = ?',
-          [s.effect_hp, s.effect_mp, s.effect_attack, s.effect_defense, s.effect_phys_attack||0, s.effect_phys_defense||0, s.effect_mag_attack||0, s.effect_mag_defense||0, s.effect_crit_rate||0, s.effect_evasion||0, char.id]
+          [...sStats, char.id]
         );
       }
     }
 
     // 기존 장비 해제
     const [currentEquip] = await conn.query(
-      `SELECT e.item_id, it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense, it.effect_crit_rate, it.effect_evasion, it.name
+      `SELECT e.item_id, it.*, IFNULL(inv.enhance_level, 0) as enhance_level
        FROM equipment e JOIN items it ON e.item_id = it.id
+       LEFT JOIN inventory inv ON inv.character_id = e.character_id AND inv.item_id = e.item_id
        WHERE e.character_id = ? AND e.slot = ?`,
       [char.id, slot]
     );
 
     if (currentEquip.length > 0) {
       const old = currentEquip[0];
+      const oldStats = itemStatArray(old, old.enhance_level);
       await conn.query('DELETE FROM equipment WHERE character_id = ? AND slot = ?', [char.id, slot]);
       await conn.query(
         'UPDATE characters SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?, phys_attack = phys_attack - ?, phys_defense = phys_defense - ?, mag_attack = mag_attack - ?, mag_defense = mag_defense - ?, crit_rate = crit_rate - ?, evasion = evasion - ? WHERE id = ?',
-        [old.effect_hp, old.effect_mp, old.effect_attack, old.effect_defense, old.effect_phys_attack||0, old.effect_phys_defense||0, old.effect_mag_attack||0, old.effect_mag_defense||0, old.effect_crit_rate||0, old.effect_evasion||0, char.id]
+        [...oldStats, char.id]
       );
     }
 
-    // 새 장비 장착
+    // 새 장비 장착 (강화 보너스 포함)
+    const [newInv] = await conn.query('SELECT enhance_level FROM inventory WHERE character_id = ? AND item_id = ? LIMIT 1', [char.id, itemId]);
+    const newEnhLv = newInv.length > 0 ? (newInv[0].enhance_level || 0) : 0;
+    const newStats = itemStatArray(item, newEnhLv);
     await conn.query(
       'INSERT INTO equipment (character_id, slot, item_id) VALUES (?, ?, ?)',
       [char.id, slot, itemId]
     );
     await conn.query(
       'UPDATE characters SET hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?, phys_attack = phys_attack + ?, phys_defense = phys_defense + ?, mag_attack = mag_attack + ?, mag_defense = mag_defense + ?, crit_rate = crit_rate + ?, evasion = evasion + ? WHERE id = ?',
-      [item.effect_hp, item.effect_mp, item.effect_attack, item.effect_defense, item.effect_phys_attack||0, item.effect_phys_defense||0, item.effect_mag_attack||0, item.effect_mag_defense||0, item.effect_crit_rate||0, item.effect_evasion||0, char.id]
+      [...newStats, char.id]
     );
 
     // current_hp, current_mp 보정
@@ -327,21 +375,23 @@ router.post('/unequip', auth, async (req, res) => {
     const char = chars[0];
 
     const [equipRows] = await conn.query(
-      `SELECT e.item_id, it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense, it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense, it.effect_crit_rate, it.effect_evasion, it.name
+      `SELECT e.item_id, it.*, IFNULL(inv.enhance_level, 0) as enhance_level
        FROM equipment e JOIN items it ON e.item_id = it.id
+       LEFT JOIN inventory inv ON inv.character_id = e.character_id AND inv.item_id = e.item_id
        WHERE e.character_id = ? AND e.slot = ?`,
       [char.id, slot]
     );
     if (equipRows.length === 0) return res.status(400).json({ message: '해당 슬롯에 장착된 장비가 없습니다.' });
 
     const equip = equipRows[0];
+    const unequipStats = itemStatArray(equip, equip.enhance_level);
 
     await conn.beginTransaction();
 
     await conn.query('DELETE FROM equipment WHERE character_id = ? AND slot = ?', [char.id, slot]);
     await conn.query(
       'UPDATE characters SET hp = hp - ?, mp = mp - ?, attack = attack - ?, defense = defense - ?, phys_attack = phys_attack - ?, phys_defense = phys_defense - ?, mag_attack = mag_attack - ?, mag_defense = mag_defense - ?, crit_rate = crit_rate - ?, evasion = evasion - ? WHERE id = ?',
-      [equip.effect_hp, equip.effect_mp, equip.effect_attack, equip.effect_defense, equip.effect_phys_attack||0, equip.effect_phys_defense||0, equip.effect_mag_attack||0, equip.effect_mag_defense||0, equip.effect_crit_rate||0, equip.effect_evasion||0, char.id]
+      [...unequipStats, char.id]
     );
     await conn.query('UPDATE characters SET current_hp = LEAST(current_hp, hp), current_mp = LEAST(current_mp, mp) WHERE id = ?', [char.id]);
 
@@ -385,17 +435,35 @@ router.post('/use-potion', auth, async (req, res) => {
     const charId = chars[0].id;
 
     const [rows] = await pool.query(
-      `SELECT i.id as inv_id, i.item_id, i.quantity, it.effect_hp, it.effect_mp, it.name
+      `SELECT i.id as inv_id, i.item_id, i.quantity, it.effect_hp, it.effect_mp, it.name, it.type,
+              it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense,
+              it.effect_crit_rate, it.effect_evasion, it.description
        FROM inventory i JOIN items it ON i.item_id = it.id
-       WHERE i.id = ? AND i.character_id = ? AND it.type = 'potion' AND i.quantity > 0`,
+       WHERE i.id = ? AND i.character_id = ? AND it.type IN ('potion', 'talisman') AND i.quantity > 0`,
       [invId, charId]
     );
-    if (rows.length === 0) return res.status(400).json({ message: '사용할 수 없는 물약입니다.' });
+    if (rows.length === 0) return res.status(400).json({ message: '사용할 수 없는 아이템입니다.' });
 
-    const potion = rows[0];
+    const item = rows[0];
     await pool.query('UPDATE inventory SET quantity = quantity - 1 WHERE id = ?', [invId]);
 
-    res.json({ message: `${potion.name} 사용!`, effect_hp: potion.effect_hp || 0, effect_mp: potion.effect_mp || 0 });
+    res.json({
+      message: `${item.name} 사용!`,
+      effect_hp: item.effect_hp || 0,
+      effect_mp: item.effect_mp || 0,
+      item: {
+        type: item.type,
+        name: item.name,
+        item_id: item.item_id,
+        effect_phys_attack: item.effect_phys_attack || 0,
+        effect_phys_defense: item.effect_phys_defense || 0,
+        effect_mag_attack: item.effect_mag_attack || 0,
+        effect_mag_defense: item.effect_mag_defense || 0,
+        effect_crit_rate: item.effect_crit_rate || 0,
+        effect_evasion: item.effect_evasion || 0,
+        description: item.description || '',
+      },
+    });
   } catch (err) {
     console.error('Use potion error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });

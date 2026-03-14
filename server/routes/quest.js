@@ -296,6 +296,9 @@ router.post('/reward', auth, async (req, res) => {
     if (chars.length === 0) return res.status(404).json({ message: '캐릭터가 없습니다.' });
     const char = chars[0];
 
+    // 일일 퀘스트 리셋 체크 (보상 수령 전 리셋 우회 방지)
+    await checkDailyReset(char.id, conn);
+
     const [cqRows] = await conn.query(
       `SELECT cq.*, q.title, q.reward_exp, q.reward_gold, q.reward_item_id, q.reward_item_qty
        FROM character_quests cq JOIN quests q ON cq.quest_id = q.id

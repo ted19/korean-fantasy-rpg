@@ -56,21 +56,15 @@ async function refreshShopStock(conn, characterId, classType) {
   // 해당 캐릭터의 기존 재고 삭제
   await conn.query('DELETE FROM shop_stock WHERE character_id = ?', [characterId]);
 
-  // 캐릭터 레벨에 맞는 장비 + 물약에서 랜덤 선택
-  // 현재 레벨 +10 범위까지의 아이템만 표시 (너무 높은 장비 제외)
-  const [charRow] = await conn.query('SELECT level FROM characters WHERE id = ?', [characterId]);
-  const charLevel = charRow.length > 0 ? charRow[0].level : 1;
-  const maxItemLevel = Math.min(100, charLevel + 10);
-
+  // 캐릭터 클래스에 맞는 장비 + 물약에서 랜덤 선택 (레벨 제한 없음)
   const [candidates] = await conn.query(
     `SELECT id FROM items
      WHERE (class_restriction IS NULL OR class_restriction = ?)
        AND type != 'cosmetic'
-       AND required_level <= ?
        AND IFNULL(grade, '일반') IN ('일반', '고급')
      ORDER BY RAND()
      LIMIT ?`,
-    [classType, maxItemLevel, SHOP_ITEM_COUNT]
+    [classType, SHOP_ITEM_COUNT]
   );
 
   if (candidates.length > 0) {
@@ -167,7 +161,7 @@ router.get('/inventory', auth, async (req, res) => {
     // 장비: 장착중인 개수만큼 제외, 물약: 수량 그대로
     const usedCount = {};
     const result = inventory.filter(i => {
-      if (i.type === 'potion') return i.quantity > 0;
+      if (i.type === 'potion' || i.type === 'talisman') return i.quantity > 0;
       const equipped = equippedCountMap[i.item_id] || 0;
       const used = usedCount[i.item_id] || 0;
       if (used < equipped) {
@@ -175,7 +169,7 @@ router.get('/inventory', auth, async (req, res) => {
         return false;
       }
       return true;
-    }).map(i => ({ ...i, available_qty: i.type === 'potion' ? i.quantity : 1 }));
+    }).map(i => ({ ...i, available_qty: (i.type === 'potion' || i.type === 'talisman') ? i.quantity : 1 }));
 
     res.json({ inventory: result });
   } catch (err) {
@@ -211,9 +205,7 @@ router.post('/buy', auth, async (req, res) => {
     if (items.length === 0) return res.status(404).json({ message: '아이템을 찾을 수 없습니다.' });
     const item = items[0];
 
-    if (char.level < item.required_level) {
-      return res.status(400).json({ message: `레벨 ${item.required_level} 이상만 구매할 수 있습니다.` });
-    }
+    // 레벨 제한 없이 구매 가능 (장착 시 레벨 체크)
 
     if (item.class_restriction && item.class_restriction !== char.class_type) {
       return res.status(400).json({ message: `${item.class_restriction} 전용 아이템입니다.` });
@@ -229,8 +221,8 @@ router.post('/buy', auth, async (req, res) => {
 
     await conn.query('UPDATE characters SET gold = gold - ? WHERE id = ?', [totalPrice, char.id]);
 
-    if (item.type === 'potion') {
-      // 물약: 수량 스택 (최대 99)
+    if (item.type === 'potion' || item.type === 'talisman') {
+      // 소모품: 수량 스택 (최대 99)
       const [existing] = await conn.query(
         'SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?',
         [char.id, item.id]
@@ -238,7 +230,7 @@ router.post('/buy', auth, async (req, res) => {
       const currentQty = existing.length > 0 ? existing[0].quantity : 0;
       if (currentQty + quantity > 99) {
         await conn.rollback();
-        return res.status(400).json({ message: `물약은 최대 99개까지 보유할 수 있습니다. (현재: ${currentQty}개)` });
+        return res.status(400).json({ message: `소모품은 최대 99개까지 보유할 수 있습니다. (현재: ${currentQty}개)` });
       }
       await conn.query(
         `INSERT INTO inventory (character_id, item_id, quantity)
@@ -353,8 +345,8 @@ router.post('/sell', auth, async (req, res) => {
 
     await conn.beginTransaction();
 
-    if (inv.type === 'potion') {
-      // 물약: 수량 감소
+    if (inv.type === 'potion' || inv.type === 'talisman') {
+      // 소모품: 수량 감소
       const sellQty = Math.min(quantity, inv.quantity);
       const totalGold = inv.sell_price * sellQty;
       if (inv.quantity <= sellQty) {
@@ -411,7 +403,9 @@ router.post('/use', auth, async (req, res) => {
     const char = chars[0];
 
     const [invRows] = await conn.query(
-      `SELECT i.*, it.name, it.type, it.effect_hp, it.effect_mp
+      `SELECT i.*, it.name, it.type, it.effect_hp, it.effect_mp,
+              it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense,
+              it.effect_crit_rate, it.effect_evasion, it.description
        FROM inventory i JOIN items it ON i.item_id = it.id
        WHERE i.character_id = ? AND i.item_id = ?`,
       [char.id, itemId]
@@ -419,7 +413,7 @@ router.post('/use', auth, async (req, res) => {
     if (invRows.length === 0) return res.status(404).json({ message: '보유하지 않은 아이템입니다.' });
 
     const inv = invRows[0];
-    if (inv.type !== 'potion') return res.status(400).json({ message: '사용할 수 없는 아이템입니다.' });
+    if (inv.type !== 'potion' && inv.type !== 'talisman') return res.status(400).json({ message: '사용할 수 없는 아이템입니다.' });
 
     await conn.beginTransaction();
 
@@ -428,7 +422,9 @@ router.post('/use', auth, async (req, res) => {
     const newHp = inv.effect_hp > 0 ? Math.min(char.hp, currentHp + inv.effect_hp) : currentHp;
     const newMp = inv.effect_mp > 0 ? Math.min(char.mp, currentMp + inv.effect_mp) : currentMp;
 
-    await conn.query('UPDATE characters SET current_hp = ?, current_mp = ? WHERE id = ?', [newHp, newMp, char.id]);
+    if (inv.type === 'potion') {
+      await conn.query('UPDATE characters SET current_hp = ?, current_mp = ? WHERE id = ?', [newHp, newMp, char.id]);
+    }
 
     if (inv.quantity <= 1) {
       await conn.query('DELETE FROM inventory WHERE id = ?', [inv.id]);
@@ -441,6 +437,20 @@ router.post('/use', auth, async (req, res) => {
     res.json({
       message: `${inv.name}을(를) 사용했습니다.`,
       character: { current_hp: newHp, current_mp: newMp },
+      item: {
+        type: inv.type,
+        name: inv.name,
+        item_id: inv.item_id,
+        effect_hp: inv.effect_hp || 0,
+        effect_mp: inv.effect_mp || 0,
+        effect_phys_attack: inv.effect_phys_attack || 0,
+        effect_phys_defense: inv.effect_phys_defense || 0,
+        effect_mag_attack: inv.effect_mag_attack || 0,
+        effect_mag_defense: inv.effect_mag_defense || 0,
+        effect_crit_rate: inv.effect_crit_rate || 0,
+        effect_evasion: inv.effect_evasion || 0,
+        description: inv.description || '',
+      },
     });
   } catch (err) {
     await conn.rollback();

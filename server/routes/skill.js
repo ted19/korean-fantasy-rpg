@@ -35,6 +35,66 @@ router.get('/encyclopedia', auth, async (req, res) => {
   }
 });
 
+// GET /skill/merc-encyclopedia - 용병 스킬 도감
+router.get('/merc-encyclopedia', auth, async (req, res) => {
+  try {
+    const { class_type, search } = req.query;
+    let sql = 'SELECT * FROM mercenary_skills WHERE 1=1';
+    const params = [];
+    if (class_type && class_type !== 'all') {
+      if (class_type === '공용') {
+        sql += ' AND is_common = 1';
+      } else {
+        sql += ' AND class_type = ?';
+        params.push(class_type);
+      }
+    }
+    if (search) { sql += ' AND name LIKE ?'; params.push(`%${search}%`); }
+    sql += ' ORDER BY COALESCE(class_type, "공용"), required_level, id';
+    const [skills] = await pool.query(sql, params);
+    // 공용 스킬에 class_type 표시
+    for (const s of skills) {
+      if (!s.class_type || s.is_common) s.class_type_display = '공용';
+      else s.class_type_display = s.class_type;
+    }
+    res.json({ skills });
+  } catch (err) {
+    console.error('Merc skill encyclopedia error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
+// GET /skill/summon-encyclopedia - 소환수 스킬 도감
+router.get('/summon-encyclopedia', auth, async (req, res) => {
+  try {
+    const { summon_type, search } = req.query;
+    let sql = `SELECT ss.*, st.name as template_name, st.type as template_type, st.icon as template_icon
+               FROM summon_skills ss
+               LEFT JOIN summon_templates st ON ss.template_id = st.id
+               WHERE 1=1`;
+    const params = [];
+    if (summon_type && summon_type !== 'all') {
+      if (summon_type === '공용') {
+        sql += ' AND ss.is_common = 1';
+      } else {
+        sql += ' AND ss.summon_type = ?';
+        params.push(summon_type);
+      }
+    }
+    if (search) { sql += ' AND ss.name LIKE ?'; params.push(`%${search}%`); }
+    sql += ' ORDER BY COALESCE(ss.summon_type, "공용"), ss.required_level, ss.id';
+    const [skills] = await pool.query(sql, params);
+    for (const s of skills) {
+      if (!s.summon_type || s.is_common) s.type_display = '공용';
+      else s.type_display = s.summon_type;
+    }
+    res.json({ skills });
+  } catch (err) {
+    console.error('Summon skill encyclopedia error:', err);
+    res.status(500).json({ message: '서버 오류' });
+  }
+});
+
 // GET /skill/tree - 스킬 트리 전체 + 해금 현황
 router.get('/tree', auth, async (req, res) => {
   try {
@@ -216,7 +276,7 @@ router.get('/active-skills', auth, async (req, res) => {
 
     // 해금한 노드 조회
     const [unlocked] = await pool.query(
-      `SELECT stn.* FROM character_skill_nodes csn
+      `SELECT stn.*, csn.auto_priority FROM character_skill_nodes csn
        JOIN skill_tree_nodes stn ON csn.node_id = stn.id
        WHERE csn.character_id = ?`,
       [char.id]
@@ -241,6 +301,7 @@ router.get('/active-skills', auth, async (req, res) => {
         cooldown: n.cooldown,
         skill_range: n.skill_range,
         node_key: n.node_key,
+        auto_priority: n.auto_priority ?? 100,
       }));
 
     // 패시브 보너스 합산
@@ -260,6 +321,46 @@ router.get('/active-skills', auth, async (req, res) => {
     res.json({ skills: activeSkills, passiveBonuses });
   } catch (err) {
     console.error('Active skills error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// PUT /skill/auto-priority - 스킬 자동전투 우선도 설정
+router.put('/auto-priority', auth, async (req, res) => {
+  try {
+    const char = await getSelectedChar(req);
+    if (!char) return res.status(400).json({ message: '캐릭터를 선택해주세요.' });
+    const { node_id, priority } = req.body;
+    if (!node_id || priority === undefined) return res.status(400).json({ message: '잘못된 요청입니다.' });
+    const p = Math.max(0, Math.min(200, Math.round(Number(priority))));
+    await pool.query(
+      'UPDATE character_skill_nodes SET auto_priority = ? WHERE character_id = ? AND node_id = ?',
+      [p, char.id, node_id]
+    );
+    res.json({ success: true, auto_priority: p });
+  } catch (err) {
+    console.error('Auto priority error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// PUT /skill/auto-priority-batch - 일괄 우선도 설정
+router.put('/auto-priority-batch', auth, async (req, res) => {
+  try {
+    const char = await getSelectedChar(req);
+    if (!char) return res.status(400).json({ message: '캐릭터를 선택해주세요.' });
+    const { priorities } = req.body; // [{node_id, priority}]
+    if (!Array.isArray(priorities)) return res.status(400).json({ message: '잘못된 요청입니다.' });
+    for (const { node_id, priority } of priorities) {
+      const p = Math.max(0, Math.min(200, Math.round(Number(priority))));
+      await pool.query(
+        'UPDATE character_skill_nodes SET auto_priority = ? WHERE character_id = ? AND node_id = ?',
+        [p, char.id, node_id]
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Auto priority batch error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });

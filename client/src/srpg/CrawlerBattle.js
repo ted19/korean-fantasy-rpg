@@ -255,12 +255,12 @@ export default function CrawlerBattle({
     if (unit.team === 'player') {
       const isCompanion = unit.id !== 'player';
       if (autoAll || (autoCompanion && isCompanion)) {
-        setTimeout(() => executeAutoTurn(unit), 400);
+        setTimeout(() => executeAutoTurn(unit), 800);
       } else {
         setPhase('player_action');
       }
     } else {
-      setTimeout(() => executeEnemyTurn(unit), 500);
+      setTimeout(() => executeEnemyTurn(unit), 900);
     }
   }, [phase, turnTick]); // eslint-disable-line
 
@@ -428,7 +428,7 @@ export default function CrawlerBattle({
         skillIconUrl: null,
         casterName: unit.name,
       });
-      setTimeout(() => setSkillCutIn(null), 800);
+      setTimeout(() => setSkillCutIn(null), 1000);
     }
 
     // 공격 애니메이션
@@ -453,8 +453,8 @@ export default function CrawlerBattle({
 
       setUnits([...unitsRef.current]);
       actionLogs.forEach(l => processLogEntry(l, unit.id));
-      setTimeout(() => advanceTurn(), 400);
-    }, 500);
+      setTimeout(() => advanceTurn(), 700);
+    }, 800);
   }, [advanceTurn, processLogEntry]);
 
   // ===== 자동 턴 =====
@@ -484,7 +484,7 @@ export default function CrawlerBattle({
 
     setUnits([...unitsRef.current]);
     actionLogs.forEach(l => processLogEntry(l, unit.id));
-    setTimeout(() => advanceTurn(), 500);
+    setTimeout(() => advanceTurn(), 800);
   }, [advanceTurn, processLogEntry]);
 
   // ===== 플레이어 액션 =====
@@ -580,31 +580,60 @@ export default function CrawlerBattle({
     setTimeout(() => advanceTurn(), 500);
   };
 
-  const handleUsePotion = async (potion) => {
+  const handleUsePotion = async (item) => {
     const currentUnit = getCurrentUnit();
     if (!currentUnit || currentUnit.id !== 'player') return;
     try {
-      await api.post('/equipment/use-potion', { invId: potion.inv_id });
-      const hpHeal = potion.effect_hp || 0;
-      const mpHeal = potion.effect_mp || 0;
-      if (hpHeal > 0) {
-        const actual = Math.min(hpHeal, currentUnit.maxHp - currentUnit.hp);
-        currentUnit.hp += actual;
-        addPopup('player', `HP+${actual}`, 'heal');
-        addLog(`${potion.name} 사용! HP +${actual}`, 'heal');
-      }
-      if (mpHeal > 0) {
-        const actual = Math.min(mpHeal, currentUnit.maxMp - currentUnit.mp);
-        currentUnit.mp += actual;
-        addPopup('player', `MP+${actual}`, 'heal');
-        addLog(`${potion.name} 사용! MP +${actual}`, 'heal');
+      await api.post('/equipment/use-potion', { invId: item.inv_id });
+
+      if (item.type === 'talisman') {
+        // 부적: 버프 적용
+        const buffEffects = [];
+        const statMap = [
+          { key: 'effect_phys_attack', stat: 'attack', label: '공격력' },
+          { key: 'effect_phys_defense', stat: 'defense', label: '방어력' },
+          { key: 'effect_mag_attack', stat: 'attack', label: '마법공격' },
+          { key: 'effect_mag_defense', stat: 'defense', label: '마법방어' },
+          { key: 'effect_crit_rate', stat: 'crit_rate', label: '치명타' },
+          { key: 'effect_evasion', stat: 'evasion', label: '회피율' },
+        ];
+        const newBuffs = [...(currentUnit.buffs || [])];
+        for (const sm of statMap) {
+          const val = item[sm.key] || 0;
+          if (val > 0) {
+            const existing = newBuffs.findIndex(b => b.stat === sm.stat && b.source === 'talisman');
+            if (existing >= 0) newBuffs.splice(existing, 1);
+            newBuffs.push({ stat: sm.stat, value: val, duration: 3, source: 'talisman', name: item.name });
+            buffEffects.push(`${sm.label}+${val}`);
+          }
+        }
+        currentUnit.buffs = newBuffs;
+        const effectText = buffEffects.length > 0 ? buffEffects.join(', ') : item.description;
+        addPopup('player', `📜 ${item.name}`, 'buff');
+        addLog(`${item.name} 사용! (${effectText})`, 'buff');
+      } else {
+        // 물약: HP/MP 회복
+        const hpHeal = item.effect_hp || 0;
+        const mpHeal = item.effect_mp || 0;
+        if (hpHeal > 0) {
+          const actual = Math.min(hpHeal, currentUnit.maxHp - currentUnit.hp);
+          currentUnit.hp += actual;
+          addPopup('player', `HP+${actual}`, 'heal');
+          addLog(`${item.name} 사용! HP +${actual}`, 'heal');
+        }
+        if (mpHeal > 0) {
+          const actual = Math.min(mpHeal, currentUnit.maxMp - currentUnit.mp);
+          currentUnit.mp += actual;
+          addPopup('player', `MP+${actual}`, 'heal');
+          addLog(`${item.name} 사용! MP +${actual}`, 'heal');
+        }
       }
       setUnits([...unitsRef.current]);
       setPotions(prev => prev.map(p =>
-        p.inv_id === potion.inv_id ? { ...p, quantity: p.quantity - 1 } : p
+        p.inv_id === item.inv_id ? { ...p, quantity: p.quantity - 1 } : p
       ).filter(p => p.quantity > 0));
     } catch (err) {
-      addLog(err.response?.data?.message || '물약 사용 실패', 'damage');
+      addLog(err.response?.data?.message || '아이템 사용 실패', 'damage');
     }
     setShowItemList(false);
     advanceTurn();
@@ -974,7 +1003,7 @@ export default function CrawlerBattle({
               </button>
               <button className="cwb-act-btn item" onClick={() => handleAction('item')}
                 disabled={currentUnit.id !== 'player' || potions.length === 0}>
-                🧪 물약
+                🧪 물품
               </button>
               <button className="cwb-act-btn guard" onClick={() => handleAction('guard')}>🛡️ 수호</button>
               <button className="cwb-act-btn wait" onClick={() => handleAction('wait')}>⏳ 대기</button>
@@ -1005,15 +1034,19 @@ export default function CrawlerBattle({
 
         {showItemList && (
           <div className="cwb-skill-list">
-            <div className="cwb-action-label">물약 선택</div>
+            <div className="cwb-action-label">물품 선택</div>
             <div className="cwb-skill-btns">
               {potions.map((p, i) => (
-                <button key={p.inv_id || i} className={`cwb-skill-btn ${p.effect_mp ? 'buff' : 'heal'}`} onClick={() => handleUsePotion(p)}>
+                <button key={p.inv_id || i} className={`cwb-skill-btn ${p.type === 'talisman' ? 'buff' : p.effect_mp ? 'buff' : 'heal'}`} onClick={() => handleUsePotion(p)}>
                   <span className="cwb-skill-icon">
-                    <img src={`/equipment/${p.item_id}_icon.png`} alt="" className="cwb-skill-icon-img" onError={e => { e.target.style.display = 'none'; e.target.parentElement.textContent = p.effect_mp ? '💧' : '🧪'; }} />
+                    <img src={`/equipment/${p.item_id}_icon.png`} alt="" className="cwb-skill-icon-img" onError={e => { e.target.style.display = 'none'; e.target.parentElement.textContent = p.type === 'talisman' ? '📜' : p.effect_mp ? '💧' : '🧪'; }} />
                   </span>
                   <span className="cwb-skill-name">{p.name} x{p.quantity}</span>
-                  <span className="cwb-skill-mp">{p.effect_hp ? `HP+${p.effect_hp}` : ''}{p.effect_hp && p.effect_mp ? ' ' : ''}{p.effect_mp ? `MP+${p.effect_mp}` : ''}</span>
+                  <span className="cwb-skill-mp">
+                    {p.type === 'talisman' ? '📜 부적' : (
+                      `${p.effect_hp ? `HP+${p.effect_hp}` : ''}${p.effect_hp && p.effect_mp ? ' ' : ''}${p.effect_mp ? `MP+${p.effect_mp}` : ''}`
+                    )}
+                  </span>
                 </button>
               ))}
               <button className="cwb-cancel-btn" onClick={() => setShowItemList(false)}>취소</button>

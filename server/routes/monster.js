@@ -106,7 +106,7 @@ router.get('/equipment-encyclopedia', auth, async (req, res) => {
                effect_phys_attack, effect_phys_defense, effect_mag_attack, effect_mag_defense,
                effect_crit_rate, effect_evasion, required_level, class_restriction,
                grade, max_enhance, cosmetic_effect
-               FROM items WHERE type != 'potion'`;
+               FROM items WHERE 1=1`;
     const params = [];
 
     if (type) {

@@ -67,12 +67,22 @@
   border-left: 3px solid var(--gold);
 }
 
+.formation-unit-icon-wrap {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-dark);
+}
 .formation-unit-icon {
   width: 36px;
   height: 36px;
   border-radius: 50%;
   object-fit: cover;
-  background: var(--bg-dark);
+  position: relative;
+  z-index: 1;
   flex-shrink: 0;
 }
 

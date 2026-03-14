@@ -237,7 +237,10 @@ router.post('/enhance', auth, async (req, res) => {
 
     // 인벤토리 아이템 확인
     const [invItems] = await conn.query(
-      `SELECT inv.*, i.name, i.grade, i.max_enhance, i.type
+      `SELECT inv.*, i.name, i.grade, i.max_enhance, i.type,
+              i.effect_hp, i.effect_mp, i.effect_attack, i.effect_defense,
+              i.effect_phys_attack, i.effect_phys_defense, i.effect_mag_attack, i.effect_mag_defense,
+              i.effect_crit_rate, i.effect_evasion
        FROM inventory inv JOIN items i ON inv.item_id = i.id
        WHERE inv.id = ? AND inv.character_id = ?`,
       [inventoryId, char.id]
@@ -318,11 +321,45 @@ router.post('/enhance', auth, async (req, res) => {
     const roll = Math.random();
     const success = roll < finalRate;
 
+    // 장착 중인 장비인지 확인
+    const [equipped] = await conn.query(
+      'SELECT slot FROM equipment WHERE character_id = ? AND item_id = ?',
+      [char.id, item.item_id]
+    );
+    const isEquipped = equipped.length > 0;
+
+    // 강화 보너스 계산 헬퍼 (equipment.js와 동일 공식)
+    const calcBonus = (enhLv) => {
+      if (!enhLv || enhLv <= 0) return [0,0,0,0,0,0,0,0,0,0];
+      const gradeMult = { '일반':1, '고급':1.2, '희귀':1.5, '영웅':1.8, '전설':2.0, '신화':2.5, '초월':3.0 };
+      const m = gradeMult[item.grade] || 1;
+      const pct = enhLv * 0.06 * m;
+      return [
+        Math.floor((item.effect_hp||0)*pct), Math.floor((item.effect_mp||0)*pct),
+        Math.floor((item.effect_attack||0)*pct), Math.floor((item.effect_defense||0)*pct),
+        Math.floor((item.effect_phys_attack||0)*pct), Math.floor((item.effect_phys_defense||0)*pct),
+        Math.floor((item.effect_mag_attack||0)*pct), Math.floor((item.effect_mag_defense||0)*pct),
+        Math.floor((item.effect_crit_rate||0)*pct), Math.floor((item.effect_evasion||0)*pct),
+      ];
+    };
+
     if (success) {
       await conn.query(
         'UPDATE inventory SET enhance_level = ? WHERE id = ?',
         [nextLevel, inventoryId]
       );
+
+      // 장착 중이면 캐릭터 스탯 차이만큼 갱신
+      if (isEquipped) {
+        const oldBonus = calcBonus(item.enhance_level);
+        const newBonus = calcBonus(nextLevel);
+        const diff = newBonus.map((v, i) => v - oldBonus[i]);
+        await conn.query(
+          'UPDATE characters SET hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?, phys_attack = phys_attack + ?, phys_defense = phys_defense + ?, mag_attack = mag_attack + ?, mag_defense = mag_defense + ?, crit_rate = crit_rate + ?, evasion = evasion + ? WHERE id = ?',
+          [...diff, char.id]
+        );
+      }
+
       await conn.commit();
       res.json({
         success: true,
@@ -342,6 +379,17 @@ router.post('/enhance', auth, async (req, res) => {
           'UPDATE inventory SET enhance_level = ? WHERE id = ?',
           [newLevel, inventoryId]
         );
+
+        // 장착 중이면 캐릭터 스탯 차이만큼 감소
+        if (isEquipped) {
+          const oldBonus = calcBonus(item.enhance_level);
+          const newBonusArr = calcBonus(newLevel);
+          const diff = newBonusArr.map((v, i) => v - oldBonus[i]);
+          await conn.query(
+            'UPDATE characters SET hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?, phys_attack = phys_attack + ?, phys_defense = phys_defense + ?, mag_attack = mag_attack + ?, mag_defense = mag_defense + ?, crit_rate = crit_rate + ?, evasion = evasion + ? WHERE id = ?',
+            [...diff, char.id]
+          );
+        }
       }
       await conn.commit();
       res.json({

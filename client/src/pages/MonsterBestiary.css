@@ -1978,8 +1978,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60px;
+  padding: 8px;
   background: rgba(15, 18, 30, 0.6);
+}
+.mskill-card-icon .skill-bestiary-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
 }
 .mskill-icon-emoji {
   font-size: 32px;
@@ -1996,14 +2002,17 @@
   background: linear-gradient(135deg, rgba(30,30,60,0.8), rgba(20,20,40,0.9));
   border-radius: 12px 12px 0 0;
 }
-.mskill-detail-icon {
-  font-size: 42px;
+.mskill-detail-icon,
+.mskill-detail-header .skill-detail-icon {
   flex-shrink: 0;
   width: 56px;
   height: 56px;
+  object-fit: cover;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 42px;
   background: rgba(255,255,255,0.05);
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.1);
@@ -2048,4 +2057,149 @@
   border-radius: 4px;
   background: rgba(139,92,246,0.15);
   color: #a78bfa;
+}
+
+/* ========================================
+   MASTERY SYSTEM
+   ======================================== */
+
+/* -- Locked Section Overlay -- */
+.bd-section-locked {
+  position: relative;
+  min-height: 80px;
+}
+.bd-section-locked .bd-section-title {
+  opacity: 0.4;
+}
+.bd-locked-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 16px;
+  background: rgba(0,0,0,0.3);
+  border: 1px dashed rgba(255,255,255,0.1);
+  border-radius: 10px;
+}
+.bd-locked-icon {
+  font-size: 28px;
+  opacity: 0.7;
+}
+.bd-locked-text {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+}
+.bd-locked-bar {
+  position: relative;
+  width: 100%;
+  max-width: 200px;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bd-locked-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e94560, #ffa502);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.bd-locked-bar-text {
+  position: absolute;
+  top: -18px;
+  right: 0;
+  font-size: 10px;
+  color: #666;
+}
+.bd-locked-hint {
+  text-align: center;
+  font-size: 11px;
+  color: #666;
+  padding: 8px 0 0;
+  border-top: 1px dashed rgba(255,255,255,0.06);
+  margin-top: 8px;
+}
+
+/* -- Mastery Progress Bar (6 steps) -- */
+.bd-mastery-progress {
+  margin-top: 12px;
+  padding: 10px 0 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.bd-mastery-steps {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
+}
+.bd-mastery-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  flex: 1;
+}
+.bd-mastery-step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  border: 2px solid rgba(255,255,255,0.1);
+  transition: all 0.3s;
+  z-index: 1;
+}
+.bd-mastery-step.reached .bd-mastery-step-dot {
+  border-color: transparent;
+}
+.bd-mastery-step-label {
+  font-size: 9px;
+  color: #555;
+  font-weight: 600;
+  transition: color 0.3s;
+}
+.bd-mastery-step-line {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: rgba(255,255,255,0.06);
+  z-index: 0;
+}
+.bd-mastery-step-line.filled {
+  background: linear-gradient(90deg, #4ade80, #60a5fa);
+}
+.bd-mastery-next {
+  text-align: center;
+  font-size: 11px;
+  color: #777;
+  margin-top: 8px;
+}
+
+/* -- Card Mastery Badge -- */
+.bestiary-card-mastery {
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  justify-content: center;
+}
+
+/* -- Expert Badge (shimmer effect) -- */
+.bd-mastery-expert-badge {
+  display: inline-block;
+  animation: bd-shimmer 2s ease-in-out infinite;
+}
+@keyframes bd-shimmer {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.2); }
 }

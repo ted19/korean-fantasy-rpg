@@ -653,6 +653,9 @@
 .quest-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
 
 /* ===== 보상 수령 팝업 ===== */
+/* ========================================
+   QUEST REWARD POPUP (Pure CSS, no images)
+   ======================================== */
 .qreward-overlay {
   position: fixed;
   inset: 0;
@@ -660,8 +663,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
   animation: qrewardOverlayIn 0.3s ease-out;
 }
 @keyframes qrewardOverlayIn {
@@ -683,29 +686,6 @@
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* 배경 */
-.qreward-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
-.qreward-bg-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.5;
-  animation: qrewardBgZoom 10s ease-out forwards;
-}
-@keyframes qrewardBgZoom {
-  from { transform: scale(1.15); }
-  to { transform: scale(1); }
-}
-.qreward-bg-overlay {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, rgba(10, 8, 20, 0.4) 0%, rgba(10, 8, 20, 0.85) 65%, rgba(10, 8, 20, 0.95) 100%);
-}
-
 /* 파티클 */
 .qreward-particles {
   position: absolute;
@@ -714,32 +694,27 @@
   pointer-events: none;
   overflow: hidden;
 }
-.qreward-particles-img {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.3;
-  animation: qrewardParticlesDrift 5s ease-in-out infinite;
-}
-@keyframes qrewardParticlesDrift {
-  0%, 100% { transform: translateY(0); opacity: 0.25; }
-  50% { transform: translateY(-8px); opacity: 0.4; }
-}
 .qreward-particle {
   position: absolute;
   width: calc(3px + var(--pi) * 0.3px);
   height: calc(3px + var(--pi) * 0.3px);
-  background: rgba(255, 200, 50, 0.5);
   border-radius: 50%;
-  left: calc(var(--pi) * 7% + 2%);
+  left: calc(var(--pi) * 5.2% + 2%);
   animation: qrewardFloat 4s ease-in-out infinite;
-  animation-delay: calc(var(--pi) * 0.3s);
+  animation-delay: calc(var(--pi) * 0.25s);
+}
+.qreward-particle:nth-child(odd) {
+  background: rgba(255, 200, 50, 0.6);
+  box-shadow: 0 0 4px rgba(255, 200, 50, 0.4);
+}
+.qreward-particle:nth-child(even) {
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.2);
 }
 @keyframes qrewardFloat {
   0% { bottom: -8%; opacity: 0; }
-  20% { opacity: 0.8; }
-  80% { opacity: 0.3; }
+  15% { opacity: 0.9; }
+  80% { opacity: 0.2; }
   100% { bottom: 110%; opacity: 0; }
 }
 
@@ -749,12 +724,14 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(ellipse 50% 35% at 50% 25%, rgba(255, 200, 50, 0.1) 0%, transparent 70%);
-  animation: qrewardLightPulse 3s ease-in-out infinite;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 20%, rgba(255, 200, 50, 0.12) 0%, transparent 70%),
+    conic-gradient(from 0deg at 50% 30%, transparent 0deg, rgba(255,200,50,0.03) 20deg, transparent 40deg, rgba(255,200,50,0.03) 60deg, transparent 80deg, rgba(255,200,50,0.03) 100deg, transparent 120deg, rgba(255,200,50,0.03) 140deg, transparent 160deg, rgba(255,200,50,0.03) 180deg, transparent 200deg, rgba(255,200,50,0.03) 220deg, transparent 240deg, rgba(255,200,50,0.03) 260deg, transparent 280deg, rgba(255,200,50,0.03) 300deg, transparent 320deg, rgba(255,200,50,0.03) 340deg, transparent 360deg);
+  animation: qrewardRaysSpin 20s linear infinite;
 }
-@keyframes qrewardLightPulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+@keyframes qrewardRaysSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* 콘텐츠 */
@@ -764,25 +741,27 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 36px 32px 28px;
-  background: linear-gradient(180deg, rgba(14, 12, 24, 0.75) 0%, rgba(20, 16, 32, 0.88) 100%);
-  border: 1px solid rgba(255, 180, 50, 0.25);
+  padding: 40px 32px 28px;
+  background: linear-gradient(180deg, rgba(18, 14, 30, 0.92) 0%, rgba(12, 10, 22, 0.96) 100%);
+  border: 1px solid rgba(255, 180, 50, 0.2);
   border-radius: 20px;
-  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 200, 80, 0.08);
+  box-shadow:
+    0 16px 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 200, 80, 0.1),
+    inset 0 -1px 0 rgba(255, 200, 80, 0.05);
 }
 
-/* 프레임 */
-.qreward-frame {
+/* 상단 장식선 */
+.qreward-top-deco {
   position: absolute;
-  top: -15px;
+  top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 85%;
-  max-width: 320px;
-  height: auto;
-  opacity: 0.35;
-  pointer-events: none;
-  filter: drop-shadow(0 0 8px rgba(255, 180, 50, 0.2));
+  width: 60%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 200, 50, 0.5), rgba(255, 165, 2, 0.7), rgba(255, 200, 50, 0.5), transparent);
+  border-radius: 2px;
+  box-shadow: 0 0 12px rgba(255, 200, 50, 0.3);
 }
 
 /* 아이콘 */
@@ -790,33 +769,47 @@
   position: relative;
   width: 90px;
   height: 90px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
-.qreward-icon-img {
+.qreward-icon-emoji {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
   filter: drop-shadow(0 4px 12px rgba(255, 165, 2, 0.4));
   animation: qrewardIconPulse 2s ease-in-out infinite;
 }
 @keyframes qrewardIconPulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
+  50% { transform: scale(1.08); }
 }
 .qreward-icon-glow {
   position: absolute;
-  inset: -15px;
+  inset: -20px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 165, 2, 0.25) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(255, 165, 2, 0.2) 0%, rgba(255, 200, 50, 0.08) 40%, transparent 70%);
   animation: qrewardGlowPulse 2s ease-in-out infinite;
 }
 @keyframes qrewardGlowPulse {
   0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.15); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.qreward-icon-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 200, 50, 0.15);
+  animation: qrewardRingPulse 2.5s ease-in-out infinite;
+}
+@keyframes qrewardRingPulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.15); opacity: 0.6; }
 }
 .qreward-icon-sparkles {
   position: absolute;
-  inset: -20px;
+  inset: -22px;
 }
 .qreward-icon-sparkles span {
   position: absolute;
@@ -831,9 +824,9 @@
   animation-delay: calc(var(--si) * -0.5s);
 }
 @keyframes qrewardSparkleOrbit {
-  0% { transform: rotate(calc(var(--si) * 60deg)) translateX(40px) scale(0.6); opacity: 0.4; }
-  50% { transform: rotate(calc(var(--si) * 60deg + 180deg)) translateX(40px) scale(1); opacity: 1; }
-  100% { transform: rotate(calc(var(--si) * 60deg + 360deg)) translateX(40px) scale(0.6); opacity: 0.4; }
+  0% { transform: rotate(calc(var(--si) * 60deg)) translateX(42px) scale(0.5); opacity: 0.3; }
+  50% { transform: rotate(calc(var(--si) * 60deg + 180deg)) translateX(42px) scale(1); opacity: 1; }
+  100% { transform: rotate(calc(var(--si) * 60deg + 360deg)) translateX(42px) scale(0.5); opacity: 0.3; }
 }
 
 /* 타이틀 */
@@ -841,19 +834,19 @@
   font-size: 26px;
   font-weight: 700;
   color: #ffd700;
-  text-shadow: 0 0 20px rgba(255, 200, 50, 0.5), 0 2px 4px rgba(0, 0, 0, 0.5);
-  letter-spacing: 4px;
-  margin-bottom: 4px;
+  text-shadow: 0 0 20px rgba(255, 200, 50, 0.5), 0 2px 4px rgba(0, 0, 0, 0.6);
+  letter-spacing: 5px;
+  margin-bottom: 6px;
   animation: qrewardTitleGlow 2s ease-in-out infinite;
 }
 @keyframes qrewardTitleGlow {
-  0%, 100% { text-shadow: 0 0 20px rgba(255, 200, 50, 0.5), 0 2px 4px rgba(0, 0, 0, 0.5); }
-  50% { text-shadow: 0 0 30px rgba(255, 200, 50, 0.7), 0 2px 6px rgba(0, 0, 0, 0.5); }
+  0%, 100% { text-shadow: 0 0 20px rgba(255, 200, 50, 0.5), 0 2px 4px rgba(0, 0, 0, 0.6); }
+  50% { text-shadow: 0 0 35px rgba(255, 200, 50, 0.8), 0 2px 6px rgba(0, 0, 0, 0.6), 0 0 60px rgba(255, 200, 50, 0.2); }
 }
 .qreward-quest-name {
   font-size: 13px;
-  color: rgba(255, 220, 150, 0.7);
-  margin-bottom: 12px;
+  color: rgba(255, 220, 150, 0.65);
+  margin-bottom: 14px;
   max-width: 280px;
   text-align: center;
   white-space: nowrap;
@@ -861,25 +854,24 @@
   text-overflow: ellipsis;
 }
 
-/* 배너 */
-.qreward-banner-wrap {
-  width: calc(100% + 40px);
-  height: 28px;
-  margin: 0 -20px 16px;
+/* 구분선 */
+.qreward-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 200, 50, 0.25), transparent);
+  margin-bottom: 16px;
   position: relative;
-  overflow: hidden;
-  border-radius: 4px;
+  display: flex;
+  justify-content: center;
 }
-.qreward-banner-wrap img {
-  width: 110%;
-  height: 100%;
-  object-fit: cover;
+.qreward-divider-gem {
   position: absolute;
-  left: -5%;
-  top: 0;
-  opacity: 0.5;
-  mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+  top: -7px;
+  font-size: 10px;
+  color: rgba(255, 200, 50, 0.5);
+  background: rgba(18, 14, 30, 0.95);
+  padding: 0 8px;
+  letter-spacing: 4px;
 }
 
 /* 보상 목록 */
@@ -888,72 +880,89 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
 .qreward-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 200, 80, 0.1);
-  border-radius: 10px;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 200, 80, 0.02));
+  border: 1px solid rgba(255, 200, 80, 0.08);
+  border-radius: 12px;
   animation: qrewardRowSlide 0.5s ease-out backwards;
+  transition: all 0.2s;
 }
-.qreward-row:nth-child(1) { animation-delay: 0.2s; }
-.qreward-row:nth-child(2) { animation-delay: 0.35s; }
-.qreward-row:nth-child(3) { animation-delay: 0.5s; }
-.qreward-row:nth-child(4) { animation-delay: 0.65s; }
+.qreward-row:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 200, 80, 0.04));
+  border-color: rgba(255, 200, 80, 0.15);
+}
+.qreward-row:nth-child(1) { animation-delay: 0.25s; }
+.qreward-row:nth-child(2) { animation-delay: 0.4s; }
+.qreward-row:nth-child(3) { animation-delay: 0.55s; }
+.qreward-row:nth-child(4) { animation-delay: 0.7s; }
 @keyframes qrewardRowSlide {
   from { opacity: 0; transform: translateX(-20px); }
   to { opacity: 1; transform: translateX(0); }
 }
 .qreward-row.levelup {
-  background: linear-gradient(135deg, rgba(255, 200, 50, 0.1), rgba(255, 165, 2, 0.05));
+  background: linear-gradient(135deg, rgba(255, 200, 50, 0.12), rgba(255, 165, 2, 0.06));
   border-color: rgba(255, 200, 50, 0.3);
-  box-shadow: 0 0 15px rgba(255, 200, 50, 0.08);
+  box-shadow: 0 0 20px rgba(255, 200, 50, 0.08);
+  animation: qrewardRowSlide 0.5s ease-out backwards, qrewardLevelGlow 1.5s ease-in-out infinite 0.8s;
+}
+@keyframes qrewardLevelGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 200, 50, 0.08); }
+  50% { box-shadow: 0 0 30px rgba(255, 200, 50, 0.15); }
 }
 .qreward-row-icon {
-  font-size: 20px;
-  width: 28px;
-  text-align: center;
+  font-size: 22px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
 }
 .qreward-row-label {
   flex: 1;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 500;
 }
 .qreward-row-val {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   font-family: 'Courier New', monospace;
 }
-.qreward-row-val.exp { color: #60a5fa; text-shadow: 0 0 8px rgba(96, 165, 250, 0.3); }
-.qreward-row-val.gold { color: #ffa502; text-shadow: 0 0 8px rgba(255, 165, 2, 0.3); }
-.qreward-row-val.item { color: #4ade80; text-shadow: 0 0 8px rgba(74, 222, 128, 0.3); }
-.qreward-row-val.level { color: #ffd700; text-shadow: 0 0 12px rgba(255, 215, 0, 0.5); font-size: 18px; }
+.qreward-row-val.exp { color: #60a5fa; text-shadow: 0 0 10px rgba(96, 165, 250, 0.3); }
+.qreward-row-val.gold { color: #ffa502; text-shadow: 0 0 10px rgba(255, 165, 2, 0.3); }
+.qreward-row-val.item { color: #4ade80; text-shadow: 0 0 10px rgba(74, 222, 128, 0.3); }
+.qreward-row-val.level { color: #ffd700; text-shadow: 0 0 14px rgba(255, 215, 0, 0.5); font-size: 18px; }
 
 /* 닫기 버튼 */
 .qreward-close-btn {
   position: relative;
-  padding: 12px 48px;
-  border: 1px solid rgba(255, 200, 80, 0.35);
+  padding: 12px 52px;
+  border: 1px solid rgba(255, 200, 80, 0.3);
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(255, 165, 2, 0.15), rgba(255, 165, 2, 0.05));
+  background: linear-gradient(135deg, rgba(255, 165, 2, 0.12), rgba(255, 165, 2, 0.04));
   cursor: pointer;
   overflow: hidden;
   transition: all 0.25s ease;
 }
 .qreward-close-btn:hover {
-  background: linear-gradient(135deg, rgba(255, 165, 2, 0.3), rgba(255, 165, 2, 0.1));
-  box-shadow: 0 0 25px rgba(255, 165, 2, 0.2);
+  background: linear-gradient(135deg, rgba(255, 165, 2, 0.25), rgba(255, 165, 2, 0.08));
+  border-color: rgba(255, 200, 80, 0.5);
+  box-shadow: 0 0 30px rgba(255, 165, 2, 0.15);
   transform: translateY(-2px);
 }
 .qreward-close-shimmer {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 200, 80, 0.1), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 200, 80, 0.12), transparent);
   animation: qrewardShimmer 2.5s ease-in-out infinite;
 }
 @keyframes qrewardShimmer {
@@ -972,9 +981,10 @@
 /* 모바일 반응형 */
 @media (max-width: 480px) {
   .qreward-popup { width: 95vw; }
-  .qreward-content { padding: 28px 20px 24px; }
-  .qreward-title { font-size: 22px; }
-  .qreward-icon-wrap { width: 70px; height: 70px; }
-  .qreward-row { padding: 8px 12px; }
+  .qreward-content { padding: 30px 20px 24px; }
+  .qreward-title { font-size: 22px; letter-spacing: 3px; }
+  .qreward-icon-wrap { width: 72px; height: 72px; }
+  .qreward-icon-emoji { font-size: 38px; }
+  .qreward-row { padding: 10px 12px; }
   .qreward-close-btn { padding: 10px 36px; }
 }

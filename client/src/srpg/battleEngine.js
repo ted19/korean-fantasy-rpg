@@ -267,7 +267,7 @@ export function createMonsterUnit(monster, spawnPos, index) {
     critRate: monster.crit_rate || monster.critRate || 5,
     evasion: monster.evasion || 3,
     move: monster.move || 3,
-    skills: monster.skills || [],
+    skills: (monster.skills || []).map(s => ({ ...s, iconUrl: s.iconUrl || `/monster_skills/${s.id}_icon.png` })),
     x: spawnPos.x,
     z: spawnPos.z,
     acted: false,
@@ -565,7 +565,7 @@ export function calcDamage(attacker, defender, skill = null, mapData = null) {
 // 회복량 계산
 export function calcHeal(healer, skill) {
   if (!skill || skill.type !== 'heal') return 0;
-  return skill.heal_amount || 30;
+  return skill.heal_amount > 0 ? skill.heal_amount : 0;
 }
 
 // ========== 턴 순서 ==========
@@ -631,6 +631,7 @@ function selectSkill(unit, allies, enemies, mapData) {
   const availableSkills = unit.skills.filter(s => {
     if (s.mp_cost > unit.mp) return false;
     if (unit.skillCooldowns && unit.skillCooldowns[s.id] > 0) return false;
+    if (s.auto_priority !== undefined && Number(s.auto_priority) <= 0) return false; // 사용안함
     return true;
   });
 
@@ -667,6 +668,10 @@ function selectSkill(unit, allies, enemies, mapData) {
       // 생명력 흡수: HP 낮을 때 우선
       if (skill.heal_amount > 0 && hpRatio < 0.5) priority += 20;
     }
+
+    // auto_priority 배율 적용 (0=사용안함, 50=소극적, 100=보통, 150=적극적, 200=최우선)
+    const autoPri = Number(skill.auto_priority ?? 100) / 100;
+    priority = Math.round(priority * autoPri);
 
     return { skill, priority };
   });

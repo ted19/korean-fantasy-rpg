@@ -18,6 +18,11 @@ const CLASS_RANGE_TYPE = {
   '저승사자': 'melee',
 };
 
+const ELEMENT_AURA = {
+  fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy',
+  light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
+};
+
 function UnitIcon({ src, fallback, className }) {
   const [err, setErr] = useState(false);
   if (err || !src) return <span className={className || 'formation-unit-icon-text'}>{fallback || '?'}</span>;
@@ -69,6 +74,7 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
       icon: CLASS_IMAGES[character.class_type],
       fallbackIcon: '⚔️',
       rangeType: CLASS_RANGE_TYPE[character.class_type] || 'melee',
+      element: character.element || 'neutral',
     },
     ...(mySummons || []).map(s => ({
       id: `summon_${s.id}`,
@@ -76,9 +82,10 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
       summonId: s.id,
       name: s.name,
       subText: `${s.type} · Lv.${s.level}`,
-      icon: s.icon_url_img || `/summons/${s.template_id}_icon.png`,
+      icon: `/summons_nobg/${s.template_id}_icon.png`,
       fallbackIcon: s.icon || '🐉',
       rangeType: s.range_type || 'melee',
+      element: s.element || 'neutral',
     })),
     ...(myMercenaries || []).map(m => ({
       id: `merc_${m.id}`,
@@ -89,6 +96,7 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
       icon: `/mercenaries/${m.template_id}_icon.png`,
       fallbackIcon: '🗡️',
       rangeType: m.range_type || 'melee',
+      element: m.element || 'neutral',
     })),
   ];
 
@@ -149,6 +157,7 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
         name: selectedUnit.name,
         icon: selectedUnit.icon,
         fallbackIcon: selectedUnit.fallbackIcon,
+        element: selectedUnit.element || 'neutral',
       };
       setGridData(newGrid);
       setSelectedUnit(null);
@@ -204,7 +213,10 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
               className={`formation-unit-card${selectedUnit?.id === unit.id ? ' selected' : ''}${placedUnitIds.has(unit.id) ? ' placed' : ''}${otherSlotUnitIds.has(unit.id) ? ' placed other-slot' : ''}${unit.type === 'player' ? ' is-player' : ''}`}
               onClick={() => handleUnitClick(unit)}
             >
-              <UnitIcon src={unit.icon} fallback={unit.fallbackIcon} className="formation-unit-icon" />
+              <div className="formation-unit-icon-wrap">
+                <div className={`cb-portrait-effect cb-effect-${ELEMENT_AURA[unit.element] || 'holy'}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', zIndex: 0, opacity: 0.6 }} />
+                <UnitIcon src={unit.icon} fallback={unit.fallbackIcon} className="formation-unit-icon" />
+              </div>
               <div className="formation-unit-info">
                 <div className="formation-unit-name">{unit.name}</div>
                 <div className="formation-unit-sub">
@@ -276,6 +288,7 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
                       </div>
                     ) : cell ? (
                       <>
+                        <div className={`cb-portrait-effect cb-effect-${ELEMENT_AURA[cell.element] || 'holy'}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', zIndex: 0, opacity: 0.5 }} />
                         <UnitIcon src={cell.icon} fallback={cell.fallbackIcon} className="formation-cell-icon" />
                         <div className="formation-cell-name">{cell.name}</div>
                         <button

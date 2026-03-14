@@ -35,4 +35,3 @@ venv/
 
 # Dev archive (generators, 3D models, unused components)
 _dev_archive/
-ComfyUI

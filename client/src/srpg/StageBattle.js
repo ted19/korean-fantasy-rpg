@@ -505,7 +505,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       // 물약 인벤토리 로드
       try {
         const invRes = await api.get('/shop/inventory');
-        const potionItems = (invRes.data.inventory || []).filter(i => i.type === 'potion' && i.quantity > 0);
+        const potionItems = (invRes.data.inventory || []).filter(i => (i.type === 'potion' || i.type === 'talisman') && i.quantity > 0);
         setPotions(potionItems);
       } catch {}
 
@@ -641,9 +641,11 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
     const attackType = (unit.rangeType === 'ranged' || unit.rangeType === 'magic') ? unit.rangeType : 'melee';
     const validTargets = getValidTargets(unit, enemies, attackType);
 
-    const usableSkills = unit.skills.filter(s =>
-      s.currentCooldown <= 0 && (s.mp_cost || 0) <= unit.mp
-    );
+    const usableSkills = unit.skills.filter(s => {
+      if (s.currentCooldown > 0 || (s.mp_cost || 0) > unit.mp) return false;
+      if (s.auto_priority !== undefined && Number(s.auto_priority) <= 0) return false;
+      return true;
+    });
 
     // 아군 체력이 50% 미만이면 치유 스킬 우선
     const healSkill = usableSkills.find(s => s.type === 'heal');
@@ -931,39 +933,68 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
     }
   };
 
-  // 물약 사용
-  const handleUseItem = async (potion) => {
+  // 물약/부적 사용
+  const handleUseItem = async (item) => {
     const current = getCurrentUnit();
     if (!current || current.id !== 'player') return;
 
     try {
-      const res = await api.post('/shop/use', { itemId: potion.item_id });
+      const res = await api.post('/shop/use', { itemId: item.item_id });
       const { current_hp, current_mp } = res.data.character;
 
-      // 유닛 HP/MP 업데이트
-      setUnits(prev => prev.map(u => {
-        if (u.id !== 'player') return u;
-        const newHp = Math.min(u.maxHp, current_hp);
-        const newMp = Math.min(u.maxMp, current_mp);
-        return { ...u, hp: newHp, mp: newMp };
-      }));
+      if (item.type === 'talisman') {
+        // 부적: 버프 적용
+        const buffEffects = [];
+        const statMap = [
+          { key: 'effect_phys_attack', stat: 'attack', label: '공격력' },
+          { key: 'effect_phys_defense', stat: 'defense', label: '방어력' },
+          { key: 'effect_mag_attack', stat: 'attack', label: '마법공격' },
+          { key: 'effect_mag_defense', stat: 'defense', label: '마법방어' },
+          { key: 'effect_crit_rate', stat: 'crit_rate', label: '치명타' },
+          { key: 'effect_evasion', stat: 'evasion', label: '회피율' },
+        ];
+        setUnits(prev => prev.map(u => {
+          if (u.id !== 'player') return u;
+          const newBuffs = [...(u.buffs || [])];
+          for (const sm of statMap) {
+            const val = item[sm.key] || 0;
+            if (val > 0) {
+              const existing = newBuffs.findIndex(b => b.stat === sm.stat && b.source === 'talisman');
+              if (existing >= 0) newBuffs.splice(existing, 1);
+              newBuffs.push({ stat: sm.stat, value: val, duration: 3, source: 'talisman', name: item.name });
+              buffEffects.push(`${sm.label}+${val}`);
+            }
+          }
+          return { ...u, buffs: newBuffs };
+        }));
+        const effectText = buffEffects.length > 0 ? buffEffects.join(', ') : item.description;
+        addLog(`${current.name}이(가) ${item.name} 사용! (${effectText})`, 'buff');
+        addPopup('player', `📜 ${item.name}`, 'buff');
+      } else {
+        // 물약: HP/MP 업데이트
+        setUnits(prev => prev.map(u => {
+          if (u.id !== 'player') return u;
+          const newHp = Math.min(u.maxHp, current_hp);
+          const newMp = Math.min(u.maxMp, current_mp);
+          return { ...u, hp: newHp, mp: newMp };
+        }));
+        const healText = [];
+        if (item.effect_hp > 0) healText.push(`HP +${item.effect_hp}`);
+        if (item.effect_mp > 0) healText.push(`MP +${item.effect_mp}`);
+        addLog(`${current.name}이(가) ${item.name} 사용! (${healText.join(', ')})`, 'heal');
+        addPopup('player', `+${healText.join(' ')}`, 'heal');
+      }
 
       // 인벤토리 업데이트
       setPotions(prev => prev.map(p => {
-        if (p.item_id !== potion.item_id) return p;
+        if (p.item_id !== item.item_id) return p;
         return { ...p, quantity: p.quantity - 1 };
       }).filter(p => p.quantity > 0));
 
-      const healText = [];
-      if (potion.effect_hp > 0) healText.push(`HP +${potion.effect_hp}`);
-      if (potion.effect_mp > 0) healText.push(`MP +${potion.effect_mp}`);
-      addLog(`${current.name}이(가) ${potion.name} 사용! (${healText.join(', ')})`, 'heal');
-      addPopup('player', `+${healText.join(' ')}`, 'heal');
-
       setShowItemList(false);
-      advanceTurn(); // 물약 사용 = 1턴 소모
+      advanceTurn();
     } catch (err) {
-      addLog(err.response?.data?.message || '물약 사용 실패', 'system');
+      addLog(err.response?.data?.message || '아이템 사용 실패', 'system');
     }
   };
 
@@ -1385,15 +1416,21 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
             {potions.map(p => (
               <button
                 key={p.item_id}
-                className={`cb-action-btn item ${p.effect_hp > 0 ? 'hp-potion' : 'mp-potion'}`}
+                className={`cb-action-btn item ${p.type === 'talisman' ? 'talisman' : p.effect_hp > 0 ? 'hp-potion' : 'mp-potion'}`}
                 onClick={() => handleUseItem(p)}
-                title={p.name}
+                title={p.description || p.name}
               >
                 <img src={`/equipment/${p.item_id}_icon.png`} alt="" className="cb-item-icon" onError={(e) => { e.target.style.display='none'; }} />
                 <span className="cb-item-name">{p.name}</span>
                 <span className="cb-item-effect">
-                  {p.effect_hp > 0 && <span className="cb-hp-text">HP+{p.effect_hp}</span>}
-                  {p.effect_mp > 0 && <span className="cb-mp-text">MP+{p.effect_mp}</span>}
+                  {p.type === 'talisman' ? (
+                    <span className="cb-talisman-text">📜 부적</span>
+                  ) : (
+                    <>
+                      {p.effect_hp > 0 && <span className="cb-hp-text">HP+{p.effect_hp}</span>}
+                      {p.effect_mp > 0 && <span className="cb-mp-text">MP+{p.effect_mp}</span>}
+                    </>
+                  )}
                 </span>
                 <span className="cb-item-qty">x{p.quantity}</span>
               </button>

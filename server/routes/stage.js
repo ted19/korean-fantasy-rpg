@@ -327,9 +327,9 @@ router.post('/clear', auth, async (req, res) => {
   }
 });
 
-// ========== 콘텐츠 입장 횟수 시스템 (3회 → 5시간 쿨타임) ==========
-const CHARGE_COOLDOWN_MS = 5 * 60 * 60 * 1000; // 5시간
-const MAX_CHARGES = 3;
+// ========== 콘텐츠 입장 횟수 시스템 (5회 → 4시간 쿨타임) ==========
+const CHARGE_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4시간
+const MAX_CHARGES = 5;
 
 async function getOrCreateCharges(charId, contentType, connOrPool) {
   const db = connOrPool || pool;
@@ -461,17 +461,10 @@ router.post('/use-charge', auth, async (req, res) => {
     }
 
     const newCharges = row.charges - 1;
-    if (newCharges === 0) {
-      await pool.query(
-        'UPDATE content_charges SET charges = 0, last_recharged_at = NOW() WHERE character_id = ? AND content_type = ?',
-        [char.id, contentType]
-      );
-    } else {
-      await pool.query(
-        'UPDATE content_charges SET charges = ? WHERE character_id = ? AND content_type = ?',
-        [newCharges, char.id, contentType]
-      );
-    }
+    await pool.query(
+      'UPDATE content_charges SET charges = ?, last_recharged_at = NOW() WHERE character_id = ? AND content_type = ?',
+      [newCharges, char.id, contentType]
+    );
 
     const cooldown = newCharges === 0 ? CHARGE_COOLDOWN_MS : 0;
     res.json({

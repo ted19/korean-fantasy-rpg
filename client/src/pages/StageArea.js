@@ -506,13 +506,13 @@ function StageArea({ character, charState, onStartStageBattle, returnGroupKey, o
                   </div>
                 </div>
                 {contentCharges && selectedGroup && stagePopup && (() => {
-                  const ck = contentCharges[`stage_${selectedGroup.key}_${stagePopup.stageNumber}`] || { charges: 3, maxCharges: 3, cooldown: 0 };
+                  const ck = contentCharges[`stage_${selectedGroup.key}_${stagePopup.stageNumber}`] || { charges: 5, maxCharges: 5, cooldown: 0 };
                   return (
                   <div className="stage-popup-charges">
-                    입장 횟수: {[...Array(ck.maxCharges || 3)].map((_, i) => (
-                      <span key={i} className={`charge-pip ${i < (ck.charges ?? 3) ? 'active' : 'empty'}`} />
+                    입장 횟수: {[...Array(ck.maxCharges || 5)].map((_, i) => (
+                      <span key={i} className={`charge-pip ${i < (ck.charges ?? 5) ? 'active' : 'empty'}`} />
                     ))}
-                    <span className="charge-count">{ck.charges ?? 3}/{ck.maxCharges || 3}</span>
+                    <span className="charge-count">{ck.charges ?? 5}/{ck.maxCharges || 5}</span>
                     {ck.charges === 0 && ck.cooldown > 0 && (
                       <span className="charge-cooldown">충전까지 {Math.floor(ck.cooldown / 3600000)}시간 {Math.floor((ck.cooldown % 3600000) / 60000)}분</span>
                     )}
@@ -520,7 +520,7 @@ function StageArea({ character, charState, onStartStageBattle, returnGroupKey, o
                   );
                 })()}
                 {(() => {
-                  const ck = (selectedGroup && stagePopup) ? (contentCharges?.[`stage_${selectedGroup.key}_${stagePopup.stageNumber}`] || { charges: 3 }) : { charges: 3 };
+                  const ck = (selectedGroup && stagePopup) ? (contentCharges?.[`stage_${selectedGroup.key}_${stagePopup.stageNumber}`] || { charges: 5 }) : { charges: 5 };
                   return (
                     <button className="stage-popup-start-btn" onClick={handleStartBattle} disabled={ck.charges === 0}>
                       {ck.charges === 0 ? '입장 횟수 부족' : `⚔️ 전투 시작 (행동력 ${stagePopup?.isBoss ? 2 : 1} 소모)`}

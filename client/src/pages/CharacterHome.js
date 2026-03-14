@@ -40,6 +40,93 @@ function renderSkillTags(sk) {
   );
 }
 
+const PRIORITY_PRESETS = [
+  { value: 0, label: '사용안함', color: '#555', icon: '🚫' },
+  { value: 50, label: '소극적', color: '#60a5fa', icon: '🔹' },
+  { value: 100, label: '보통', color: '#4ade80', icon: '✅' },
+  { value: 150, label: '적극적', color: '#fbbf24', icon: '🔸' },
+  { value: 200, label: '최우선', color: '#ef4444', icon: '🔥' },
+];
+
+function getPriorityInfo(value) {
+  if (value === 0) return PRIORITY_PRESETS[0];
+  if (value <= 50) return PRIORITY_PRESETS[1];
+  if (value <= 100) return PRIORITY_PRESETS[2];
+  if (value <= 150) return PRIORITY_PRESETS[3];
+  return PRIORITY_PRESETS[4];
+}
+
+function SkillManagePanel({ skills, onPriorityChange }) {
+  if (!skills || skills.length === 0) {
+    return (
+      <div className="skill-manage-empty">
+        <div className="skill-manage-empty-icon">📭</div>
+        <div className="skill-manage-empty-text">습득한 액티브 스킬이 없습니다.</div>
+        <div className="skill-manage-empty-hint">스킬 트리에서 스킬을 해금하세요.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="skill-manage-panel">
+      <div className="skill-manage-header-bar">
+        <span className="skill-manage-header-title">자동전투 스킬 우선도</span>
+        <span className="skill-manage-header-desc">전투 AI가 스킬을 선택할 때의 우선도를 조절합니다</span>
+      </div>
+      <div className="skill-manage-legend">
+        {PRIORITY_PRESETS.map(p => (
+          <span key={p.value} className="skill-manage-legend-item" style={{ color: p.color }}>
+            {p.icon} {p.label}
+          </span>
+        ))}
+      </div>
+      <div className="skill-manage-list-v2">
+        {skills.map(sk => {
+          const pri = sk.auto_priority ?? 100;
+          const info = getPriorityInfo(pri);
+          return (
+            <div key={sk.id} className={`skill-manage-card ${pri === 0 ? 'disabled' : ''}`}>
+              <div className="skill-manage-card-left">
+                <div className="skill-manage-card-icon">
+                  <img src={`/skills/${sk.id}_icon.png`} alt="" className="skill-manage-card-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
+                  <span className="skill-manage-card-icon-fallback" style={{ display: 'none' }}>{sk.icon}</span>
+                </div>
+                <div className="skill-manage-card-info">
+                  <div className="skill-manage-card-name">{sk.name}</div>
+                  <div className="skill-manage-card-desc">{sk.description}</div>
+                  {renderSkillTags(sk)}
+                </div>
+              </div>
+              <div className="skill-manage-card-right">
+                <div className="skill-manage-priority-label" style={{ color: info.color }}>
+                  {info.icon} {info.label}
+                </div>
+                <div className="skill-manage-priority-btns">
+                  {PRIORITY_PRESETS.map(p => (
+                    <button
+                      key={p.value}
+                      className={`skill-manage-pri-btn ${pri === p.value ? 'active' : ''}`}
+                      style={pri === p.value ? { background: p.color, borderColor: p.color } : {}}
+                      onClick={() => onPriorityChange(sk.id, p.value)}
+                      title={p.label}
+                    >
+                      {p.icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="skill-manage-tip">
+        💡 <strong>사용안함</strong>: 자동전투에서 해당 스킬을 사용하지 않습니다.
+        <strong>최우선</strong>: 가능한 한 항상 이 스킬을 먼저 사용합니다.
+      </div>
+    </div>
+  );
+}
+
 const ELEMENT_INFO = {
   fire:    { name: '불', icon: '🔥', color: '#ff6b35' },
   water:   { name: '물', icon: '💧', color: '#4da6ff' },
@@ -248,6 +335,9 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
   const [mercSkillLevel, setMercSkillLevel] = useState(0);
   const [showMercEquipment, setShowMercEquipment] = useState(false);
   const [equippedCosmetics, setEquippedCosmetics] = useState({});
+  // 스킬 서브탭 (스킬트리 / 스킬관리)
+  const [skillSubTab, setSkillSubTab] = useState('tree');
+  const [managedSkills, setManagedSkills] = useState([]);
 
   const loadCosmetics = useCallback(async () => {
     try {
@@ -263,6 +353,24 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
     if (equipped) return equipped.effect;
     return ELEMENT_AURA[element] || 'aura_gold';
   }, [equippedCosmetics]);
+
+  const loadManagedSkills = useCallback(async () => {
+    try {
+      const res = await api.get('/skill/active-skills');
+      setManagedSkills((res.data.skills || []).map(s => ({ ...s })));
+    } catch {}
+  }, []);
+
+  useEffect(() => { if (skillSubTab === 'manage') loadManagedSkills(); }, [skillSubTab, loadManagedSkills]);
+
+  const updateSkillPriority = async (nodeId, priority) => {
+    setManagedSkills(prev => prev.map(s => s.id === nodeId ? { ...s, auto_priority: priority } : s));
+    try {
+      await api.put('/skill/auto-priority', { node_id: nodeId, priority });
+    } catch {
+      if (onLog) onLog('우선도 변경 실패');
+    }
+  };
 
   const loadMySummons = useCallback(async () => {
     try {
@@ -383,6 +491,28 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                     <div className="skill-manage-name">{sk.name} <span className="skill-manage-lv">Lv.{sk.required_level}</span></div>
                     <div className="skill-manage-desc">{sk.description}</div>
                     {renderSkillTags(sk)}
+                    {sk.learned && (
+                      <div className="skill-manage-priority-row">
+                        <span className="skill-manage-priority-title">자동전투:</span>
+                        <div className="skill-manage-priority-btns">
+                          {PRIORITY_PRESETS.map(p => (
+                            <button key={p.value}
+                              className={`skill-manage-pri-btn ${(sk.auto_priority ?? 100) === p.value ? 'active' : ''}`}
+                              style={(sk.auto_priority ?? 100) === p.value ? { background: p.color, borderColor: p.color } : {}}
+                              title={p.label}
+                              onClick={async () => {
+                                setSummonSkillList(prev => prev.map(s => s.id === sk.id ? { ...s, auto_priority: p.value } : s));
+                                try { await api.put(`/summon/${selectedSummon.id}/skill-priority`, { skill_id: sk.id, priority: p.value }); }
+                                catch { if (onLog) onLog('우선도 변경 실패'); }
+                              }}
+                            >{p.icon}</button>
+                          ))}
+                        </div>
+                        <span className="skill-manage-priority-label" style={{ color: getPriorityInfo(sk.auto_priority ?? 100).color }}>
+                          {getPriorityInfo(sk.auto_priority ?? 100).label}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="skill-manage-action">
                     {sk.learned ? (
@@ -439,6 +569,28 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                       {sk.cooldown > 0 && <span className="skill-manage-tag cd">쿨타임 {sk.cooldown}턴</span>}
                       {!sk.learned && <span className="skill-manage-tag" style={{ color: '#ffa502', borderColor: 'rgba(255,165,2,0.2)' }}>{(sk.gold_cost || 0).toLocaleString()}G</span>}
                     </div>
+                    {sk.learned && (
+                      <div className="skill-manage-priority-row">
+                        <span className="skill-manage-priority-title">자동전투:</span>
+                        <div className="skill-manage-priority-btns">
+                          {PRIORITY_PRESETS.map(p => (
+                            <button key={p.value}
+                              className={`skill-manage-pri-btn ${(sk.auto_priority ?? 100) === p.value ? 'active' : ''}`}
+                              style={(sk.auto_priority ?? 100) === p.value ? { background: p.color, borderColor: p.color } : {}}
+                              title={p.label}
+                              onClick={async () => {
+                                setMercSkillList(prev => prev.map(s => s.id === sk.id ? { ...s, auto_priority: p.value } : s));
+                                try { await api.put(`/mercenary/${selectedMerc.id}/skill-priority`, { skill_id: sk.id, priority: p.value }); }
+                                catch { if (onLog) onLog('우선도 변경 실패'); }
+                              }}
+                            >{p.icon}</button>
+                          ))}
+                        </div>
+                        <span className="skill-manage-priority-label" style={{ color: getPriorityInfo(sk.auto_priority ?? 100).color }}>
+                          {getPriorityInfo(sk.auto_priority ?? 100).label}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="skill-manage-action">
                     {sk.learned ? (
@@ -618,14 +770,24 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
           <Col lg={7} className="mb-3">
             <Card className="char-skill-card">
               <Card.Body className="d-flex flex-column">
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 600, marginBottom: 10 }}>
-                  스킬 트리
+                <div className="skill-sub-tabs">
+                  <button className={`skill-sub-tab ${skillSubTab === 'tree' ? 'active' : ''}`} onClick={() => setSkillSubTab('tree')}>
+                    🌳 스킬 트리
+                  </button>
+                  <button className={`skill-sub-tab ${skillSubTab === 'manage' ? 'active' : ''}`} onClick={() => setSkillSubTab('manage')}>
+                    ⚙️ 스킬 관리
+                  </button>
                 </div>
-                <SkillTreePanel
-                  charState={charState}
-                  onLog={onLog}
-                  onSkillsUpdate={onSkillsUpdate}
-                />
+                {skillSubTab === 'tree' && (
+                  <SkillTreePanel
+                    charState={charState}
+                    onLog={onLog}
+                    onSkillsUpdate={(skills) => { onSkillsUpdate(skills); loadManagedSkills(); }}
+                  />
+                )}
+                {skillSubTab === 'manage' && (
+                  <SkillManagePanel skills={managedSkills} onPriorityChange={updateSkillPriority} />
+                )}
               </Card.Body>
             </Card>
           </Col>
@@ -883,8 +1045,9 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                   <>
                     <div className="text-center mb-3">
                       <div className="char-home-avatar">
+                        <div className={`cb-portrait-effect cb-effect-${getAuraEffect(`summon_${selectedSummon.id}`, selectedSummon.element)}`} style={{ position: 'absolute', inset: 0, zIndex: 3, borderRadius: 'inherit', pointerEvents: 'none' }} />
                         <SummonImg
-                          src={`/summons/${selectedSummon.template_id}_full.png`}
+                          src={`/summons_nobg/${selectedSummon.template_id}_full.png`}
                           fallback={selectedSummon.icon}
                           className="summon-profile-img"
                         />
@@ -1003,8 +1166,9 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                         onClick={() => setSelectedSummon(s)}
                       >
                         <div className="summon-list-icon-wrap">
+                          <div className={`cb-portrait-effect cb-effect-${getAuraEffect(`summon_${s.id}`, s.element)}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', zIndex: 0, opacity: 0.7 }} />
                           <SummonImg
-                            src={s.icon_url_img || `/summons/${s.template_id}_icon.png`}
+                            src={`/summons_nobg/${s.template_id}_icon.png`}
                             fallback={s.icon}
                             className="summon-list-icon-img"
                           />

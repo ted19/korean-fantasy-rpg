@@ -165,7 +165,7 @@ export function createCardMonsterUnit(monster, index) {
     critRate: monster.crit_rate ?? monster.critRate ?? 5,
     evasion: monster.evasion ?? 3,
     speed: (monster.move_range || monster.moveRange || 3) * 5 + (monster.evasion || 3),
-    skills: (monster.skills || []).map(s => ({ ...s, currentCooldown: 0 })),
+    skills: (monster.skills || []).map(s => ({ ...s, currentCooldown: 0, iconUrl: `/monster_skills/${s.id}_icon.png` })),
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
     icon: monster.icon || '👹',
@@ -332,18 +332,24 @@ export function calculateDamage(attacker, defender, skill = null) {
     }
   }
 
-  // 버프 적용
+  // 버프/디버프 적용
   const atkBuff = (attacker.buffs || [])
     .filter(b => b.stat === 'attack')
     .reduce((sum, b) => sum + b.value, 0);
-  baseDmg += atkBuff;
+  const atkDebuff = (attacker.debuffs || [])
+    .filter(b => b.stat === 'attack')
+    .reduce((sum, b) => sum + b.value, 0);
+  baseDmg += atkBuff + atkDebuff;
 
   // 방어
   const defStat = isMagic ? defender.magDefense : defender.physDefense;
   const defBuff = (defender.buffs || [])
     .filter(b => b.stat === 'defense')
     .reduce((sum, b) => sum + b.value, 0);
-  const totalDef = defStat + defender.defense * 0.3 + defBuff;
+  const defDebuff = (defender.debuffs || [])
+    .filter(b => b.stat === 'defense')
+    .reduce((sum, b) => sum + b.value, 0);
+  const totalDef = defStat + defender.defense * 0.3 + defBuff + defDebuff;
 
   // 랜덤 편차
   const variance = Math.floor(Math.random() * 5) - 2;
@@ -366,18 +372,20 @@ export function calculateDamage(attacker, defender, skill = null) {
     damage = Math.max(1, Math.floor(damage * elementMult));
   }
 
-  // 크리티컬
+  // 크리티컬 (부적 등 버프 반영)
   let isCrit = false;
-  const critRate = attacker.critRate || 5;
+  const critBuff = (attacker.buffs || []).filter(b => b.stat === 'crit_rate').reduce((sum, b) => sum + b.value, 0);
+  const critRate = (attacker.critRate || 5) + critBuff;
   if (Math.random() * 100 < critRate) {
     const critMultiplier = 1.4 + Math.min(critRate, 30) * 0.01;
     damage = Math.floor(damage * critMultiplier);
     isCrit = true;
   }
 
-  // 회피
+  // 회피 (부적 등 버프 반영)
   let isEvade = false;
-  if (Math.random() * 100 < (defender.evasion || 3)) {
+  const evaBuff = (defender.buffs || []).filter(b => b.stat === 'evasion').reduce((sum, b) => sum + b.value, 0);
+  if (Math.random() * 100 < ((defender.evasion || 3) + evaBuff)) {
     damage = 0;
     isEvade = true;
   }
@@ -457,10 +465,23 @@ export function executeSkill(caster, skill, target, allUnits) {
     }
 
     case 'heal': {
-      const healAmt = skill.heal_amount || 30;
-      const actual = Math.min(healAmt, target.maxHp - target.hp);
-      target.hp += actual;
-      logs.push({ text: `${caster.name}의 ${skill.name} → ${target.name} HP +${actual}`, type: 'heal', targetId: target.id });
+      if (skill.heal_amount > 0) {
+        const healAmt = skill.heal_amount;
+        const actual = Math.min(healAmt, target.maxHp - target.hp);
+        target.hp += actual;
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${target.name} HP +${actual}`, type: 'heal', targetId: target.id });
+      }
+      // heal 스킬에 buff가 있으면 함께 적용
+      if (skill.buff_stat) {
+        const buffTarget = target || caster;
+        const existing = buffTarget.buffs.findIndex(b => b.stat === skill.buff_stat && b.source === caster.id);
+        if (existing >= 0) buffTarget.buffs.splice(existing, 1);
+        buffTarget.buffs.push({
+          stat: skill.buff_stat, value: skill.buff_value || 5,
+          duration: skill.buff_duration || 3, source: caster.id, name: skill.name,
+        });
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${buffTarget.name} ${skill.buff_stat} +${skill.buff_value || 5} (${skill.buff_duration || 3}턴)`, type: 'buff', targetId: buffTarget.id });
+      }
       break;
     }
 
@@ -613,10 +634,12 @@ export function decideAIAction(unit, allUnits) {
     return getValidTargets(unit, enemies, skillType);
   };
 
-  // 사용 가능한 스킬
-  const usableSkills = unit.skills.filter(s =>
-    s.currentCooldown <= 0 && (s.mp_cost || 0) <= unit.mp
-  );
+  // 사용 가능한 스킬 (auto_priority=0이면 자동전투에서 사용안함)
+  const usableSkills = unit.skills.filter(s => {
+    if (s.currentCooldown > 0 || (s.mp_cost || 0) > unit.mp) return false;
+    if (s.auto_priority !== undefined && Number(s.auto_priority) <= 0) return false;
+    return true;
+  });
 
   // --- 긴급 치유 (모든 AI 타입 공통: 자신 HP < 25%일 때) ---
   if (unit.hp < unit.maxHp * 0.25) {

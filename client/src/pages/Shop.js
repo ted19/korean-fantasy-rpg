@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import '../srpg/StageBattle.css';
 
-const TYPE_LABELS = { weapon: '무기', chest: '갑옷', helmet: '투구', boots: '장화', ring: '반지', necklace: '목걸이', shield: '방패', potion: '물약', armor: '방어구', cosmetic: '코스메틱' };
-const TYPE_ICONS = { weapon: '⚔️', chest: '🛡️', helmet: '🪖', boots: '👢', ring: '💍', necklace: '📿', shield: '🛡️', potion: '🧪', armor: '🛡️', cosmetic: '✨' };
+const TYPE_LABELS = { weapon: '무기', chest: '갑옷', helmet: '투구', boots: '장화', ring: '반지', necklace: '목걸이', shield: '방패', potion: '물약', armor: '방어구', cosmetic: '코스메틱', talisman: '부적', consumable: '소모품' };
+const TYPE_ICONS = { weapon: '⚔️', chest: '🛡️', helmet: '🪖', boots: '👢', ring: '💍', necklace: '📿', shield: '🛡️', potion: '🧪', armor: '🛡️', cosmetic: '✨', talisman: '📜', consumable: '🧪' };
 const COSMETIC_EFFECT_LABELS = {
   aura_gold: '황금 기운', flame: '불꽃 오라', ice: '빙결 오라', lightning: '번개 오라',
   shadow: '암흑 오라', holy: '신성 오라', poison: '독기 오라', wind: '바람 오라',
@@ -170,18 +170,18 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
 
   const canBuy = (item) => {
     if (charState.gold < item.price) return false;
-    if (charState.level < item.required_level) return false;
     return true;
   };
 
-  const filteredShopItems = typeFilter === 'all'
-    ? shopItems
-    : shopItems.filter((i) => i.type === typeFilter);
+  const matchType = (itemType) => {
+    if (typeFilter === 'all') return true;
+    if (typeFilter === 'consumable') return itemType === 'potion' || itemType === 'talisman';
+    return itemType === typeFilter;
+  };
+  const filteredShopItems = shopItems.filter(i => matchType(i.type));
 
   const unequippedInventory = inventory;
-  const filteredInventory = typeFilter === 'all'
-    ? unequippedInventory
-    : unequippedInventory.filter((i) => i.type === typeFilter);
+  const filteredInventory = unequippedInventory.filter(i => matchType(i.type));
 
   return (
     <div className="facility-page shop-page">
@@ -227,7 +227,7 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
 
       {/* Filters */}
       <div className="facility-filters">
-        {['all', 'weapon', 'chest', 'helmet', 'boots', 'shield', 'ring', 'necklace', 'potion'].map((t) => (
+        {['all', 'weapon', 'chest', 'helmet', 'boots', 'shield', 'ring', 'necklace', 'consumable'].map((t) => (
           <button
             key={t}
             className={`facility-filter-btn ${typeFilter === t ? 'active' : ''}`}
@@ -249,7 +249,7 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
                   <div className="fitem-info">
                     <div className="fitem-name">
                       <span style={{ color: GRADE_COLORS[item.grade] || '#aaa' }}>{item.name}</span>
-                      {item.grade && item.type !== 'potion' && <span className="fitem-grade" style={{ color: GRADE_COLORS[item.grade] }}>[{item.grade}]</span>}
+                      {item.grade && item.type !== 'potion' && item.type !== 'talisman' && <span className="fitem-grade" style={{ color: GRADE_COLORS[item.grade] }}>[{item.grade}]</span>}
                       {item.type === 'weapon' && item.weapon_hand && <span className="weapon-hand-tag">{item.weapon_hand === '2h' ? '양손' : '한손'}</span>}
                       {item.class_restriction && <span className="fitem-class">{item.class_restriction}</span>}
                     </div>
@@ -280,7 +280,7 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
                     onClick={() => setConfirmPopup(item)}
                     disabled={!canBuy(item)}
                   >
-                    {charState.gold < item.price ? '골드부족' : charState.level < item.required_level ? '레벨부족' : '구매'}
+                    {charState.gold < item.price ? '골드부족' : '구매'}
                   </button>
                 </div>
               </div>
@@ -323,7 +323,7 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
       {/* 인벤토리 아이템 정보 팝업 */}
       {selectedInvItem && (() => {
         const si = selectedInvItem;
-        const isPotion = si.type === 'potion';
+        const isPotion = si.type === 'potion' || si.type === 'talisman';
         const maxQty = isPotion ? si.available_qty : 1;
         const totalSellGold = si.sell_price * sellQty;
         return (
@@ -346,7 +346,7 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
                     {si.name}{si.enhance_level > 0 ? ` +${si.enhance_level}` : ''}
                   </div>
                   <div className="sell-popup-item-meta">
-                    {si.grade && si.type !== 'potion' && (
+                    {si.grade && si.type !== 'potion' && si.type !== 'talisman' && (
                       <span className="sell-popup-grade" style={{ color: GRADE_COLORS[si.grade] }}>{si.grade}</span>
                     )}
                     <span className="sell-popup-type">{TYPE_LABELS[si.type] || si.type}</span>
@@ -432,7 +432,7 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
                 <div className="shop-popup-item-name" style={{ color: GRADE_COLORS[confirmPopup.grade] || '#eee' }}>
                   {confirmPopup.name}
                 </div>
-                {confirmPopup.grade && confirmPopup.type !== 'potion' && (
+                {confirmPopup.grade && confirmPopup.type !== 'potion' && confirmPopup.type !== 'talisman' && (
                   <span className="shop-popup-grade" style={{ color: GRADE_COLORS[confirmPopup.grade] }}>{confirmPopup.grade}</span>
                 )}
               </div>
@@ -519,7 +519,7 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
                 <div className="shop-popup-item-name" style={{ color: GRADE_COLORS[purchasePopup.item.grade] || '#eee' }}>
                   {purchasePopup.item.name}
                 </div>
-                {purchasePopup.item.grade && purchasePopup.item.type !== 'potion' && (
+                {purchasePopup.item.grade && purchasePopup.item.type !== 'potion' && purchasePopup.item.type !== 'talisman' && (
                   <span className="shop-popup-grade" style={{ color: GRADE_COLORS[purchasePopup.item.grade] }}>{purchasePopup.item.grade}</span>
                 )}
               </div>

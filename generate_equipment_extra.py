@@ -184,24 +184,62 @@ PROMPT_ITEM = (
 )
 
 EXTRA_ITEMS = [
-    # 포션 (13~18)
-    (13, "체력 물약(소)", "small red health potion bottle with cork"),
-    (14, "체력 물약(중)", "medium red health potion bottle with label"),
-    (15, "체력 물약(대)", "large red health potion flask with ornate stopper"),
-    (16, "마력 물약(소)", "small blue mana potion bottle with cork"),
-    (17, "마력 물약(중)", "medium blue mana potion bottle with label"),
-    (18, "마력 물약(대)", "large blue mana potion flask with ornate stopper"),
-    # DB에 없지만 이미지가 필요한 아이템 (34~43)
-    (34, "해독 물약", "green antidote potion bottle"),
-    (35, "만능 물약", "rainbow colored universal elixir potion"),
-    (36, "부활 물약", "golden resurrection phoenix potion bottle"),
-    (37, "경험치 물약", "glowing purple experience boost potion"),
-    (38, "공격력 물약", "fiery red attack boost potion with sword icon"),
-    (39, "방어력 물약", "steel gray defense boost potion with shield icon"),
-    (40, "속도 물약", "cyan speed boost potion with wind swirl"),
-    (41, "행운 물약", "shimmering gold luck potion with clover"),
-    (42, "투명 물약", "transparent invisibility potion bottle"),
-    (43, "강화석", "glowing enchantment stone with magical runes"),
+    # === 저승사자 전용 무기 (낫/대낫) ===
+    (42582, '사혼의 낫', 'a dark soul-reaping sickle, small curved blade with ghostly purple aura, korean grim reaper weapon'),
+    (42583, '명계의 낫', 'a scythe of the underworld, curved dark blade with blue spirit flames, korean fantasy sickle'),
+    (42584, '혈혼의 낫', 'a blood-soul sickle, crimson curved blade dripping with dark energy, korean fantasy weapon'),
+    (42585, '황천의 대낫', 'a large war scythe of the yellow springs, dark steel with golden runes, two-handed korean fantasy scythe'),
+    (42123, '업보의 낫', 'a karma scythe, bronze-tinted curved blade with swirling fate energy, korean fantasy weapon'),
+    (42586, '영혼 수확자', 'a legendary soul harvester scythe, massive dark blade with captured souls swirling around, ornate korean fantasy war scythe'),
+    (42135, '명부의 낫', 'a scythe of the death registry, silver and black blade with ghostly inscription, korean fantasy weapon'),
+    (42587, '사신의 대낫', 'a mythical grim reaper great scythe, massive obsidian blade with death aura, skull ornament handle, korean fantasy'),
+    (42147, '삼도천의 낫', 'a scythe of the river of three crossings, dark blade with flowing water spirits, golden guard, korean fantasy'),
+    (41851, '망자의 낫', 'a scythe of the dead, ethereal green-glowing blade, spirit-guiding weapon, korean fantasy war scythe'),
+    (41863, '원혼의 낫', 'a grudge spirit scythe, dark purple blade crackling with vengeful energy, korean fantasy weapon'),
+    (41875, '나락의 대낫', 'a great scythe of naraka hell, massive black and red blade with hellfire, korean fantasy war scythe'),
+    (41887, '저승 심판자', 'a judge of the afterlife scythe, majestic dark gold and black blade with scales of judgment ornament, korean fantasy'),
+    (41899, '윤회의 낫', 'a reincarnation scythe, celestial blade with yin-yang symbol, swirling cycle of life energy, korean fantasy'),
+    (41911, '무상의 대낫', 'a great scythe of impermanence, ethereal translucent blade that phases between existence, korean fantasy'),
+    (41923, '영멸의 낫', 'an ultimate soul annihilation scythe, massive void-black blade consuming light itself, transcendent korean fantasy weapon'),
+
+    # === Lv7 청동 시리즈 ===
+    (42118, '청동 장검', 'a bronze longsword, simple but sturdy straight blade with leather grip, korean fantasy weapon'),
+    (42119, '청동 장궁', 'a bronze longbow, reinforced bronze-tipped wooden bow with string, korean fantasy weapon'),
+    (42120, '풍운 부적', 'a wind-cloud talisman, paper charm with swirling wind and cloud ink painting, korean feng shui magic item'),
+    (42121, '귀신 방울', 'a ghost bell, small bronze ritual bell with ghost face engravings, korean shaman mudang item'),
+    (42122, '참선 목탁', 'a zen meditation wooden moktak, polished wooden percussion instrument with buddhist carvings, korean monk item'),
+    (42124, '청동 갑옷', 'bronze plate armor, chest piece with riveted bronze plates, korean fantasy armor'),
+    (42125, '청동 투구', 'a bronze helmet, domed helmet with cheek guards, korean fantasy armor'),
+    (42126, '청동 장화', 'bronze greaves and boots, bronze-plated leather boots, korean fantasy armor'),
+    (42127, '청동 방패', 'a bronze round shield, polished bronze face with dragon emblem, korean fantasy shield'),
+    (42128, '옥 반지', 'a jade ring, smooth green jade band with subtle glow, korean fantasy accessory'),
+    (42129, '은빛 목걸이', 'a silver necklace, delicate silver chain with crescent moon pendant, korean fantasy accessory'),
+
+    # === Lv10 백은 시리즈 ===
+    (42130, '백은 검', 'a white silver sword, gleaming silver blade with etched runes, korean fantasy weapon'),
+    (42131, '백은 궁', 'a white silver bow, elegant silver-reinforced bow with moonlight sheen, korean fantasy weapon'),
+    (42132, '천문 부적', 'an astronomy talisman, dark blue paper charm with constellation patterns in gold ink, korean feng shui item'),
+    (42133, '영매 방울', 'a spirit medium bell, ornate silver bell with spirit channeling engravings, korean shaman item'),
+    (42134, '법력 목탁', 'a dharma power moktak, golden wooden percussion with sutra inscriptions, korean monk item'),
+    (42136, '백은 갑옷', 'white silver plate armor, shining silver chest piece with ornate engravings, korean fantasy armor'),
+    (42137, '백은 투구', 'a white silver helmet, polished silver helm with wing ornaments, korean fantasy armor'),
+    (42138, '백은 장화', 'white silver boots, silver-plated armored boots with moon motif, korean fantasy armor'),
+    (42139, '백은 방패', 'a white silver shield, mirror-like silver shield with phoenix emblem, korean fantasy shield'),
+    (42140, '자수정 반지', 'an amethyst ring, gold band with large purple amethyst gemstone, korean fantasy accessory'),
+    (42141, '수정 목걸이', 'a crystal necklace, clear quartz crystal pendant on silver chain, korean fantasy accessory'),
+
+    # === Lv15 황금 시리즈 ===
+    (42142, '황금 검', 'a golden sword, ornate gold-hilted blade with royal engravings, korean fantasy weapon'),
+    (42143, '황금 궁', 'a golden bow, magnificent gold-reinforced bow with dragon motif, korean fantasy weapon'),
+    (42144, '도참 부적', 'a prophecy talisman, ancient golden paper charm with cryptic future-seeing symbols, korean feng shui item'),
+    (42145, '접신 방울', 'a divine possession bell, golden ritual bell radiating divine light, korean shaman item'),
+    (42146, '범종 목탁', 'a temple bell moktak, large golden wooden percussion shaped like a temple bell, korean monk item'),
+    (42148, '황금 갑옷', 'golden plate armor, magnificent gold-plated chest piece with dragon scales, korean fantasy armor'),
+    (42149, '황금 투구', 'a golden helmet, regal gold helm with phoenix crest, korean fantasy armor'),
+    (42150, '황금 장화', 'golden boots, gold-plated armored boots with cloud motif, korean fantasy armor'),
+    (42151, '황금 방패', 'a golden shield, radiant gold shield with tiger emblem, korean fantasy shield'),
+    (42152, '홍옥 반지', 'a ruby ring, gold band with brilliant red ruby gemstone, korean fantasy accessory'),
+    (42153, '금 목걸이', 'a pure gold necklace, thick gold chain with ornate dragon pendant, korean fantasy accessory'),
 ]
 
 # ============================================================

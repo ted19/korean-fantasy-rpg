@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import TopNav from './TopNav';
 import CharacterHome from './CharacterHome';
@@ -80,11 +80,15 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const savedEnemySetupRef = React.useRef(null); // 정예 리롤 방지용 적 구성
   const savedRetreatFailedRef = React.useRef(false); // 후퇴 실패 기록
   const [contentCharges, setContentCharges] = useState({}); // { stage_gojoseon: {charges,maxCharges,cooldown}, dungeon_cave: {...}, ... }
+  const chargesRequestId = useRef(0);
 
   const loadContentCharges = async () => {
+    const reqId = ++chargesRequestId.current;
     try {
       const res = await api.get('/stage/charges');
-      setContentCharges(res.data);
+      if (reqId === chargesRequestId.current) {
+        setContentCharges(res.data);
+      }
     } catch {}
   };
 
@@ -386,8 +390,17 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           await api.post('/dungeon/use-ticket', { dungeonKey });
         } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
         try {
-          await api.post('/stage/use-charge', { contentType: `dungeon_${dungeonKey}_${stage?.stageNumber || 1}` });
-          await loadContentCharges();
+          const contentType = `dungeon_${dungeonKey}_${stage?.stageNumber || 1}`;
+          const chargeRes = await api.post('/stage/use-charge', { contentType });
+          // 즉시 상태 반영 (race condition 방지)
+          setContentCharges(prev => ({
+            ...prev,
+            [contentType]: {
+              charges: chargeRes.data.charges,
+              maxCharges: chargeRes.data.maxCharges,
+              cooldown: chargeRes.data.cooldown,
+            }
+          }));
         } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
       }
     }
@@ -473,8 +486,17 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     // 행동력 차감 성공 후 실제 입장 횟수 소모
     if (!isSpecial) {
       try {
-        await api.post('/stage/use-charge', { contentType: `stage_${groupKey}_${stage.stageNumber}` });
-        await loadContentCharges();
+        const contentType = `stage_${groupKey}_${stage.stageNumber}`;
+        const chargeRes = await api.post('/stage/use-charge', { contentType });
+        // 즉시 상태 반영 (race condition 방지)
+        setContentCharges(prev => ({
+          ...prev,
+          [contentType]: {
+            charges: chargeRes.data.charges,
+            maxCharges: chargeRes.data.maxCharges,
+            cooldown: chargeRes.data.cooldown,
+          }
+        }));
       } catch (err) { /* 검증 통과했으므로 실패 가능성 낮음 */ }
     }
     savedEnemySetupRef.current = null; // 새 전투는 적 구성 초기화

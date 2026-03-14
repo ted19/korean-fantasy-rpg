@@ -388,7 +388,7 @@ export default function SrpgBattle({
         // 물약 인벤토리 로드
         try {
           const invRes = await api.get('/shop/inventory');
-          const potionItems = (invRes.data.inventory || []).filter(i => i.type === 'potion' && i.quantity > 0);
+          const potionItems = (invRes.data.inventory || []).filter(i => (i.type === 'potion' || i.type === 'talisman') && i.quantity > 0);
           setPotions(potionItems);
         } catch {}
 
@@ -1140,36 +1140,65 @@ export default function SrpgBattle({
   };
 
   // 물약 사용
-  const handleUseItem = async (potion) => {
+  const handleUseItem = async (item) => {
     if (!activeUnit || activeUnit.team !== 'player') return;
     if (activeUnit.id !== 'player') {
-      addLog('물약은 플레이어만 사용할 수 있습니다.', 'system');
+      addLog('아이템은 플레이어만 사용할 수 있습니다.', 'system');
       return;
     }
     try {
-      await api.post('/shop/use', { itemId: potion.item_id });
+      await api.post('/shop/use', { itemId: item.item_id });
 
-      setUnits(prev => prev.map(u => {
-        if (u.id !== 'player') return u;
-        const newHp = Math.min(u.maxHp, u.hp + (potion.effect_hp || 0));
-        const newMp = Math.min(u.maxMp, u.mp + (potion.effect_mp || 0));
-        return { ...u, hp: newHp, mp: newMp };
-      }));
+      if (item.type === 'talisman') {
+        const buffEffects = [];
+        const statMap = [
+          { key: 'effect_phys_attack', stat: 'attack', label: '공격력' },
+          { key: 'effect_phys_defense', stat: 'defense', label: '방어력' },
+          { key: 'effect_mag_attack', stat: 'attack', label: '마법공격' },
+          { key: 'effect_mag_defense', stat: 'defense', label: '마법방어' },
+          { key: 'effect_crit_rate', stat: 'crit_rate', label: '치명타' },
+          { key: 'effect_evasion', stat: 'evasion', label: '회피율' },
+        ];
+        setUnits(prev => prev.map(u => {
+          if (u.id !== 'player') return u;
+          const newBuffs = [...(u.buffs || [])];
+          for (const sm of statMap) {
+            const val = item[sm.key] || 0;
+            if (val > 0) {
+              const existing = newBuffs.findIndex(b => b.stat === sm.stat && b.source === 'talisman');
+              if (existing >= 0) newBuffs.splice(existing, 1);
+              newBuffs.push({ stat: sm.stat, value: val, duration: 3, source: 'talisman', name: item.name });
+              buffEffects.push(`${sm.label}+${val}`);
+            }
+          }
+          return { ...u, buffs: newBuffs };
+        }));
+        const effectText = buffEffects.length > 0 ? buffEffects.join(', ') : item.description;
+        addLog(`${activeUnit.name}이(가) ${item.name} 사용! (${effectText})`, 'buff');
+        addPopup(activeUnit.x, activeUnit.z, `📜 ${item.name}`, 'buff');
+      } else {
+        setUnits(prev => prev.map(u => {
+          if (u.id !== 'player') return u;
+          const newHp = Math.min(u.maxHp, u.hp + (item.effect_hp || 0));
+          const newMp = Math.min(u.maxMp, u.mp + (item.effect_mp || 0));
+          return { ...u, hp: newHp, mp: newMp };
+        }));
+        const healText = [];
+        if (item.effect_hp > 0) healText.push(`HP+${item.effect_hp}`);
+        if (item.effect_mp > 0) healText.push(`MP+${item.effect_mp}`);
+        addLog(`${activeUnit.name}이(가) ${item.name} 사용! (${healText.join(', ')})`, 'heal');
+        addPopup(activeUnit.x, activeUnit.z, `+${healText.join(' ')}`, 'heal');
+      }
 
       setPotions(prev => prev.map(p => {
-        if (p.item_id !== potion.item_id) return p;
+        if (p.item_id !== item.item_id) return p;
         return { ...p, quantity: p.quantity - 1 };
       }).filter(p => p.quantity > 0));
 
-      const healText = [];
-      if (potion.effect_hp > 0) healText.push(`HP+${potion.effect_hp}`);
-      if (potion.effect_mp > 0) healText.push(`MP+${potion.effect_mp}`);
-      addLog(`${activeUnit.icon}${activeUnit.name}이(가) ${potion.name} 사용! (${healText.join(', ')})`, 'heal');
-      addPopup(activeUnit.x, activeUnit.z, `+${healText.join(' ')}`, 'heal');
       setCtxMenu({ show: false, mode: 'main' });
       advanceTurn();
     } catch (err) {
-      addLog(err.response?.data?.message || '물약 사용 실패', 'system');
+      addLog(err.response?.data?.message || '아이템 사용 실패', 'system');
     }
   };
 

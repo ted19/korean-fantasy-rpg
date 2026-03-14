@@ -85,7 +85,7 @@ router.get('/my', auth, async (req, res) => {
     // 각 용병의 학습된 스킬 + 장착 장비 수 로드
     for (const merc of mercenaries) {
       const [skills] = await pool.query(
-        `SELECT ms.* FROM mercenary_skills ms
+        `SELECT ms.*, mls.auto_priority FROM mercenary_skills ms
          JOIN mercenary_learned_skills mls ON ms.id = mls.skill_id
          WHERE mls.mercenary_id = ?
          ORDER BY ms.required_level, ms.id`,
@@ -561,17 +561,19 @@ router.get('/:mercId/skills', auth, async (req, res) => {
       [merc.class_type]
     );
 
-    // 이미 학습한 스킬 ID
+    // 이미 학습한 스킬 ID + 우선도
     const [learned] = await pool.query(
-      'SELECT skill_id FROM mercenary_learned_skills WHERE mercenary_id = ?',
+      'SELECT skill_id, auto_priority FROM mercenary_learned_skills WHERE mercenary_id = ?',
       [merc.id]
     );
-    const learnedIds = learned.map(r => r.skill_id);
+    const learnedMap = {};
+    for (const l of learned) learnedMap[l.skill_id] = l.auto_priority ?? 100;
 
     const skills = available.map(s => ({
       ...s,
-      learned: learnedIds.includes(s.id),
-      canLearn: !learnedIds.includes(s.id) && merc.level >= s.required_level,
+      learned: s.id in learnedMap,
+      auto_priority: learnedMap[s.id] ?? 100,
+      canLearn: !(s.id in learnedMap) && merc.level >= s.required_level,
       gold_cost: Math.floor(s.required_level * 50 * (1 + (merc.level - 1) * 0.1)),
     }));
 
@@ -761,6 +763,24 @@ router.post('/rest-merc', auth, async (req, res) => {
     });
   } catch (err) {
     console.error('Merc rest error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// PUT /mercenary/:id/skill-priority - 용병 스킬 자동전투 우선도
+router.put('/:id/skill-priority', auth, async (req, res) => {
+  try {
+    const mercId = parseInt(req.params.id);
+    const { skill_id, priority } = req.body;
+    if (!skill_id || priority === undefined) return res.status(400).json({ message: '잘못된 요청입니다.' });
+    const p = Math.max(0, Math.min(200, Math.round(Number(priority))));
+    await pool.query(
+      'UPDATE mercenary_learned_skills SET auto_priority = ? WHERE mercenary_id = ? AND skill_id = ?',
+      [p, mercId, skill_id]
+    );
+    res.json({ success: true, auto_priority: p });
+  } catch (err) {
+    console.error('Merc skill priority error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });
