@@ -2001,10 +2001,10 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
         {((unit.buffs?.length > 0) || (unit.debuffs?.length > 0)) && (
           <div className="cb-card-effects">
             {(unit.buffs || []).map((b, i) => (
-              <span key={`b${i}`} className="cb-effect buff" title={`${b.name} (${b.duration}턴)`}>▲</span>
+              <span key={`b${i}`} className="cb-effect buff" title={`${b.name} (${b.duration}턴)`}>▲<span className="cb-effect-dur">{b.duration}</span></span>
             ))}
             {(unit.debuffs || []).map((b, i) => (
-              <span key={`d${i}`} className="cb-effect debuff" title={`${b.name} (${b.duration}턴)`}>▼</span>
+              <span key={`d${i}`} className="cb-effect debuff" title={`${b.name} (${b.duration}턴)`}>▼<span className="cb-effect-dur">{b.duration}</span></span>
             ))}
           </div>
         )}

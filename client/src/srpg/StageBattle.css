@@ -830,13 +830,22 @@
 
 .cb-effect {
   font-size: 0.45rem;
-  width: 13px;
-  height: 13px;
+  width: auto;
+  min-width: 13px;
+  height: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 3px;
   font-weight: 900;
+  gap: 1px;
+  padding: 0 2px;
+  position: relative;
+}
+.cb-effect-dur {
+  font-size: 0.4rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .cb-effect.buff { background: rgba(46, 213, 115, 0.25); color: #2ed573; border: 1px solid rgba(46,213,115,0.3); }

@@ -676,9 +676,15 @@ export function decideAIAction(unit, allUnits) {
     }
   }
 
-  // --- 방어형 AI: 수호 (HP < 50% 아군 보호) ---
+  // --- 방어형 AI: 수호 + 치유 (HP < 50% 아군 보호) ---
   if (unit.aiType === 'defensive') {
     const weakAlly = allies.find(u => u.hp < u.maxHp * 0.5 && u.id !== unit.id);
+    // 치유 우선 (자신 또는 아군 HP < 50%)
+    const healSkill = usableSkills.find(s => s.type === 'heal');
+    const healTarget = unit.hp < unit.maxHp * 0.5 ? unit : weakAlly;
+    if (healSkill && healTarget) {
+      return { action: 'skill', skill: healSkill, target: healTarget };
+    }
     if (weakAlly && Math.random() < 0.6) {
       return { action: 'guard', target: weakAlly };
     }
@@ -753,6 +759,17 @@ export function decideAIAction(unit, allUnits) {
         const target = sTargets.reduce((a, b) => a.hp < b.hp ? a : b);
         return { action: 'skill', skill, target };
       }
+    }
+  }
+
+  // --- 공통: 치유 (아군 HP < 40%) ---
+  {
+    const healSkill = usableSkills.find(s => s.type === 'heal');
+    if (healSkill) {
+      const healSelf = unit.hp < unit.maxHp * 0.4 ? unit : null;
+      const hurtAlly = allies.find(u => u.hp < u.maxHp * 0.4);
+      const healTarget = healSelf || hurtAlly;
+      if (healTarget) return { action: 'skill', skill: healSkill, target: healTarget };
     }
   }
 
