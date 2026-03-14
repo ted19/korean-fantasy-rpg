@@ -386,8 +386,10 @@ router.get('/elemental/tier/:num', auth, async (req, res) => {
           skillMap[row.monster_id].push({
             id: row.id, name: row.name, type: row.type,
             damage_multiplier: row.damage_multiplier,
-            mp_cost: row.mp_cost, range: row.range_val,
-            icon: row.icon,
+            mp_cost: row.mp_cost, range: row.range_val, range_val: row.range_val, icon: row.icon,
+            heal_amount: row.heal_amount || 0,
+            buff_stat: row.buff_stat || null, buff_value: row.buff_value || 0,
+            buff_duration: row.buff_duration || 0, cooldown: row.cooldown || 0,
           });
         }
       }

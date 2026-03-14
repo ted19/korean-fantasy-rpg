@@ -292,13 +292,6 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
       {/* 고용하기 탭 */}
       {tab === 'shop' && (
         <div className="inn-content">
-          {selectedTemplate && (
-            <div className="summon-full-panel">
-              <SummonImg src={`/summons/${selectedTemplate.id}_full.png`} fallback={selectedTemplate.icon} className="summon-full-panel-img" />
-              <div className="summon-full-panel-name">{selectedTemplate.name}</div>
-              <div className="summon-full-panel-type">{selectedTemplate.type} · {(ELEMENT_INFO[selectedTemplate.element] || ELEMENT_INFO.neutral).name}</div>
-            </div>
-          )}
           <div className="inn-list">
             {filteredTemplates.map((t) => {
               const mats = t.summon_materials || [];
@@ -445,13 +438,6 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
       {/* 내 소환수 탭 */}
       {tab === 'my' && (
         <div className="inn-content">
-          {selectedSummon && (
-            <div className="summon-full-panel">
-              <SummonImg src={`/summons/${selectedSummon.template_id}_full.png`} fallback={selectedSummon.icon} className="summon-full-panel-img" />
-              <div className="summon-full-panel-name">{selectedSummon.name}</div>
-              <div className="summon-full-panel-type">{selectedSummon.type} · Lv.{selectedSummon.level}</div>
-            </div>
-          )}
           <div className="inn-list">
             {filteredSummons.length === 0 ? (
               <div className="facility-empty">보유한 소환수가 없습니다.</div>
@@ -566,38 +552,38 @@ function Summon({ charState, onCharStateUpdate, onLog, initialSummonId }) {
 
     {/* 소환수 소환해제 확인 팝업 */}
     {fireConfirm && (
-      <div className="aura-popup-overlay" onClick={() => setFireConfirm(null)}>
-        <div className="inn-rest-popup" onClick={e => e.stopPropagation()}>
-          <div className="inn-rest-popup-header" style={{ borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-            <span>소환해제 확인</span>
-            <button className="aura-popup-close" onClick={() => setFireConfirm(null)}>&times;</button>
+      <div className="dismiss-overlay" onClick={() => setFireConfirm(null)}>
+        <div className="dismiss-popup" onClick={e => e.stopPropagation()}>
+          <div className="dismiss-particles">
+            {[...Array(10)].map((_, i) => <div key={i} className="dismiss-particle" style={{ '--pi': i }} />)}
           </div>
-          <div className="inn-rest-popup-body">
-            <div className="inn-fire-confirm-info">
-              <SummonImg src={`/summons/${fireConfirm.template_id}_icon.png`} fallback={fireConfirm.icon || '⚔️'} className="inn-fire-confirm-img" />
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: '#eee' }}>{fireConfirm.name}</div>
-                <div style={{ fontSize: 12, color: '#aaa' }}>{fireConfirm.type} · Lv.{fireConfirm.level}</div>
-              </div>
+          <div className="dismiss-content">
+            <div className="dismiss-top-deco" />
+            <div className="dismiss-icon-wrap">
+              <SummonImg src={`/summons/${fireConfirm.template_id}_icon.png`} fallback={fireConfirm.icon || '⚔️'} className="dismiss-icon-img" />
+              <div className="dismiss-icon-glow" />
             </div>
+            <div className="dismiss-title">소환 해제</div>
+            <div className="dismiss-unit-name">{fireConfirm.name}</div>
+            <div className="dismiss-unit-sub">{fireConfirm.type} · Lv.{fireConfirm.level}</div>
+            <div className="dismiss-divider"><span>◆</span></div>
             {fireConfirm.equipped_count > 0 ? (
-              <div className="inn-fire-confirm-warn" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px' }}>
-                <span style={{ color: '#ef4444', fontWeight: 700 }}>⚠ 장비가 {fireConfirm.equipped_count}개 장착되어 있습니다.</span><br/>
-                <span style={{ color: '#aaa' }}>장비를 먼저 해제한 후 소환해제가 가능합니다.</span>
+              <div className="dismiss-warn equipped">
+                <span className="dismiss-warn-icon">⚠️</span>
+                <span>장비가 <strong>{fireConfirm.equipped_count}개</strong> 장착되어 있습니다.</span>
+                <span className="dismiss-warn-sub">장비를 먼저 해제해주세요.</span>
               </div>
             ) : (
-              <div className="inn-fire-confirm-warn">
-                정말 소환을 해제하시겠습니까?<br/>
-                <span style={{ color: '#ef4444' }}>소환해제된 소환수는 복구할 수 없습니다.</span>
+              <div className="dismiss-warn">
+                <span className="dismiss-warn-icon">💔</span>
+                <span>정말 소환을 해제하시겠습니까?</span>
+                <span className="dismiss-warn-sub">소환해제된 소환수는 복구할 수 없습니다.</span>
               </div>
             )}
-            <div className="inn-fire-confirm-btns">
-              <button className="inn-fire-confirm-cancel" onClick={() => setFireConfirm(null)}>취소</button>
-              <button
-                className="inn-fire-confirm-ok"
-                disabled={loading || fireConfirm.equipped_count > 0}
-                onClick={() => handleSell(fireConfirm.id)}
-              >
+            <div className="dismiss-btns">
+              <button className="dismiss-btn cancel" onClick={() => setFireConfirm(null)}>취소</button>
+              <button className="dismiss-btn confirm" disabled={loading || fireConfirm.equipped_count > 0} onClick={() => handleSell(fireConfirm.id)}>
+                <span className="dismiss-btn-shimmer" />
                 {fireConfirm.equipped_count > 0 ? '장비 해제 필요' : loading ? '해제 중...' : '소환해제'}
               </button>
             </div>

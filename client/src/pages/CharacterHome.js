@@ -34,7 +34,7 @@ function renderSkillTags(sk) {
       {sk.mp_cost > 0 && <span className="skill-manage-tag mp">MP {sk.mp_cost}</span>}
       {sk.damage_multiplier > 0 && <span className="skill-manage-tag pow">배율 x{sk.damage_multiplier}</span>}
       {sk.heal_amount > 0 && <span className="skill-manage-tag heal">회복 {sk.heal_amount}</span>}
-      {sk.buff_stat && <span className="skill-manage-tag buff">{BUFF_STAT_NAMES[sk.buff_stat] || sk.buff_stat} +{sk.buff_value} ({sk.buff_duration}턴)</span>}
+      {sk.buff_stat && <span className="skill-manage-tag buff">{BUFF_STAT_NAMES[sk.buff_stat] || sk.buff_stat} {sk.buff_value >= 0 ? '+' : ''}{sk.buff_value} ({sk.buff_duration}턴)</span>}
       {sk.cooldown > 0 && <span className="skill-manage-tag cd">쿨타임 {sk.cooldown}턴</span>}
     </div>
   );
@@ -571,7 +571,7 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                       {sk.mp_cost > 0 && <span className="skill-manage-tag mp">MP {sk.mp_cost}</span>}
                       {sk.type === 'attack' && sk.damage_multiplier > 0 && <span className="skill-manage-tag pow">배율 x{sk.damage_multiplier}</span>}
                       {sk.heal_amount > 0 && <span className="skill-manage-tag heal">회복 {sk.heal_amount}</span>}
-                      {sk.buff_stat && <span className="skill-manage-tag buff">{{attack:'ATK', defense:'DEF', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명', evasion:'회피'}[sk.buff_stat] || sk.buff_stat}+{sk.buff_value} ({sk.buff_duration}턴)</span>}
+                      {sk.buff_stat && <span className="skill-manage-tag buff">{{attack:'ATK', defense:'DEF', phys_attack:'물공', phys_defense:'물방', mag_attack:'마공', mag_defense:'마방', crit_rate:'치명', evasion:'회피'}[sk.buff_stat] || sk.buff_stat}{sk.buff_value >= 0 ? '+' : ''}{sk.buff_value} ({sk.buff_duration}턴)</span>}
                       {sk.cooldown > 0 && <span className="skill-manage-tag cd">쿨타임 {sk.cooldown}턴</span>}
                       {!sk.learned && <span className="skill-manage-tag" style={{ color: '#ffa502', borderColor: 'rgba(255,165,2,0.2)' }}>{(sk.gold_cost || 0).toLocaleString()}G</span>}
                     </div>

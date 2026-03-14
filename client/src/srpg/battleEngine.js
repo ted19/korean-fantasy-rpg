@@ -624,8 +624,10 @@ function positionScore(pos, mapData, target, atkRange) {
 }
 
 // 스킬 선택: 현재 상황에 맞는 최적 스킬 결정
-function selectSkill(unit, allies, enemies, mapData) {
+function selectSkill(unit, allies, enemies, mapData, allUnits) {
   if (!unit.skills || unit.skills.length === 0) return null;
+  // 봉인 상태면 스킬 사용 불가
+  if ((unit.debuffs || []).some(d => d.stat === 'seal')) return null;
 
   const hpRatio = unit.hp / unit.maxHp;
   const availableSkills = unit.skills.filter(s => {
@@ -637,11 +639,21 @@ function selectSkill(unit, allies, enemies, mapData) {
 
   if (availableSkills.length === 0) return null;
 
+  // 부활 스킬 최우선: 죽은 아군이 있으면
+  const reviveSkill = availableSkills.find(s => s.buff_stat === 'revive');
+  if (reviveSkill) {
+    const deadAlly = allUnits.filter(u => u.team === unit.team && u.hp <= 0);
+    if (deadAlly.length > 0) return reviveSkill;
+  }
+
   // 우선순위 결정
   const scored = availableSkills.map(skill => {
     let priority = 0;
 
-    if (skill.type === 'heal') {
+    if (skill.buff_stat === 'revive') {
+      // 부활 스킬은 죽은 아군 없으면 사용 안 함
+      priority = 0;
+    } else if (skill.type === 'heal') {
       // 아군이 위험할 때 힐
       const woundedAlly = allies.find(a => a.maxHp > 0 && a.hp / a.maxHp < 0.4);
       if (woundedAlly) priority = 80 + (1 - woundedAlly.hp / woundedAlly.maxHp) * 20;
@@ -662,7 +674,7 @@ function selectSkill(unit, allies, enemies, mapData) {
     } else if (skill.type === 'attack') {
       priority = 50 + (skill.damage_multiplier - 1.0) * 30;
       // 자폭은 체력 낮을 때만
-      if (skill.name === '자폭') {
+      if (skill.buff_stat === 'selfdestruct' || skill.name === '자폭') {
         priority = hpRatio < 0.2 ? 95 : 0;
       }
       // 생명력 흡수: HP 낮을 때 우선
@@ -693,6 +705,18 @@ function getReachableEnemies(candidates, enemies, atkRange) {
 }
 
 export function aiDecide(unit, mapData, allUnits) {
+  // 마비 상태면 행동 불가
+  if ((unit.debuffs || []).some(d => d.stat === 'stun')) return null;
+  // 매혹 상태면 아군 랜덤 공격
+  if ((unit.debuffs || []).some(d => d.stat === 'charm')) {
+    const ownTeam = allUnits.filter(u => u.team === unit.team && u.hp > 0 && u.id !== unit.id);
+    if (ownTeam.length > 0) {
+      const target = ownTeam[Math.floor(Math.random() * ownTeam.length)];
+      return { target, moveTarget: null, canAttack: true, skill: null, action: 'attack' };
+    }
+    return null;
+  }
+
   const enemies = allUnits.filter(u => u.team !== unit.team && u.hp > 0);
   const allies = allUnits.filter(u => u.team === unit.team && u.hp > 0 && u.id !== unit.id);
   if (enemies.length === 0) return null;
@@ -714,8 +738,16 @@ export function aiDecide(unit, mapData, allUnits) {
   const reachByThreat = [...reachable].sort((a, b) => threatScore(b, unit) - threatScore(a, unit));
 
   // 스킬 선택
-  const chosenSkill = selectSkill(unit, allies, enemies, mapData);
+  const chosenSkill = selectSkill(unit, allies, enemies, mapData, allUnits);
   const effectiveRange = chosenSkill && chosenSkill.range ? Math.max(chosenSkill.range, atkRange) : atkRange;
+
+  // 부활 스킬이면 즉시 반환
+  if (chosenSkill && chosenSkill.buff_stat === 'revive') {
+    const deadAlly = allUnits.find(u => u.team === unit.team && u.hp <= 0);
+    if (deadAlly) {
+      return { target: deadAlly, moveTarget: null, canAttack: false, skill: chosenSkill, action: 'heal' };
+    }
+  }
 
   let target = null;
   let moveTarget = null;

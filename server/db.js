@@ -2054,12 +2054,12 @@ async function initialize() {
       ('방어 태세',  'buff',  0, 0, 'defense', 5, 5, 2, 0, 'diamond', '단단하게 방어 태세를 취한다.', '🛡️'),
       ('약화의 주문','debuff', 0, 0, 'defense', -3, 10, 3, 3, 'diamond', '적의 방어력을 낮춘다.', '⬇️'),
       ('돌진',       'attack', 1.6, 0, NULL, 0, 5, 1, 1, 'diamond', '돌진하여 강력히 부딪힌다.', '💨'),
-      ('자폭',       'aoe',   3.0, 0, NULL, 0, 0, 99, 1, 'diamond', '자폭하며 주변에 큰 피해를 준다.', '💣'),
+      ('자폭',       'attack', 0, 0, 'selfdestruct', 0, 0, 99, 1, 'single', '자폭하여 자신의 HP 50%만큼 방어 무시 피해를 주고 사망한다.', '💣'),
       ('생명력 흡수','attack', 1.3, 15, NULL, 0, 10, 2, 1, 'diamond', '공격하며 생명력을 흡수한다.', '🩸'),
       ('꼬리 휘두르기','aoe', 1.3, 0, NULL, 0, 8, 2, 1, 'cross', '거대한 꼬리를 휘두른다.', '💫'),
       ('마법 화살',  'attack', 1.4, 0, NULL, 0, 5, 1, 4, 'line', '마법 화살을 발사한다.', '🏹'),
       ('저주',       'debuff', 0, 0, 'attack', -4, 12, 3, 3, 'diamond', '적의 공격력을 낮춘다.', '🔮'),
-      ('마비의 눈길','debuff', 0, 0, 'defense', -5, 10, 2, 3, 'diamond', '눈빛으로 적의 방어를 무너뜨린다.', '👁️'),
+      ('마비의 눈길','debuff', 0, 0, 'stun', 1, 10, 2, 3, 'diamond', '눈빛으로 적을 2턴간 마비시킨다.', '👁️'),
       ('공포의 포효','debuff', 0, 0, 'attack', -6, 15, 3, 2, 'cross', '공포스러운 포효로 적의 의지를 꺾는다.', '😱'),
       ('기력 흡수',  'debuff', 0, 0, 'attack', -3, 8, 2, 2, 'diamond', '적의 기력을 빨아들인다.', '💜'),
       ('속박의 거미줄','debuff', 0, 0, 'defense', -4, 6, 2, 3, 'diamond', '거미줄로 적을 속박한다.', '🕸️'),
@@ -2081,6 +2081,8 @@ async function initialize() {
   `).catch(() => {});
   // name에 UNIQUE 제약 추가 (중복 방지)
   await pool.query(`ALTER TABLE monster_skills ADD UNIQUE INDEX idx_mskill_name (name)`).catch(() => {});
+  await pool.query('ALTER TABLE monster_skills ADD COLUMN buff_duration INT NOT NULL DEFAULT 3').catch(() => {});
+  await pool.query("UPDATE monster_skills SET buff_stat = 'stun', buff_value = 1, buff_duration = 2, description = '눈빛으로 적을 2턴간 마비시킨다.' WHERE name = '마비의 눈길'").catch(() => {});
 
   // 빙결 스킬 패치 (기존 DB에도 추가)
   await pool.query(
@@ -5345,6 +5347,7 @@ async function initialize() {
   // ========== 스킬 트리 시스템 ==========
   // characters에 skill_points, total_skill_points 컬럼 추가
   await addCol('skill_points', 'INT DEFAULT 0');
+  await addCol('speed_boost_battles', 'INT DEFAULT 0');
   await addCol('total_skill_points', 'INT DEFAULT 0');
 
   // 기존 캐릭터에 레벨 기반 스킬 포인트 지급
@@ -5455,13 +5458,13 @@ async function initialize() {
       ('무당','healing','치유술',2,'md_heal_2b','보호결계','보호 결계로 마방을 높인다.','🛡️','active','buff',14,0,'magical',0,'mag_defense',8,3,2,0,NULL,0,0, 2,2, 1,3),
       ('무당','healing','치유술',3,'md_heal_3a','대치유','강력한 치유 의식으로 대량 HP를 회복한다.','💖','active','heal',30,0,'magical',80,NULL,0,0,2,3,NULL,0,0, 0,3, 1,5),
       ('무당','healing','치유술',3,'md_heal_3b','생명의 축복','생명력을 강화하는 축복을 내린다.','🌸','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'hp',25,0, 1,3, 1,5),
-      ('무당','healing','치유술',3,'md_heal_3c','해독의식','해독 의식으로 물방을 강화한다.','🍃','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'phys_defense',4,0, 2,3, 1,5),
-      ('무당','healing','치유술',4,'md_heal_4','부활의 의식','죽은 자를 되살리는 궁극 치유술.','🌅','active','heal',60,0,'magical',150,NULL,0,0,4,4,NULL,0,0, 1,4, 2,8),
+      ('무당','healing','치유술',3,'md_heal_3c','해독의식','해독 의식으로 아군의 상태이상을 해제하고 소량 치유한다.','🍃','active','heal',15,0,'magical',20,'cleanse',0,0,2,4,NULL,0,0, 2,3, 1,5),
+      ('무당','healing','치유술',4,'md_heal_4','부활의 의식','죽은 자를 되살리는 궁극 치유술.','🌅','active','heal',60,0,'magical',150,'revive',0,0,4,4,NULL,0,0, 1,4, 2,8),
 
       ('무당','curse','저주술',1,'md_curse_1','약화저주','적의 방어력을 약화시키는 저주.','🔮','active','debuff',10,1.5,'magical',0,'defense',-5,3,0,3,NULL,0,0, 1,1, 1,1),
       ('무당','curse','저주술',2,'md_curse_2a','독기방출','독기를 방출하여 지속 피해를 준다.','☠️','active','attack',16,2.5,'magical',0,NULL,0,0,1,2,NULL,0,0, 0,2, 1,3),
       ('무당','curse','저주술',2,'md_curse_2b','저주확산','저주가 확산되어 범위 피해를 준다.','🌑','active','aoe',20,2.0,'magical',0,NULL,0,0,2,2,NULL,0,0, 2,2, 1,3),
-      ('무당','curse','저주술',3,'md_curse_3a','혼란의 주문','적을 혼란에 빠뜨리는 주문.','🌀','active','debuff',22,2.8,'magical',0,'attack',-8,3,2,3,NULL,0,0, 0,3, 1,5),
+      ('무당','curse','저주술',3,'md_curse_3a','혼란의 주문','적을 혼란에 빠뜨려 2턴간 아군을 공격하게 한다.','🌀','active','debuff',22,2.8,'magical',0,'charm',1,2,2,3,NULL,0,0, 0,3, 1,5),
       ('무당','curse','저주술',3,'md_curse_3b','원한응축','원한을 응축하여 마공을 높인다.','💢','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_attack',7,0, 1,3, 1,5),
       ('무당','curse','저주술',3,'md_curse_3c','사령소환','사령을 소환하여 적을 공격한다.','👻','active','attack',26,3.5,'magical',0,NULL,0,0,2,3,NULL,0,0, 2,3, 1,5),
       ('무당','curse','저주술',4,'md_curse_4','망자의 저주','망자의 원한을 해방하는 궁극 저주술.','💀','active','aoe',55,6.0,'magical',0,'defense',-10,3,4,4,NULL,0,0, 1,4, 2,8),
@@ -5488,7 +5491,7 @@ async function initialize() {
       ('승려','zen','선법',2,'mk_zen_2b','명상','깊은 명상으로 MP를 높인다.','🕯️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mp',15,0, 2,2, 1,3),
       ('승려','zen','선법',3,'mk_zen_3a','기공파','기공을 모아 강력한 파동을 발사한다.','🌊','active','attack',20,3.0,'magical',0,NULL,0,0,2,3,NULL,0,0, 0,3, 1,5),
       ('승려','zen','선법',3,'mk_zen_3b','선정의 경지','선정의 경지에 올라 회피를 높인다.','☁️','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'evasion',4,0, 1,3, 1,5),
-      ('승려','zen','선법',3,'mk_zen_3c','만병통치','모든 상처를 치유하는 의술.','🌟','active','heal',28,0,'magical',70,NULL,0,0,2,0,NULL,0,0, 2,3, 1,5),
+      ('승려','zen','선법',3,'mk_zen_3c','만병통치','모든 상처를 치유하고 상태이상을 해제한다.','🌟','active','heal',28,0,'magical',70,'cleanse',0,0,2,4,NULL,0,0, 2,3, 1,5),
       ('승려','zen','선법',4,'mk_zen_4','대자대비','대자대비의 경지에 오르는 궁극 선법.','☸️','active','heal',55,0,'magical',120,'attack',10,3,4,4,NULL,0,0, 1,4, 2,8)
     `);
 
@@ -6377,7 +6380,7 @@ async function initialize() {
       ('저승사자','undead','망자술',3,'rp_undead_3a','불사의 의지','죽음의 문턱에서 생존한다.','🔥','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'hp',15,0, 0,3, 1,5),
       ('저승사자','undead','망자술',3,'rp_undead_3b','영혼 흡수','쓰러진 적의 영혼을 흡수하여 HP 회복.','👻','active','heal',15,0,'magical',40,NULL,0,0,1,0,NULL,0,0, 1,3, 1,5),
       ('저승사자','undead','망자술',3,'rp_undead_3c','사령술','사령을 불러 공격력/방어력을 높인다.','💀','active','buff',20,0,'magical',0,'attack',10,3,3,0,NULL,0,0, 2,3, 1,5),
-      ('저승사자','undead','망자술',4,'rp_undead_4','부활의 의식','망자의 힘으로 사망에서 부활한다.','☠️','active','buff',50,0,'magical',80,'defense',15,5,5,0,NULL,0,0, 1,4, 2,8),
+      ('저승사자','undead','망자술',4,'rp_undead_4','부활의 의식','망자의 힘으로 사망에서 부활한다.','☠️','active','heal',50,0,'magical',80,'revive',0,0,5,0,NULL,0,0, 1,4, 2,8),
       ('저승사자','undead','망자술',5,'rp_undead_5','저승의 권능','저승의 힘을 몸에 깃들게 한다.','🌑','active','buff',55,0,'magical',0,'attack',20,4,5,0,NULL,0,0, 1,5, 5,45),
       ('저승사자','undead','망자술',6,'rp_undead_6','사왕의 갑옷','사왕의 갑옷을 소환하여 무적.','👑','active','buff',75,0,'magical',60,'defense',35,5,6,0,'phys_defense',12,0, 1,6, 7,65),
       ('저승사자','undead','망자술',7,'rp_undead_7','사생결단','생과 사의 경계를 초월하는 궁극기.','💠','active','buff',100,0,'magical',150,'attack',30,6,8,0,'hp',80,0, 1,7, 10,85)

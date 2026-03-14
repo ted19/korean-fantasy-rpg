@@ -889,7 +889,9 @@ const SKILL_STAT_LABELS = {
   hp: 'HP', mp: 'MP', attack: 'ATK', defense: 'DEF',
   phys_attack: '물공', phys_defense: '물방', mag_attack: '마공', mag_defense: '마방',
   crit_rate: '치명', evasion: '회피',
+  poison: '독', stun: '마비', revive: '부활', cleanse: '해독', selfdestruct: '자폭', charm: '매혹', seal: '봉인',
 };
+const DEBUFF_STATS = new Set(['poison', 'stun', 'selfdestruct', 'charm', 'seal']);
 
 function SkillTab() {
   const [skills, setSkills] = useState([]);
@@ -1229,7 +1231,7 @@ function SkillTab() {
                       <div className="equip-stat-row"><span className="equip-stat-icon">💚</span><span className="equip-stat-label">치유량</span><span className="equip-stat-value equip-sv-hp">+{ss.heal_amount}</span></div>
                     )}
                     {ss.buff_stat && (
-                      <div className="equip-stat-row"><span className="equip-stat-icon">✨</span><span className="equip-stat-label">버프 ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value equip-sv-atk">+{ss.buff_value} ({ss.buff_duration}턴)</span></div>
+                      <div className="equip-stat-row"><span className="equip-stat-icon">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '⬇️' : '⬆️'}</span><span className="equip-stat-label">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '디버프' : '버프'} ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value" style={{ color: DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '#ef4444' : '#22c55e' }}>{ss.buff_stat === 'poison' ? `-${ss.buff_value}%` : ss.buff_stat === 'stun' ? `${ss.buff_duration}턴` : `${ss.buff_value >= 0 ? '+' : ''}${ss.buff_value}`} ({ss.buff_duration}턴)</span></div>
                     )}
                     {ss.cooldown > 0 && (
                       <div className="equip-stat-row"><span className="equip-stat-icon">⏱️</span><span className="equip-stat-label">쿨타임</span><span className="equip-stat-value">{ss.cooldown}턴</span></div>
@@ -1277,7 +1279,7 @@ function SkillTab() {
                       <div className="equip-stat-row"><span className="equip-stat-icon">💚</span><span className="equip-stat-label">치유량</span><span className="equip-stat-value equip-sv-hp">+{ss.heal_amount}</span></div>
                     )}
                     {ss.buff_stat && (
-                      <div className="equip-stat-row"><span className="equip-stat-icon">✨</span><span className="equip-stat-label">버프 ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value equip-sv-atk">+{ss.buff_value} ({ss.buff_duration}턴)</span></div>
+                      <div className="equip-stat-row"><span className="equip-stat-icon">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '⬇️' : '⬆️'}</span><span className="equip-stat-label">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '디버프' : '버프'} ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value" style={{ color: DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '#ef4444' : '#22c55e' }}>{ss.buff_stat === 'poison' ? `-${ss.buff_value}%` : ss.buff_stat === 'stun' ? `${ss.buff_duration}턴` : `${ss.buff_value >= 0 ? '+' : ''}${ss.buff_value}`} ({ss.buff_duration}턴)</span></div>
                     )}
                     {ss.cooldown > 0 && (
                       <div className="equip-stat-row"><span className="equip-stat-icon">⏱️</span><span className="equip-stat-label">쿨타임</span><span className="equip-stat-value">{ss.cooldown}턴</span></div>
@@ -1420,7 +1422,7 @@ function MonsterSkillTab() {
                     <div className="equip-stat-row"><span className="equip-stat-icon">💚</span><span className="equip-stat-label">치유량</span><span className="equip-stat-value equip-sv-hp">+{ss.heal_amount}</span></div>
                   )}
                   {ss.buff_stat && (
-                    <div className="equip-stat-row"><span className="equip-stat-icon">{ss.buff_value > 0 ? '⬆️' : '⬇️'}</span><span className="equip-stat-label">{ss.buff_stat === 'attack' ? '공격력' : ss.buff_stat === 'defense' ? '방어력' : ss.buff_stat}</span><span className="equip-stat-value" style={{ color: ss.buff_value > 0 ? '#22c55e' : '#ef4444' }}>{ss.buff_value > 0 ? '+' : ''}{ss.buff_value}</span></div>
+                    <div className="equip-stat-row"><span className="equip-stat-icon">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '⬇️' : '⬆️'}</span><span className="equip-stat-label">{SKILL_STAT_LABELS[ss.buff_stat] || (ss.buff_stat === 'attack' ? '공격력' : ss.buff_stat === 'defense' ? '방어력' : ss.buff_stat)}</span><span className="equip-stat-value" style={{ color: DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '#ef4444' : '#22c55e' }}>{ss.buff_stat === 'poison' ? `-${ss.buff_value}%` : ss.buff_stat === 'stun' ? `${ss.buff_duration || 2}턴` : `${ss.buff_value > 0 ? '+' : ''}${ss.buff_value}`}</span></div>
                   )}
                   {ss.cooldown > 0 && (
                     <div className="equip-stat-row"><span className="equip-stat-icon">⏱️</span><span className="equip-stat-label">쿨타임</span><span className="equip-stat-value">{ss.cooldown}턴</span></div>

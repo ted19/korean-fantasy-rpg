@@ -622,10 +622,55 @@ export default function SrpgBattle({
 
       // ===== AI 행동 실행 =====
       if (decision.action === 'heal' && decision.skill && decision.target) {
-        // 힐 스킬 사용
         const healTarget = unitsRef.current.find(u => u.id === decision.target.id);
-        if (healTarget && healTarget.hp > 0) {
-          const healAmt = decision.skill.heal_amount || 30;
+        const isRevive = decision.skill.buff_stat === 'revive' && healTarget && healTarget.hp <= 0;
+
+        if (isRevive) {
+          // 부활 스킬
+          const reviveHp = decision.skill.heal_amount > 0 ? decision.skill.heal_amount : Math.floor(healTarget.maxHp * 0.3);
+          setUnits(prev => {
+            const updated = prev.map(u => {
+              if (u.id === healTarget.id) {
+                return { ...u, hp: Math.min(reviveHp, u.maxHp), debuffs: [] };
+              }
+              if (u.id === movedUnit.id) {
+                const cd = { ...(u.skillCooldowns || {}) };
+                cd[decision.skill.id] = decision.skill.cooldown || 0;
+                return { ...u, mp: u.mp - (decision.skill.mp_cost || 0), acted: true, skillCooldowns: cd, attackAnim: { tx: healTarget.x, tz: healTarget.z } };
+              }
+              return u;
+            });
+            unitsRef.current = updated;
+            return updated;
+          });
+          addLog(
+            `[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 ${decision.skill.icon || '🌅'}[${decision.skill.name}]! ${healTarget.icon}${healTarget.name}이(가) 부활! (HP: ${reviveHp})`,
+            'heal'
+          );
+          addPopup(healTarget.x, healTarget.z, '부활!', 'heal');
+          addEffect(healTarget.x, healTarget.z, 'heal');
+        } else if (decision.skill.buff_stat === 'cleanse' && healTarget && healTarget.hp > 0) {
+          // 해독 스킬
+          const healAmt = decision.skill.heal_amount > 0 ? decision.skill.heal_amount : 0;
+          setUnits(prev => {
+            const updated = prev.map(u => {
+              if (u.id === healTarget.id) return { ...u, hp: Math.min(u.maxHp, u.hp + healAmt), debuffs: [] };
+              if (u.id === movedUnit.id) {
+                const cd = { ...(u.skillCooldowns || {}) };
+                cd[decision.skill.id] = decision.skill.cooldown || 0;
+                return { ...u, mp: u.mp - (decision.skill.mp_cost || 0), acted: true, skillCooldowns: cd };
+              }
+              return u;
+            });
+            unitsRef.current = updated;
+            return updated;
+          });
+          addLog(`[R${roundCount}] ${movedUnit.icon}${movedUnit.name}의 [${decision.skill.name}]! ${healTarget.icon}${healTarget.name}의 상태이상 해제!`, 'heal');
+          addPopup(healTarget.x, healTarget.z, '해독!', 'heal');
+          addEffect(healTarget.x, healTarget.z, 'heal');
+        } else if (healTarget && healTarget.hp > 0) {
+          // 일반 힐 스킬
+          const healAmt = decision.skill.heal_amount > 0 ? decision.skill.heal_amount : 0;
           const selfHeal = healTarget.id === movedUnit.id;
           setUnits(prev => {
             const updated = prev.map(u => {
@@ -668,6 +713,8 @@ export default function SrpgBattle({
               if (bs === 'mag_defense') newU.magDefense = (newU.magDefense||0) + decision.skill.buff_value;
               if (bs === 'crit_rate') newU.critRate = (newU.critRate||0) + decision.skill.buff_value;
               if (bs === 'evasion') newU.evasion = (newU.evasion||0) + decision.skill.buff_value;
+              if (bs === 'mp') newU.mp = Math.min((newU.mp||0) + decision.skill.buff_value, newU.maxMp||999);
+              if (bs === 'hp') newU.hp = Math.min((newU.hp||0) + decision.skill.buff_value, newU.maxHp||999);
               return newU;
             }
             return u;
@@ -683,6 +730,26 @@ export default function SrpgBattle({
         );
         addPopup(movedUnit.x, movedUnit.z, `${statName}${decision.skill.buff_value > 0 ? '↑' : '↓'}`, 'system');
         addEffect(movedUnit.x, movedUnit.z, 'buff', decision.skill.buff_stat === 'attack' || decision.skill.buff_stat === 'phys_attack' || decision.skill.buff_stat === 'mag_attack' ? '#ff6600' : '#4488ff');
+      } else if (decision.skill && decision.skill.buff_stat === 'selfdestruct' && decision.target) {
+        // 자폭
+        const targetUnit = unitsRef.current.find(u => u.id === decision.target.id);
+        if (movedUnit && movedUnit.hp > 0 && targetUnit) {
+          playSkillCutIn(movedUnit, decision.skill);
+          const selfDestructDmg = Math.floor(movedUnit.hp * 0.5);
+          setUnits(prev => {
+            const updated = prev.map(u => {
+              if (u.id === movedUnit.id) return { ...u, hp: 0, acted: true };
+              if (u.id === targetUnit.id) return { ...u, hp: Math.max(0, u.hp - selfDestructDmg) };
+              return u;
+            });
+            unitsRef.current = updated;
+            return updated;
+          });
+          addLog(`[R${roundCount}] ${movedUnit.icon}${movedUnit.name}이(가) 자폭! ${targetUnit.icon}${targetUnit.name}에게 ${selfDestructDmg} 피해! (방어 무시)`, 'damage');
+          addPopup(targetUnit.x, targetUnit.z, `-${selfDestructDmg}`, 'damage');
+          addPopup(movedUnit.x, movedUnit.z, '자폭!', 'kill');
+          addEffect(targetUnit.x, targetUnit.z, 'attack', '#ff4400');
+        }
       } else if (decision.canAttack && decision.target) {
         // 공격 (일반 or 스킬)
         const targetUnit = unitsRef.current.find(u => u.id === decision.target.id);
@@ -904,6 +971,54 @@ export default function SrpgBattle({
         return;
       }
 
+      // 부활 스킬: 죽은 아군 타겟
+      if (selectedSkill && selectedSkill.buff_stat === 'revive') {
+        const deadUnit = units.find(u => u.x === tile.x && u.z === tile.z && u.hp <= 0 && u.team === 'player');
+        if (deadUnit) {
+          const reviveHp = selectedSkill.heal_amount > 0 ? selectedSkill.heal_amount : Math.floor(deadUnit.maxHp * 0.3);
+          setUnits(prev => {
+            const updated = prev.map(u => {
+              if (u.id === deadUnit.id) return { ...u, hp: Math.min(reviveHp, u.maxHp), debuffs: [] };
+              if (u.id === activeUnit.id) return { ...u, mp: u.mp - selectedSkill.mp_cost, acted: true, attackAnim: { tx: deadUnit.x, tz: deadUnit.z } };
+              return u;
+            });
+            unitsRef.current = updated;
+            return updated;
+          });
+          addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 [${selectedSkill.name}]! ${deadUnit.icon}${deadUnit.name} 부활! (HP: ${reviveHp})`, 'heal');
+          addPopup(deadUnit.x, deadUnit.z, '부활!', 'heal');
+          addEffect(deadUnit.x, deadUnit.z, 'heal', '#ffd700');
+          setAttackRange([]);
+          setSelectedSkill(null);
+          setTimeout(() => advanceTurn(), 500);
+        }
+        return;
+      }
+
+      // 해독 스킬: 디버프 있는 아군 타겟
+      if (selectedSkill && selectedSkill.buff_stat === 'cleanse') {
+        const cleanseTarget = units.find(u => u.x === tile.x && u.z === tile.z && u.hp > 0 && u.team === 'player');
+        if (cleanseTarget && (cleanseTarget.debuffs || []).length > 0) {
+          const healAmt = selectedSkill.heal_amount > 0 ? selectedSkill.heal_amount : 0;
+          setUnits(prev => {
+            const updated = prev.map(u => {
+              if (u.id === cleanseTarget.id) return { ...u, hp: Math.min(u.maxHp, u.hp + healAmt), debuffs: [] };
+              if (u.id === activeUnit.id) return { ...u, mp: u.mp - selectedSkill.mp_cost, acted: true, attackAnim: { tx: cleanseTarget.x, tz: cleanseTarget.z } };
+              return u;
+            });
+            unitsRef.current = updated;
+            return updated;
+          });
+          addLog(`[R${roundCount}] ${activeUnit.icon}${activeUnit.name}의 [${selectedSkill.name}]! ${cleanseTarget.icon}${cleanseTarget.name}의 상태이상 해제!${healAmt > 0 ? ` HP +${healAmt}` : ''}`, 'heal');
+          addPopup(cleanseTarget.x, cleanseTarget.z, '해독!', 'heal');
+          addEffect(cleanseTarget.x, cleanseTarget.z, 'heal', '#2ed573');
+          setAttackRange([]);
+          setSelectedSkill(null);
+          setTimeout(() => advanceTurn(), 500);
+        }
+        return;
+      }
+
       const targetUnit = units.find(u => u.x === tile.x && u.z === tile.z && u.hp > 0);
 
       // 힐 스킬
@@ -1096,6 +1211,32 @@ export default function SrpgBattle({
 
   const handleSkill = (skill) => {
     if (!activeUnit || activeUnit.mp < skill.mp_cost) return;
+    // 해독 스킬: 디버프 있는 아군 타겟 선택
+    if (skill.buff_stat === 'cleanse') {
+      const debuffedAllies = units.filter(u => u.team === 'player' && u.hp > 0 && (u.debuffs || []).length > 0);
+      if (debuffedAllies.length === 0) {
+        addLog('상태이상 대상이 없습니다.', 'system');
+        return;
+      }
+      setAttackRange(debuffedAllies.map(u => ({ x: u.x, z: u.z })));
+      setMovableRange([]);
+      setSelectedSkill(skill);
+      setPhase(PHASE.PLAYER_SKILL);
+      return;
+    }
+    // 부활 스킬: 죽은 아군이 있으면 타겟 선택 모드
+    if (skill.buff_stat === 'revive') {
+      const deadAllies = units.filter(u => u.team === 'player' && u.hp <= 0);
+      if (deadAllies.length === 0) {
+        addLog('부활 대상이 없습니다.', 'system');
+        return;
+      }
+      setAttackRange(deadAllies.map(u => ({ x: u.x, z: u.z })));
+      setMovableRange([]);
+      setSelectedSkill(skill);
+      setPhase(PHASE.PLAYER_SKILL);
+      return;
+    }
     const range = getSkillRange(skill);
     if (range === 0) {
       // 자기 버프

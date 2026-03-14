@@ -389,6 +389,13 @@ export function calculateDamage(attacker, defender, skill = null) {
     isCrit = true;
   }
 
+  // 파천 부적: 다음 공격 2배
+  const nextDouble = (attacker.buffs || []).findIndex(b => b.stat === 'next_double');
+  if (nextDouble >= 0) {
+    damage = Math.floor(damage * 2);
+    attacker.buffs.splice(nextDouble, 1);
+  }
+
   // 회피 (부적 등 버프 반영)
   let isEvade = false;
   const evaBuff = (defender.buffs || []).filter(b => b.stat === 'evasion').reduce((sum, b) => sum + b.value, 0);
@@ -413,6 +420,29 @@ export function executeSkill(caster, skill, target, allUnits) {
   caster.mp -= (skill.mp_cost || 0);
   skill.currentCooldown = skill.cooldown || 0;
 
+  // 자폭 스킬 특수 처리
+  if (skill.buff_stat === 'selfdestruct') {
+    const selfDestructDmg = Math.floor(caster.hp * 0.5);
+    // 시전자 사망
+    caster.hp = 0;
+    logs.push({ text: `${caster.name}이(가) 자폭했다!`, type: 'system' });
+    logs.push({ text: `${caster.name} 쓰러짐!`, type: 'kill', targetId: caster.id });
+    // 대상에게 방어 무시 피해
+    const guardian = findGuardian(target, allUnits);
+    const actualTarget = guardian || target;
+    if (guardian) {
+      logs.push({ text: `${guardian.name}이(가) ${target.name} 대신 방어!`, type: 'system' });
+    }
+    actualTarget.hp = Math.max(0, actualTarget.hp - selfDestructDmg);
+    logs.push({ text: `${caster.name}의 자폭! → ${actualTarget.name}에게 ${selfDestructDmg} 피해 (방어 무시)`, type: 'damage', targetId: actualTarget.id });
+    if (actualTarget.hp <= 0) {
+      logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill', targetId: actualTarget.id });
+      promoteBackRow(actualTarget.team, allUnits);
+    }
+    promoteBackRow(caster.team, allUnits);
+    return { logs, success: true };
+  }
+
   switch (skill.type) {
     case 'attack': {
       const result = calculateDamage(caster, target, skill);
@@ -428,6 +458,7 @@ export function executeSkill(caster, skill, target, allUnits) {
         logs.push({ text: `${caster.name}의 ${skill.name} → ${actualTarget.name} 회피!`, type: 'evade', isEvade: true, targetId: actualTarget.id });
       } else {
         actualTarget.hp = Math.max(0, actualTarget.hp - result.damage);
+        if (actualTarget.hp <= 0 && (actualTarget.buffs || []).some(b => b.stat === 'immortal')) actualTarget.hp = 1;
         let dmgText = `${caster.name}의 ${skill.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
         if (result.isCrit) dmgText += ' (치명타!)';
         if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
@@ -439,9 +470,16 @@ export function executeSkill(caster, skill, target, allUnits) {
           caster.hp += healAmt;
           logs.push({ text: `${caster.name} HP +${healAmt} 흡수`, type: 'heal', targetId: caster.id });
         }
+        // 독 부여
+        if (skill.buff_stat === 'poison' && actualTarget.hp > 0) {
+          const existing = actualTarget.debuffs.findIndex(d => d.stat === 'poison');
+          if (existing >= 0) actualTarget.debuffs.splice(existing, 1);
+          actualTarget.debuffs.push({ stat: 'poison', value: skill.buff_value || 5, duration: skill.buff_duration || 3, source: caster.id, name: skill.name });
+          logs.push({ text: `${actualTarget.name}에게 독 부여! (${skill.buff_duration || 3}턴)`, type: 'debuff', targetId: actualTarget.id });
+        }
       }
 
-      if (actualTarget.hp <= 0) {
+      if (actualTarget.hp <= 0 && !checkAutoRevive(actualTarget, logs)) {
         logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill', targetId: actualTarget.id });
         promoteBackRow(actualTarget.team, allUnits);
       }
@@ -462,8 +500,13 @@ export function executeSkill(caster, skill, target, allUnits) {
           if (result.isCrit) aoeText += ' (치명타!)';
           if (result.elementLabel) aoeText += ` [${result.elementLabel}]`;
           logs.push({ text: aoeText, type: 'damage', isCrit: result.isCrit, targetId: enemy.id, elementMult: result.elementMult, elementLabel: result.elementLabel });
-          if (enemy.hp <= 0) {
+          if (enemy.hp <= 0 && !checkAutoRevive(enemy, logs)) {
             logs.push({ text: `  ${enemy.name} 쓰러짐!`, type: 'kill', targetId: enemy.id });
+          } else if (enemy.hp > 0 && skill.buff_stat === 'poison') {
+            const existing = enemy.debuffs.findIndex(d => d.stat === 'poison');
+            if (existing >= 0) enemy.debuffs.splice(existing, 1);
+            enemy.debuffs.push({ stat: 'poison', value: skill.buff_value || 5, duration: skill.buff_duration || 2, source: caster.id, name: skill.name });
+            logs.push({ text: `  ${enemy.name}에게 독 부여! (${skill.buff_duration || 2}턴)`, type: 'debuff', targetId: enemy.id });
           }
         }
       }
@@ -472,14 +515,35 @@ export function executeSkill(caster, skill, target, allUnits) {
     }
 
     case 'heal': {
+      // 부활 스킬
+      if (skill.buff_stat === 'revive') {
+        if (target && target.hp <= 0) {
+          const reviveHp = skill.heal_amount > 0 ? skill.heal_amount : Math.floor(target.maxHp * 0.3);
+          target.hp = Math.min(reviveHp, target.maxHp);
+          target.debuffs = [];
+          logs.push({ text: `${caster.name}의 ${skill.name}! ${target.name}이(가) 부활했다! (HP ${target.hp})`, type: 'revive', targetId: target.id });
+        } else {
+          logs.push({ text: `${caster.name}의 ${skill.name} → 부활 대상이 없습니다!`, type: 'system' });
+        }
+        break;
+      }
       if (skill.heal_amount > 0) {
         const healAmt = skill.heal_amount;
         const actual = Math.min(healAmt, target.maxHp - target.hp);
         target.hp += actual;
         logs.push({ text: `${caster.name}의 ${skill.name} → ${target.name} HP +${actual}`, type: 'heal', targetId: target.id });
       }
+      // 해독(cleanse): 모든 디버프 제거
+      if (skill.buff_stat === 'cleanse') {
+        const hadDebuffs = (target.debuffs || []).length > 0;
+        target.debuffs = [];
+        if (hadDebuffs) {
+          logs.push({ text: `${target.name}의 상태이상이 해제되었다!`, type: 'system', targetId: target.id });
+        }
+        break;
+      }
       // heal 스킬에 buff가 있으면 함께 적용
-      if (skill.buff_stat) {
+      if (skill.buff_stat && skill.buff_stat !== 'revive') {
         const buffTarget = target || caster;
         const existing = buffTarget.buffs.findIndex(b => b.stat === skill.buff_stat && b.source === caster.id);
         if (existing >= 0) buffTarget.buffs.splice(existing, 1);
@@ -494,19 +558,27 @@ export function executeSkill(caster, skill, target, allUnits) {
 
     case 'buff': {
       const buffTarget = target || caster;
-      const existing = buffTarget.buffs.findIndex(b => b.stat === skill.buff_stat && b.source === caster.id);
-      if (existing >= 0) buffTarget.buffs.splice(existing, 1);
-      buffTarget.buffs.push({
-        stat: skill.buff_stat || 'attack',
-        value: skill.buff_value || 5,
-        duration: skill.buff_duration || 3,
-        source: caster.id,
-        name: skill.name,
-      });
-      logs.push({
-        text: `${caster.name}의 ${skill.name} → ${buffTarget.name} ${skill.buff_stat || 'attack'} +${skill.buff_value || 5} (${skill.buff_duration || 3}턴)`,
-        type: 'buff', targetId: buffTarget.id,
-      });
+      const bStat = skill.buff_stat || 'attack';
+      const bVal = skill.buff_value || 5;
+      const bDur = skill.buff_duration || 3;
+      // MP/HP 회복형 버프는 즉시 적용
+      if (bStat === 'mp') {
+        const actual = Math.min(bVal, buffTarget.maxMp - buffTarget.mp);
+        buffTarget.mp += actual;
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${buffTarget.name} MP +${actual}`, type: 'heal', targetId: buffTarget.id });
+      } else if (bStat === 'hp') {
+        const actual = Math.min(bVal, buffTarget.maxHp - buffTarget.hp);
+        buffTarget.hp += actual;
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${buffTarget.name} HP +${actual}`, type: 'heal', targetId: buffTarget.id });
+      } else {
+        const existing = buffTarget.buffs.findIndex(b => b.stat === bStat && b.source === caster.id);
+        if (existing >= 0) buffTarget.buffs.splice(existing, 1);
+        buffTarget.buffs.push({ stat: bStat, value: bVal, duration: bDur, source: caster.id, name: skill.name });
+        logs.push({
+          text: `${caster.name}의 ${skill.name} → ${buffTarget.name} ${bStat} +${bVal} (${bDur}턴)`,
+          type: 'buff', targetId: buffTarget.id,
+        });
+      }
       break;
     }
 
@@ -551,13 +623,17 @@ export function executeAttack(attacker, target, allUnits) {
     logs.push({ text: `${attacker.name} → ${actualTarget.name} 회피!`, type: 'evade', isEvade: true, targetId: actualTarget.id });
   } else {
     actualTarget.hp = Math.max(0, actualTarget.hp - result.damage);
+    // 불멸 부적: HP 1 이하로 안 떨어짐
+    if (actualTarget.hp <= 0 && (actualTarget.buffs || []).some(b => b.stat === 'immortal')) {
+      actualTarget.hp = 1;
+    }
     let dmgText = `${attacker.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
     if (result.isCrit) dmgText += ' (치명타!)';
     if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
     logs.push({ text: dmgText, type: 'damage', targetId: actualTarget.id, isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
   }
 
-  if (actualTarget.hp <= 0) {
+  if (actualTarget.hp <= 0 && !checkAutoRevive(actualTarget, logs)) {
     logs.push({ text: `${actualTarget.name} 쓰러짐!`, type: 'kill', targetId: actualTarget.id });
     promoteBackRow(actualTarget.team, allUnits);
   }
@@ -604,9 +680,36 @@ export function promoteBackRow(team, allUnits) {
 // ========== 턴 시작 처리 ==========
 
 export function onTurnStart(unit) {
+  const logs = [];
+
   // 쿨다운 감소
   for (const skill of unit.skills) {
     if (skill.currentCooldown > 0) skill.currentCooldown--;
+  }
+
+  // 독 데미지 (지속시간 감소 전에 처리)
+  const poison = (unit.debuffs || []).find(d => d.stat === 'poison');
+  if (poison && unit.hp > 0) {
+    const poisonDmg = Math.max(1, Math.floor(unit.maxHp * (poison.value || 5) / 100));
+    unit.hp = Math.max(0, unit.hp - poisonDmg);
+    logs.push({ text: `${unit.name}이(가) 독으로 ${poisonDmg} 피해! (HP: ${unit.hp})`, type: 'poison', targetId: unit.id, damage: poisonDmg });
+  }
+
+  // 재생 버프 (HP 회복)
+  const regen = (unit.buffs || []).find(b => b.stat === 'regen');
+  if (regen && unit.hp > 0 && unit.hp < unit.maxHp) {
+    const regenAmt = Math.max(1, Math.floor(unit.maxHp * (regen.value || 5) / 100));
+    const actual = Math.min(regenAmt, unit.maxHp - unit.hp);
+    unit.hp += actual;
+    logs.push({ text: `${unit.name} 재생 HP +${actual}`, type: 'heal', targetId: unit.id });
+  }
+  // 마력 충전 버프 (MP 회복)
+  const mpRegen = (unit.buffs || []).find(b => b.stat === 'mp_regen');
+  if (mpRegen && unit.hp > 0 && unit.mp < unit.maxMp) {
+    const mpAmt = Math.max(1, Math.floor(unit.maxMp * (mpRegen.value || 3) / 100));
+    const actual = Math.min(mpAmt, unit.maxMp - unit.mp);
+    unit.mp += actual;
+    logs.push({ text: `${unit.name} 마력 충전 MP +${actual}`, type: 'heal', targetId: unit.id });
   }
 
   // 버프/디버프 지속시간 감소
@@ -622,11 +725,48 @@ export function onTurnStart(unit) {
   // 수호 해제 (매 턴 갱신)
   unit.isGuarding = false;
   unit.guardTarget = null;
+
+  return logs;
+}
+
+// ========== 부활 부적 체크 ==========
+function checkAutoRevive(unit, logs) {
+  if (unit.hp <= 0) {
+    const revIdx = (unit.buffs || []).findIndex(b => b.stat === 'auto_revive');
+    if (revIdx >= 0) {
+      const revBuff = unit.buffs[revIdx];
+      unit.hp = Math.max(1, Math.floor(unit.maxHp * (revBuff.value || 30) / 100));
+      unit.buffs.splice(revIdx, 1);
+      logs.push({ text: `${unit.name}이(가) 부활 부적으로 부활! (HP ${unit.hp})`, type: 'revive', targetId: unit.id });
+      return true;
+    }
+  }
+  return false;
+}
+
+// ========== 상태이상 체크 ==========
+export function isStunned(unit) {
+  return (unit.debuffs || []).some(d => d.stat === 'stun');
+}
+export function isCharmed(unit) {
+  return (unit.debuffs || []).some(d => d.stat === 'charm');
 }
 
 // ========== AI 행동 결정 ==========
 
 export function decideAIAction(unit, allUnits) {
+  // 마비 상태면 대기만 가능
+  if (isStunned(unit)) return { action: 'wait' };
+  // 매혹 상태면 자기 팀 랜덤 공격
+  if (isCharmed(unit)) {
+    const ownTeam = allUnits.filter(u => u.team === unit.team && u.hp > 0 && u.id !== unit.id);
+    if (ownTeam.length > 0) {
+      const target = ownTeam[Math.floor(Math.random() * ownTeam.length)];
+      return { action: 'attack', target };
+    }
+    return { action: 'wait' };
+  }
+
   const allies = allUnits.filter(u => u.team === unit.team && u.hp > 0);
   const enemies = allUnits.filter(u => u.team !== unit.team && u.hp > 0);
   if (enemies.length === 0) return null;
@@ -641,8 +781,11 @@ export function decideAIAction(unit, allUnits) {
     return getValidTargets(unit, enemies, skillType);
   };
 
+  // 봉인 상태면 스킬 사용 불가
+  const isSealed = (unit.debuffs || []).some(d => d.stat === 'seal');
+
   // 사용 가능한 스킬 (auto_priority=0이면 자동전투에서 사용안함)
-  const usableSkills = unit.skills.filter(s => {
+  const usableSkills = isSealed ? [] : unit.skills.filter(s => {
     if (s.currentCooldown > 0 || (s.mp_cost || 0) > unit.mp) return false;
     if (s.auto_priority !== undefined && Number(s.auto_priority) <= 0) return false;
     return true;
@@ -762,9 +905,31 @@ export function decideAIAction(unit, allUnits) {
     }
   }
 
+  // --- 공통: 부활 (죽은 아군이 있으면 최우선) ---
+  {
+    const reviveSkill = usableSkills.find(s => s.buff_stat === 'revive');
+    if (reviveSkill) {
+      const deadAlly = allUnits.find(u => u.team === unit.team && u.hp <= 0);
+      if (deadAlly) return { action: 'skill', skill: reviveSkill, target: deadAlly };
+    }
+  }
+
+  // --- 공통: 해독 (아군에 독/마비 있으면) ---
+  {
+    const cleanseSkill = usableSkills.find(s => s.buff_stat === 'cleanse');
+    if (cleanseSkill) {
+      const debuffedAlly = allies.find(u => u.hp > 0 && (u.debuffs || []).some(d => d.stat === 'poison' || d.stat === 'stun'));
+      if (debuffedAlly) return { action: 'skill', skill: cleanseSkill, target: debuffedAlly };
+      // 자기 자신 체크
+      if ((unit.debuffs || []).some(d => d.stat === 'poison' || d.stat === 'stun')) {
+        return { action: 'skill', skill: cleanseSkill, target: unit };
+      }
+    }
+  }
+
   // --- 공통: 치유 (아군 HP < 40%) ---
   {
-    const healSkill = usableSkills.find(s => s.type === 'heal');
+    const healSkill = usableSkills.find(s => s.type === 'heal' && s.buff_stat !== 'revive' && s.buff_stat !== 'cleanse');
     if (healSkill) {
       const healSelf = unit.hp < unit.maxHp * 0.4 ? unit : null;
       const hurtAlly = allies.find(u => u.hp < u.maxHp * 0.4);

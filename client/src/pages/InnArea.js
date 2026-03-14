@@ -510,38 +510,38 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
 
       {/* 용병 해고 확인 팝업 */}
       {restPopup && restPopup.fireConfirm && (
-        <div className="aura-popup-overlay" onClick={() => setRestPopup(null)}>
-          <div className="inn-rest-popup" onClick={e => e.stopPropagation()}>
-            <div className="inn-rest-popup-header" style={{ borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-              <span>용병 해고 확인</span>
-              <button className="aura-popup-close" onClick={() => setRestPopup(null)}>&times;</button>
+        <div className="dismiss-overlay" onClick={() => setRestPopup(null)}>
+          <div className="dismiss-popup" onClick={e => e.stopPropagation()}>
+            <div className="dismiss-particles">
+              {[...Array(10)].map((_, i) => <div key={i} className="dismiss-particle" style={{ '--pi': i }} />)}
             </div>
-            <div className="inn-rest-popup-body">
-              <div className="inn-fire-confirm-info">
-                <MercImg src={`/mercenaries/${restPopup.merc.template_id}_icon.png`} fallback="⚔️" className="inn-fire-confirm-img" />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: '#eee' }}>{restPopup.merc.name}</div>
-                  <div style={{ fontSize: 12, color: '#aaa' }}>{restPopup.merc.class_type} · Lv.{restPopup.merc.level}</div>
-                </div>
+            <div className="dismiss-content">
+              <div className="dismiss-top-deco" />
+              <div className="dismiss-icon-wrap">
+                <MercImg src={`/mercenaries/${restPopup.merc.template_id}_icon.png`} fallback="⚔️" className="dismiss-icon-img" />
+                <div className="dismiss-icon-glow" />
               </div>
+              <div className="dismiss-title">용병 해고</div>
+              <div className="dismiss-unit-name">{restPopup.merc.name}</div>
+              <div className="dismiss-unit-sub">{restPopup.merc.class_type} · Lv.{restPopup.merc.level}</div>
+              <div className="dismiss-divider"><span>◆</span></div>
               {restPopup.merc.equipped_count > 0 ? (
-                <div className="inn-fire-confirm-warn" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px' }}>
-                  <span style={{ color: '#ef4444', fontWeight: 700 }}>⚠ 장비가 {restPopup.merc.equipped_count}개 장착되어 있습니다.</span><br/>
-                  <span style={{ color: '#aaa' }}>장비를 먼저 해제한 후 해고가 가능합니다.</span>
+                <div className="dismiss-warn equipped">
+                  <span className="dismiss-warn-icon">⚠️</span>
+                  <span>장비가 <strong>{restPopup.merc.equipped_count}개</strong> 장착되어 있습니다.</span>
+                  <span className="dismiss-warn-sub">장비를 먼저 해제해주세요.</span>
                 </div>
               ) : (
-                <div className="inn-fire-confirm-warn">
-                  정말 해고하시겠습니까?<br/>
-                  <span style={{ color: '#ef4444' }}>해고된 용병은 복구할 수 없으며 골드도 반환되지 않습니다.</span>
+                <div className="dismiss-warn">
+                  <span className="dismiss-warn-icon">💔</span>
+                  <span>정말 해고하시겠습니까?</span>
+                  <span className="dismiss-warn-sub">해고된 용병은 복구할 수 없으며 골드도 반환되지 않습니다.</span>
                 </div>
               )}
-              <div className="inn-fire-confirm-btns">
-                <button className="inn-fire-confirm-cancel" onClick={() => setRestPopup(null)}>취소</button>
-                <button
-                  className="inn-fire-confirm-ok"
-                  disabled={loading || restPopup.merc.equipped_count > 0}
-                  onClick={() => { setRestPopup(null); handleFire(restPopup.merc.id); }}
-                >
+              <div className="dismiss-btns">
+                <button className="dismiss-btn cancel" onClick={() => setRestPopup(null)}>취소</button>
+                <button className="dismiss-btn confirm" disabled={loading || restPopup.merc.equipped_count > 0} onClick={() => { setRestPopup(null); handleFire(restPopup.merc.id); }}>
+                  <span className="dismiss-btn-shimmer" />
                   {restPopup.merc.equipped_count > 0 ? '장비 해제 필요' : loading ? '해고 중...' : '해고'}
                 </button>
               </div>

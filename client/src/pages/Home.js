@@ -161,6 +161,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         stamina: c.stamina ?? 10,
         maxStamina: c.max_stamina ?? 10,
         lastStaminaTime: c.last_stamina_time || null,
+        speedBoostBattles: c.speed_boost_battles || 0,
       });
     } catch {}
   };

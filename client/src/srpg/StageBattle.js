@@ -4,7 +4,7 @@ import {
   assignGridPositions,
   calculateTurnOrder, getValidTargets, getHealTargets, getGuardTargets,
   executeAttack, executeSkill, executeGuard,
-  onTurnStart, decideAIAction, checkBattleEnd, calculateRewards,
+  onTurnStart, decideAIAction, checkBattleEnd, calculateRewards, isStunned, isCharmed,
 } from './cardBattleEngine';
 import { rollEliteTier, applyEliteStats, ELITE_TIERS } from './battleEngine';
 import api from '../api';
@@ -48,6 +48,10 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   const isPrologue = groupKey === 'prologue';
   const [autoAll, setAutoAll] = useState(isPrologue); // 전체 자동전투 (프롤로그는 강제 자동)
   const [autoCompanion, setAutoCompanion] = useState(false); // 소환수/용병만 자동전투
+  const [currentWave, setCurrentWave] = useState(1);
+  const [maxWaves, setMaxWaves] = useState(1);
+  const [waveTransition, setWaveTransition] = useState(false); // 웨이브 전환 연출 중
+  const buildEnemyTeamRef = useRef(null);
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
   const [retreatFailed, setRetreatFailed] = useState(false); // 후퇴 실패 여부
   const [retreatDisabled, setRetreatDisabled] = useState(!!savedRetreatFailed); // 후퇴 버튼 비활성화 (DB에서 복원)
@@ -123,6 +127,10 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         if (!c[attackerId]) c[attackerId] = { damage: 0, kills: 0 };
         c[attackerId].kills += 1;
       }
+    }
+    if (l.type === 'revive') {
+      const tid = l.targetId || targetId;
+      addPopup(tid, '부활!', 'revive');
     }
   }, [addLog, addPopup, addHitEffect]);
 
@@ -483,6 +491,29 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       return { enemyTeam, eliteInfo };
     };
 
+    buildEnemyTeamRef.current = buildEnemyTeam;
+
+    // 웨이브 수 결정: 플레이어 전력 vs 적 전력 비교
+    const calcPower = (units) => units.reduce((sum, u) => sum + (u.hp || 0) + ((u.physAttack || u.phys_attack || 0) + (u.magAttack || u.mag_attack || 0)) * 3, 0);
+    const playerPower = calcPower([
+      { hp: charState.maxHp, physAttack: charState.physAttack, magAttack: charState.magAttack },
+      ...(activeSummons || []).map(s => ({ hp: s.hp, physAttack: s.phys_attack, magAttack: s.mag_attack })),
+      ...(activeMercenaries || []).map(m => ({ hp: m.hp, physAttack: m.phys_attack, magAttack: m.mag_attack })),
+    ]);
+    const sampleEnemy = (monsters || []).slice(0, stage.monsterCount || 3);
+    const enemyPower = calcPower(sampleEnemy.map(m => ({ hp: m.hp, physAttack: m.phys_attack || 0, magAttack: m.mag_attack || 0 })));
+    const powerRatio = enemyPower > 0 ? playerPower / enemyPower : 1;
+
+    let waves = 1;
+    if (!isPrologue && !savedEnemySetup) {
+      if (powerRatio >= 4) { waves = Math.random() < 0.5 ? 3 : 2; }
+      else if (powerRatio >= 2.5) { waves = Math.random() < 0.6 ? 2 : (Math.random() < 0.3 ? 3 : 1); }
+      else if (powerRatio >= 1.5) { waves = Math.random() < 0.4 ? 2 : 1; }
+    }
+    setMaxWaves(waves);
+    setCurrentWave(1);
+    if (waves > 1) addLog(`⚠️ 전력 우세! ${waves}웨이브 전투 예상`, 'system');
+
     const assignEnemyGrid = (enemyTeam) => {
       const front = enemyTeam.filter(u => u.row === 'front');
       const back = enemyTeam.filter(u => u.row === 'back');
@@ -522,7 +553,8 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       const startFirstTurn = () => {
         const firstUnit = allUnits.find(u => u.id === order[0]);
         if (firstUnit) {
-          onTurnStart(firstUnit);
+          const tLogs = onTurnStart(firstUnit);
+          if (tLogs) tLogs.forEach(l => { addLog(l.text, l.type); if (l.type === 'poison') addPopup(l.targetId, `-${l.damage}🧪`, 'damage'); });
           if (firstUnit.team === 'player') {
             setPhase('player_action');
           } else {
@@ -567,10 +599,63 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   useEffect(() => { autoAllRef.current = autoAll; }, [autoAll]);
   useEffect(() => { autoCompanionRef.current = autoCompanion; }, [autoCompanion]);
 
+  const waveRef = useRef(currentWave);
+  const maxWavesRef = useRef(maxWaves);
+  useEffect(() => { waveRef.current = currentWave; }, [currentWave]);
+  useEffect(() => { maxWavesRef.current = maxWaves; }, [maxWaves]);
+
   const advanceTurn = useCallback(() => {
     const currentUnits = unitsRef.current;
     const end = checkBattleEnd(currentUnits);
     if (end) {
+      // 승리 + 다음 웨이브 있으면 전환
+      if (end === 'victory' && waveRef.current < maxWavesRef.current) {
+        setWaveTransition(true);
+        setPhase('animating');
+        const nextWave = waveRef.current + 1;
+        addLog(`=== 웨이브 ${nextWave} 등장! ===`, 'system');
+
+        setTimeout(() => {
+          // 새 적 스폰
+          const buildFn = buildEnemyTeamRef.current;
+          if (buildFn) {
+            const { enemyTeam, eliteInfo } = buildFn();
+            // 그리드 배치
+            const front = enemyTeam.filter(u => u.row === 'front');
+            const back = enemyTeam.filter(u => u.row === 'back');
+            front.slice(0, 3).forEach((u, i) => { u.gridCol = 0; u.gridRow = i; });
+            back.slice(0, 3).forEach((u, i) => { u.gridCol = 2; u.gridRow = i; });
+            const overflow = [...front.slice(3), ...back.slice(3)];
+            overflow.slice(0, 3).forEach((u, i) => { u.gridCol = 1; u.gridRow = i; });
+
+            if (eliteInfo) setEliteAlert(eliteInfo);
+
+            // 아군 생존자 + 새 적
+            const aliveAllies = currentUnits.filter(u => u.team === 'player' && u.hp > 0);
+            const allUnits = [...aliveAllies, ...enemyTeam];
+            setUnits(allUnits);
+            unitsRef.current = allUnits;
+
+            const order = calculateTurnOrder(allUnits);
+            setTurnOrder(order);
+            turnOrderRef.current = order;
+            setCurrentTurnIdx(0);
+            currentTurnIdxRef.current = 0;
+
+            setCurrentWave(nextWave);
+            setWaveTransition(false);
+
+            const firstUnit = allUnits.find(u => u.id === order[0]);
+            if (firstUnit) {
+              const tLogs = onTurnStart(firstUnit);
+              if (tLogs) tLogs.forEach(l => { addLog(l.text, l.type); });
+              setPhase(firstUnit.team === 'player' ? 'player_action' : 'enemy_turn');
+            }
+          }
+        }, 1500);
+        return;
+      }
+
       setBattleResult(end);
       // 프롤로그는 승리 팝업 건너뛰고 바로 종료
       if (isPrologue && end === 'victory') {
@@ -614,7 +699,10 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       if (nextUnit) {
         setCurrentTurnIdx(nextIdx);
         currentTurnIdxRef.current = nextIdx;
-        onTurnStart(nextUnit);
+        const tLogs2 = onTurnStart(nextUnit);
+        if (tLogs2) tLogs2.forEach(l => { addLog(l.text, l.type); if (l.type === 'poison') addPopup(l.targetId, `-${l.damage}🧪`, 'damage'); });
+        setUnits([...currentUnits]);
+        if (nextUnit.hp <= 0) { advanceTurn(); return; }
         if (nextUnit.team === 'player') {
           setPhase('player_action');
         } else {
@@ -634,6 +722,12 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
 
   // 아군 자동전투 AI 결정
   const decidePlayerAutoAction = useCallback((unit, allUnits) => {
+    if (isStunned(unit)) return { action: 'wait' };
+    if (isCharmed(unit)) {
+      const ownTeam = allUnits.filter(u => u.team === unit.team && u.hp > 0 && u.id !== unit.id);
+      if (ownTeam.length > 0) return { action: 'attack', target: ownTeam[Math.floor(Math.random() * ownTeam.length)] };
+      return { action: 'wait' };
+    }
     const allies = allUnits.filter(u => u.team === 'player' && u.hp > 0);
     const enemies = allUnits.filter(u => u.team === 'enemy' && u.hp > 0);
     if (enemies.length === 0) return { action: 'wait' };
@@ -647,8 +741,25 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       return true;
     });
 
+    // 부활 스킬 최우선 (죽은 아군)
+    const reviveSkill = usableSkills.find(s => s.buff_stat === 'revive');
+    if (reviveSkill) {
+      const deadAlly = allUnits.find(u => u.team === 'player' && u.hp <= 0);
+      if (deadAlly) return { action: 'skill', skill: reviveSkill, target: deadAlly };
+    }
+
+    // 해독 (아군에 독/마비 있으면)
+    const cleanseSkill = usableSkills.find(s => s.buff_stat === 'cleanse');
+    if (cleanseSkill) {
+      const debuffedAlly = allies.find(u => u.hp > 0 && (u.debuffs || []).some(d => d.stat === 'poison' || d.stat === 'stun'));
+      if (debuffedAlly) return { action: 'skill', skill: cleanseSkill, target: debuffedAlly };
+      if ((unit.debuffs || []).some(d => d.stat === 'poison' || d.stat === 'stun')) {
+        return { action: 'skill', skill: cleanseSkill, target: unit };
+      }
+    }
+
     // 아군 체력이 50% 미만이면 치유 스킬 우선
-    const healSkill = usableSkills.find(s => s.type === 'heal');
+    const healSkill = usableSkills.find(s => s.type === 'heal' && s.buff_stat !== 'revive' && s.buff_stat !== 'cleanse');
     if (healSkill) {
       const hurtAlly = allies.find(u => u.hp < u.maxHp * 0.5);
       if (hurtAlly) return { action: 'skill', skill: healSkill, target: hurtAlly };
@@ -736,6 +847,23 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
     if (phase !== 'player_action') return;
     const current = getCurrentUnit();
     if (!current || current.team !== 'player') return;
+
+    // 마비 상태면 강제 대기
+    if (isStunned(current)) {
+      const timer = setTimeout(() => {
+        addLog(`${current.name}은(는) 마비되어 행동할 수 없다!`, 'debuff');
+        advanceTurn();
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+    // 매혹 상태면 아군 랜덤 공격
+    if (isCharmed(current)) {
+      const timer = setTimeout(() => {
+        addLog(`${current.name}은(는) 매혹되어 아군을 공격한다!`, 'debuff');
+        executeAutoPlayerTurn(current);
+      }, 600);
+      return () => clearTimeout(timer);
+    }
 
     // autoAll이면 모든 아군 자동
     // autoCompanion이면 소환수/용병만 자동 (id가 'player'가 아닌 유닛)
@@ -965,8 +1093,42 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
               buffEffects.push(`${sm.label}+${val}`);
             }
           }
+          // 특수 부적 처리
+          if (item.name === '재생 부적') { newBuffs.push({ stat: 'regen', value: 5, duration: 5, source: 'talisman', name: item.name }); buffEffects.push('매턴 HP 5% 회복'); }
+          if (item.name === '마력 충전 부적') { newBuffs.push({ stat: 'mp_regen', value: 3, duration: 5, source: 'talisman', name: item.name }); buffEffects.push('매턴 MP 3% 회복'); }
+          if (item.name === '불멸 부적') { newBuffs.push({ stat: 'immortal', value: 1, duration: 3, source: 'talisman', name: item.name }); buffEffects.push('3턴간 불멸'); }
+          if (item.name === '파천 부적') { newBuffs.push({ stat: 'next_double', value: 1, duration: 1, source: 'talisman', name: item.name }); buffEffects.push('다음 공격 2배'); }
+          if (item.name === '부활 부적') { newBuffs.push({ stat: 'auto_revive', value: 30, duration: 99, source: 'talisman', name: item.name }); buffEffects.push('사망 시 HP 30% 부활'); }
           return { ...u, buffs: newBuffs };
         }));
+        // 저주/봉인 부적: 적 1체에 디버프
+        if (item.name === '저주 부적') {
+          const enemies = units.filter(u => u.team === 'enemy' && u.hp > 0);
+          if (enemies.length > 0) {
+            const target = enemies.reduce((a, b) => (b.physAttack || 0) + (b.magAttack || 0) > (a.physAttack || 0) + (a.magAttack || 0) ? b : a);
+            setUnits(prev => prev.map(u => {
+              if (u.id !== target.id) return u;
+              const debuffs = [...(u.debuffs || [])];
+              debuffs.push({ stat: 'attack', value: -20, duration: 3, source: 'talisman', name: item.name });
+              debuffs.push({ stat: 'defense', value: -20, duration: 3, source: 'talisman', name: item.name });
+              return { ...u, debuffs };
+            }));
+            buffEffects.push(`${target.name} 공격/방어 -20%`);
+          }
+        }
+        if (item.name === '봉인 부적') {
+          const enemies = units.filter(u => u.team === 'enemy' && u.hp > 0);
+          if (enemies.length > 0) {
+            const target = enemies.reduce((a, b) => (b.skills?.length || 0) > (a.skills?.length || 0) ? b : a);
+            setUnits(prev => prev.map(u => {
+              if (u.id !== target.id) return u;
+              const debuffs = [...(u.debuffs || [])];
+              debuffs.push({ stat: 'seal', value: 1, duration: 2, source: 'talisman', name: item.name });
+              return { ...u, debuffs };
+            }));
+            buffEffects.push(`${target.name} 스킬 봉인 2턴`);
+          }
+        }
         const effectText = buffEffects.length > 0 ? buffEffects.join(', ') : item.description;
         addLog(`${current.name}이(가) ${item.name} 사용! (${effectText})`, 'buff');
         addPopup('player', `📜 ${item.name}`, 'buff');
@@ -1070,6 +1232,13 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       return getValidTargets(current, enemies, current.rangeType);
     }
     if (selectedAction === 'skill' && selectedSkill) {
+      if (selectedSkill.buff_stat === 'revive') {
+        return currentUnits.filter(u => u.team === current.team && u.hp <= 0);
+      }
+      if (selectedSkill.buff_stat === 'cleanse') {
+        // 해독: 디버프 있는 아군만 타겟
+        return currentUnits.filter(u => u.team === current.team && u.hp > 0 && (u.debuffs || []).length > 0);
+      }
       if (selectedSkill.type === 'heal') {
         return getHealTargets(current, currentUnits.filter(u => u.team === current.team));
       }
@@ -1213,6 +1382,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
           <div className="cb-stage-name">{stage.name}</div>
           <div className="cb-round">
             <img src="/ui/battle/round_badge.png" alt="" className="cb-round-icon" onError={(e) => { e.target.style.display='none'; }} />
+            {maxWaves > 1 && <span className="cb-wave-badge">W{currentWave}/{maxWaves}</span>}
             라운드 {round}
           </div>
           {!isPrologue && (
@@ -1282,6 +1452,13 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
           <img src="/ui/battle/vs_emblem.png" alt="VS" className="cb-vs-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display=''; }} />
           <span className="cb-vs-text" style={{ display: 'none' }}>VS</span>
         </div>
+
+        {waveTransition && (
+          <div className="cb-wave-overlay">
+            <div className="cb-wave-text">⚔️ 웨이브 {currentWave + 1} ⚔️</div>
+            <div className="cb-wave-sub">후속 몬스터 출현!</div>
+          </div>
+        )}
 
         <div className={`cb-side cb-side-enemy${battleEntering ? ' entering' : ''}`}>
           <div className="cb-side-label">적군</div>
@@ -2001,10 +2178,15 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
         {((unit.buffs?.length > 0) || (unit.debuffs?.length > 0)) && (
           <div className="cb-card-effects">
             {(unit.buffs || []).map((b, i) => (
-              <span key={`b${i}`} className="cb-effect buff" title={`${b.name} (${b.duration}턴)`}>▲<span className="cb-effect-dur">{b.duration}</span></span>
+              <span key={`b${i}`} className={`cb-effect buff${b.stat === 'auto_revive' ? ' revive' : b.stat === 'regen' ? ' regen' : b.stat === 'immortal' ? ' immortal' : ''}`} title={`${b.name} (${b.duration}턴)`}>
+                {b.stat === 'auto_revive' ? '🔄' : b.stat === 'regen' ? '💚' : b.stat === 'mp_regen' ? '💎' : b.stat === 'immortal' ? '🛡️' : b.stat === 'next_double' ? '⚔️' : '▲'}
+                <span className="cb-effect-dur">{b.duration}</span>
+              </span>
             ))}
             {(unit.debuffs || []).map((b, i) => (
-              <span key={`d${i}`} className="cb-effect debuff" title={`${b.name} (${b.duration}턴)`}>▼<span className="cb-effect-dur">{b.duration}</span></span>
+              <span key={`d${i}`} className={`cb-effect debuff${b.stat === 'stun' ? ' stun' : b.stat === 'poison' ? ' poison' : b.stat === 'charm' ? ' charm' : b.stat === 'seal' ? ' seal' : ''}`} title={`${b.name} (${b.duration}턴)`}>
+                {b.stat === 'stun' ? '⚡' : b.stat === 'poison' ? '🧪' : b.stat === 'charm' ? '💘' : b.stat === 'seal' ? '🚫' : '▼'}<span className="cb-effect-dur">{b.duration}</span>
+              </span>
             ))}
           </div>
         )}

@@ -4,7 +4,7 @@ import {
   assignGridPositions,
   calculateTurnOrder, getValidTargets, getHealTargets, getGuardTargets,
   executeAttack, executeSkill, executeGuard,
-  onTurnStart, decideAIAction, checkBattleEnd, calculateRewards,
+  onTurnStart, decideAIAction, checkBattleEnd, calculateRewards, isStunned, isCharmed,
 } from './cardBattleEngine';
 import { rollEliteTier, applyEliteStats, ELITE_TIERS } from './battleEngine';
 import api from '../api';
@@ -45,6 +45,15 @@ const BUFF_ICONS = {
   crit_rate: { icon: '🎯', label: '치명타' },
   evasion: { icon: '👻', label: '회피' },
   hp: { icon: '❤️', label: 'HP' },
+  stun: { icon: '⚡', label: '마비' },
+  poison: { icon: '🧪', label: '독' },
+  charm: { icon: '💘', label: '매혹' },
+  seal: { icon: '🚫', label: '봉인' },
+  regen: { icon: '💚', label: '재생' },
+  mp_regen: { icon: '💎', label: '마력충전' },
+  immortal: { icon: '🛡️', label: '불멸' },
+  auto_revive: { icon: '🔄', label: '부활' },
+  next_double: { icon: '⚔️', label: '파천' },
 };
 
 function BuffIcons({ unit }) {
@@ -246,11 +255,29 @@ export default function CrawlerBattle({
       return;
     }
 
-    // 턴 시작 효과 (cardBattleEngine의 onTurnStart는 unit을 직접 수정)
-    onTurnStart(unit);
+    // 턴 시작 효과 (독 데미지 등)
+    const turnLogs = onTurnStart(unit);
     setUnits([...unitsRef.current]);
+    if (turnLogs) turnLogs.forEach(l => { addLog(l.text, l.type); if (l.type === 'poison') addPopup(l.targetId, `-${l.damage}🧪`, 'damage'); });
 
     if (unit.hp <= 0) { advanceTurn(); return; }
+
+    // 마비 상태면 강제 대기
+    if (isStunned(unit)) {
+      addLog(`${unit.name}은(는) 마비되어 행동할 수 없다!`, 'debuff');
+      setTimeout(() => advanceTurn(), 800);
+      return;
+    }
+    // 매혹 상태면 아군 랜덤 공격
+    if (isCharmed(unit)) {
+      addLog(`${unit.name}은(는) 매혹되어 아군을 공격한다!`, 'debuff');
+      if (unit.team === 'player') {
+        setTimeout(() => executeAutoTurn(unit), 800);
+      } else {
+        setTimeout(() => executeEnemyTurn(unit), 900);
+      }
+      return;
+    }
 
     if (unit.team === 'player') {
       const isCompanion = unit.id !== 'player';
@@ -607,7 +634,30 @@ export default function CrawlerBattle({
             buffEffects.push(`${sm.label}+${val}`);
           }
         }
+        // 특수 부적 처리
+        if (item.name === '재생 부적') { newBuffs.push({ stat: 'regen', value: 5, duration: 5, source: 'talisman', name: item.name }); buffEffects.push('매턴 HP 5% 회복'); }
+        if (item.name === '마력 충전 부적') { newBuffs.push({ stat: 'mp_regen', value: 3, duration: 5, source: 'talisman', name: item.name }); buffEffects.push('매턴 MP 3% 회복'); }
+        if (item.name === '불멸 부적') { newBuffs.push({ stat: 'immortal', value: 1, duration: 3, source: 'talisman', name: item.name }); buffEffects.push('3턴간 불멸'); }
+        if (item.name === '파천 부적') { newBuffs.push({ stat: 'next_double', value: 1, duration: 1, source: 'talisman', name: item.name }); buffEffects.push('다음 공격 2배'); }
+        if (item.name === '부활 부적') { newBuffs.push({ stat: 'auto_revive', value: 30, duration: 99, source: 'talisman', name: item.name }); buffEffects.push('사망 시 HP 30% 부활'); }
         currentUnit.buffs = newBuffs;
+        // 저주/봉인 부적: 적에게 디버프
+        if (item.name === '저주 부적') {
+          const enemies = unitsRef.current.filter(u => u.team === 'enemy' && u.hp > 0);
+          if (enemies.length > 0) {
+            const target = enemies.reduce((a, b) => (b.physAttack||0)+(b.magAttack||0) > (a.physAttack||0)+(a.magAttack||0) ? b : a);
+            target.debuffs = [...(target.debuffs||[]), { stat:'attack', value:-20, duration:3, source:'talisman', name:item.name }, { stat:'defense', value:-20, duration:3, source:'talisman', name:item.name }];
+            buffEffects.push(`${target.name} 공격/방어 -20%`);
+          }
+        }
+        if (item.name === '봉인 부적') {
+          const enemies = unitsRef.current.filter(u => u.team === 'enemy' && u.hp > 0);
+          if (enemies.length > 0) {
+            const target = enemies.reduce((a, b) => (b.skills?.length||0) > (a.skills?.length||0) ? b : a);
+            target.debuffs = [...(target.debuffs||[]), { stat:'seal', value:1, duration:2, source:'talisman', name:item.name }];
+            buffEffects.push(`${target.name} 스킬 봉인 2턴`);
+          }
+        }
         const effectText = buffEffects.length > 0 ? buffEffects.join(', ') : item.description;
         addPopup('player', `📜 ${item.name}`, 'buff');
         addLog(`${item.name} 사용! (${effectText})`, 'buff');
@@ -684,9 +734,13 @@ export default function CrawlerBattle({
   const validTargets = phase === 'select_target' && currentUnit
     ? (selectedAction === 'guard'
       ? getGuardTargets(currentUnit, unitsRef.current.filter(u => u.team === currentUnit.team))
-      : selectedSkill?.type === 'heal'
-        ? getHealTargets(currentUnit, unitsRef.current)
-        : getValidTargets(currentUnit, unitsRef.current, selectedSkill))
+      : selectedSkill?.buff_stat === 'revive'
+        ? unitsRef.current.filter(u => u.team === currentUnit.team && u.hp <= 0)
+        : selectedSkill?.buff_stat === 'cleanse'
+          ? unitsRef.current.filter(u => u.team === currentUnit.team && u.hp > 0 && (u.debuffs || []).length > 0)
+          : selectedSkill?.type === 'heal'
+            ? getHealTargets(currentUnit, unitsRef.current)
+            : getValidTargets(currentUnit, unitsRef.current, selectedSkill))
     : [];
 
   // ===== 렌더링 =====

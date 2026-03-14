@@ -202,7 +202,13 @@ router.get('/group/:key', auth, async (req, res) => {
               id: row.id, name: row.name, type: row.type,
               damage_multiplier: row.damage_multiplier,
               mp_cost: row.mp_cost, range: row.range_val,
+              range_val: row.range_val,
               icon: row.icon,
+              heal_amount: row.heal_amount || 0,
+              buff_stat: row.buff_stat || null,
+              buff_value: row.buff_value || 0,
+              buff_duration: row.buff_duration || 0,
+              cooldown: row.cooldown || 0,
             });
           }
         }
