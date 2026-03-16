@@ -83,6 +83,7 @@ export default function CrawlerBattle({
   activeSummons, activeMercenaries, monsters: dbMonsters,
   groupKey, onBattleEnd, onLog,
   isBossEncounter,
+  autoPath,
 }) {
   const [units, setUnits] = useState([]);
   const [turnOrder, setTurnOrder] = useState([]);
@@ -104,7 +105,7 @@ export default function CrawlerBattle({
   const [resultData, setResultData] = useState(null);
   const [shakeTarget, setShakeTarget] = useState(null);
   const [flashTarget, setFlashTarget] = useState(null);
-  const [autoAll, setAutoAll] = useState(false);
+  const [autoAll, setAutoAll] = useState(!!autoPath);
   const [autoCompanion, setAutoCompanion] = useState(false);
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
   const [retreatFailed, setRetreatFailed] = useState(false);
@@ -391,11 +392,27 @@ export default function CrawlerBattle({
       } catch {}
       addLog(`승리! EXP +${totalExp}, Gold +${totalGold}`, 'heal');
     } else {
+      // 패배: HP/MP 0으로 서버 반영
+      try {
+        await api.post('/stage/battle-result', {
+          victory: false, expGained: 0, goldGained: 0,
+          activeSummonIds: battleSummonIdsRef.current, activeMercenaryIds: battleMercIdsRef.current,
+          playerHp: 0, playerMp: 0,
+        });
+      } catch {}
       addLog('패배...', 'damage');
     }
   };
 
   handleBattleEndRef.current = handleBattleEnd;
+
+  // 자동길찾기 모드: 승리 시 자동으로 결과 닫기
+  useEffect(() => {
+    if (autoPath && phase === 'battle_end' && battleResult === 'victory') {
+      const t = setTimeout(() => onBattleEnd('victory', totalExpGained, totalGoldGained), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [autoPath, phase, battleResult, totalExpGained, totalGoldGained, onBattleEnd]);
 
   // ===== 로그 처리 =====
   const processLogEntry = useCallback((entry, attackerId) => {
@@ -1135,11 +1152,12 @@ export default function CrawlerBattle({
             const isAllyTarget = phase === 'select_target' && validTargets.some(t => t.id === ally.id);
             const isAllyShaking = shakeTarget === ally.id;
             const isAllyFlashing = flashTarget === ally.id;
+            const isAttacking = playerAttacking && isCurrent;
 
             return (
               <div
                 key={ally.id}
-                className={`cwb-ally ${isDead ? 'dead' : ''} ${isCurrent ? 'current' : ''} ${isAllyTarget ? 'targetable' : ''} ${isAllyShaking ? 'shake' : ''} ${isAllyFlashing ? 'flash-hit' : ''} ${ally.isGuarding ? 'guarding' : ''}`}
+                className={`cwb-ally ${isDead ? 'dead' : ''} ${isCurrent ? 'current' : ''} ${isAllyTarget ? 'targetable' : ''} ${isAllyShaking ? 'shake' : ''} ${isAllyFlashing ? 'flash-hit' : ''} ${ally.isGuarding ? 'guarding' : ''} ${isAttacking ? 'attacking' : ''}`}
                 onClick={() => { if (isAllyTarget) handleSelectTarget(ally); else setInspectAlly(ally); }}
               >
                 <div className="cwb-ally-portrait">

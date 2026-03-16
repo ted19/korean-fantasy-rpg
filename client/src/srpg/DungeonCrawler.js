@@ -107,6 +107,22 @@ function generateMaze(width, height, monsterCount, stage, dbMonsters) {
     if (t) treasures.push({ id: `tr_${i}`, ...t, collected: false });
   }
 
+  // 배회형 몬스터 (1~2마리, 던전을 돌아다니며 플레이어와 마주치면 전투)
+  const roamStart = treasureStart + treasureCount;
+  const roamCount = Math.min(1 + Math.floor(Math.random() * 2), Math.max(0, shuffled.length - roamStart - 2));
+  for (let i = 0; i < roamCount; i++) {
+    const slot = shuffled[roamStart + i];
+    if (slot) {
+      const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
+      monsters.push({
+        id: `roam_${i}`, ...slot, defeated: false, roaming: true,
+        monsterId: template?.id || null,
+        monsterName: template?.name || '???',
+        roamDir: Math.floor(Math.random() * 4), // 초기 이동 방향
+      });
+    }
+  }
+
   return { grid, width: W, height: H, playerStart, exitPos, monsters, treasures, isBoss: stage?.isBoss };
 }
 
@@ -117,198 +133,605 @@ const DIR_DX = [0, 1, 0, -1];
 const DIR_DY = [-1, 0, 1, 0];
 
 // ========== 1인칭 던전 뷰 렌더링 ==========
-function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, monsterSpeech }) {
-  const dx = DIR_DX[facing];
-  const dy = DIR_DY[facing];
-  // 왼쪽/오른쪽/뒤 방향
-  const ldx = DIR_DX[(facing + 3) % 4];
-  const ldy = DIR_DY[(facing + 3) % 4];
-  const rdx = DIR_DX[(facing + 1) % 4];
-  const rdy = DIR_DY[(facing + 1) % 4];
-  const bdx = DIR_DX[(facing + 2) % 4];
-  const bdy = DIR_DY[(facing + 2) % 4];
+// ========== 던전별 3D 테마 정의 ==========
+const DUNGEON_3D_THEMES = {
+  forest: {
+    name: '숲',
+    wallNS: [28, 55, 22], wallEW: [35, 65, 28],  // 이끼 낀 녹색 벽
+    wallAccent: [18, 40, 15],                       // 그라우트/이끼
+    ceilTop: [5, 18, 8], ceilBot: [12, 30, 15],    // 짙은 나뭇잎 천장
+    floorTop: [35, 28, 18], floorBot: [18, 14, 8], // 흙/낙엽 바닥
+    fogColor: [20, 45, 25], fogDensity: 0.7,
+    torchColor: [180, 255, 100], torchAlpha: 0.06,  // 녹색빛 발광
+    ambientColor: [30, 80, 40], ambientAlpha: 0.04,
+    particleType: 'firefly',                         // 반딧불이
+    wallPattern: 'bark',                             // 나무껍질 패턴
+    floorPattern: 'leaves',                          // 낙엽 패턴
+    vineFactor: 0.4,                                 // 벽 덩굴 비율
+    mushroomGlow: true,                              // 바닥 버섯 발광
+  },
+  slime_cave: {
+    wallNS: [30, 50, 55], wallEW: [38, 60, 65], wallAccent: [20, 35, 40],
+    ceilTop: [8, 15, 18], ceilBot: [15, 28, 32],
+    floorTop: [25, 40, 45], floorBot: [10, 20, 22],
+    fogColor: [15, 40, 45], fogDensity: 0.65,
+    torchColor: [100, 220, 255], torchAlpha: 0.08,
+    ambientColor: [40, 120, 140], ambientAlpha: 0.03,
+    particleType: 'drip', wallPattern: 'slime', floorPattern: 'wet',
+  },
+  cave: {
+    wallNS: [45, 35, 55], wallEW: [55, 45, 65], wallAccent: [30, 22, 40],
+    ceilTop: [8, 6, 13], ceilBot: [15, 12, 25],
+    floorTop: [30, 25, 40], floorBot: [12, 10, 18],
+    fogColor: [20, 15, 35], fogDensity: 0.6,
+    torchColor: [255, 160, 50], torchAlpha: 0.1,
+    ambientColor: [80, 50, 120], ambientAlpha: 0.03,
+    particleType: 'dust', wallPattern: 'brick', floorPattern: 'stone',
+  },
+  swamp: {
+    wallNS: [40, 50, 25], wallEW: [48, 58, 30], wallAccent: [28, 35, 15],
+    ceilTop: [10, 15, 5], ceilBot: [20, 28, 12],
+    floorTop: [30, 38, 20], floorBot: [15, 20, 8],
+    fogColor: [25, 40, 15], fogDensity: 0.8,
+    torchColor: [200, 255, 80], torchAlpha: 0.07,
+    ambientColor: [60, 80, 30], ambientAlpha: 0.05,
+    particleType: 'spore', wallPattern: 'moss', floorPattern: 'mud',
+  },
+  ocean: {
+    wallNS: [25, 45, 65], wallEW: [30, 55, 75], wallAccent: [15, 30, 50],
+    ceilTop: [5, 12, 22], ceilBot: [10, 25, 45],
+    floorTop: [20, 35, 50], floorBot: [8, 18, 30],
+    fogColor: [10, 30, 55], fogDensity: 0.75,
+    torchColor: [80, 180, 255], torchAlpha: 0.09,
+    ambientColor: [30, 80, 150], ambientAlpha: 0.05,
+    particleType: 'bubble', wallPattern: 'coral', floorPattern: 'sand',
+  },
+  demon: {
+    wallNS: [60, 20, 20], wallEW: [75, 28, 25], wallAccent: [45, 12, 12],
+    ceilTop: [15, 3, 3], ceilBot: [30, 8, 8],
+    floorTop: [40, 15, 12], floorBot: [20, 6, 5],
+    fogColor: [40, 10, 10], fogDensity: 0.55,
+    torchColor: [255, 80, 30], torchAlpha: 0.12,
+    ambientColor: [150, 40, 20], ambientAlpha: 0.04,
+    particleType: 'ember', wallPattern: 'hellstone', floorPattern: 'lava',
+  },
+  dragon: {
+    wallNS: [55, 45, 20], wallEW: [65, 55, 28], wallAccent: [40, 32, 12],
+    ceilTop: [12, 8, 3], ceilBot: [25, 18, 8],
+    floorTop: [45, 35, 15], floorBot: [22, 16, 6],
+    fogColor: [35, 25, 10], fogDensity: 0.5,
+    torchColor: [255, 200, 50], torchAlpha: 0.11,
+    ambientColor: [120, 90, 30], ambientAlpha: 0.04,
+    particleType: 'ember', wallPattern: 'scale', floorPattern: 'bone',
+  },
+};
+// 기본 테마
+const DEFAULT_3D_THEME = DUNGEON_3D_THEMES.cave;
 
-  const isWall = (x, y) => {
-    if (x < 0 || x >= maze.width || y < 0 || y >= maze.height) return true;
-    return maze.grid[y][x] === 1;
+// ========== 프로시저럴 텍스처 생성 (64x64, 캐시) ==========
+const textureCache = {};
+function generateTexture(type, theme) {
+  const key = type + '_' + (theme?.name || 'default');
+  if (textureCache[key]) return textureCache[key];
+  const S = 64;
+  const data = new Uint8Array(S * S * 3);
+  const set = (x, y, r, g, b) => { const i = (y * S + x) * 3; data[i] = r; data[i+1] = g; data[i+2] = b; };
+  const hash = (x, y) => ((x * 374761393 + y * 668265263) ^ (x * 1274126177)) & 0x7FFFFFFF;
+  const noise = (x, y) => (hash(x, y) % 1000) / 1000;
+
+  if (type === 'wall_bark') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const grain = Math.sin(y * 0.4 + x * 0.12 + noise(x, y) * 3) * 0.2;
+      const ring = Math.sin(Math.sqrt((x-32)*(x-32)+(y-32)*(y-32)) * 0.3) * 0.1;
+      const crack = (noise(x>>1, y>>1) > 0.88) ? -0.25 : 0;
+      const v = 0.45 + grain + ring + crack + noise(x, y) * 0.15;
+      const mossy = y > 44 ? (y - 44) / 20 * noise(x*3, y*2) : 0;
+      set(x, y, (55*(1-mossy)+20*mossy)*v|0, (70*(1-mossy)+85*mossy)*v|0, (35*(1-mossy)+25*mossy)*v|0);
+    }
+  } else if (type === 'wall_brick') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const row = Math.floor(y / 8);
+      const off = (row % 2) * 16;
+      const bx = (x + off) % 32;
+      const isGrout = (y % 8 < 1) || (bx < 1);
+      const brickN = noise(Math.floor((x+off)/32)*7+row*13, row);
+      const v = isGrout ? 0.2 + noise(x,y)*0.1 : 0.5 + brickN * 0.2 + noise(x,y) * 0.12;
+      const wc = theme?.wallNS || [45,35,60];
+      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+    }
+  } else if (type === 'wall_slime') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const base = 0.4 + noise(x,y)*0.15;
+      const drip = y > 40 ? Math.sin(x*0.5)*0.5+0.5 : 0;
+      const glow = drip * (y-40)/24 * 0.4;
+      const wc = theme?.wallNS || [30,50,55];
+      set(x, y, wc[0]*base|0, (wc[1]+glow*80)*base|0, (wc[2]+glow*60)*base|0);
+    }
+  } else if (type === 'wall_hellstone') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const crack = Math.sin(x*0.4+y*0.25+noise(x,y)*5);
+      const glow = crack > 0.82 ? 0.5 + (crack-0.82)*3 : 0;
+      const v = 0.35 + noise(x,y)*0.2;
+      set(x, y, Math.min(255,(60+glow*300)*v)|0, (20+glow*80)*v|0, 20*v|0);
+    }
+  } else if (type === 'wall_coral') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const pat = Math.sin(x*0.3+y*0.2)*Math.cos(x*0.2-y*0.3);
+      const v = 0.4 + pat*0.15 + noise(x,y)*0.15;
+      const wc = theme?.wallNS || [25,45,65];
+      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+    }
+  } else if (type === 'wall_scale') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const r = Math.floor(y/6); const c = Math.floor((x+(r%2)*3)/6);
+      const edge = (y%6<1)||((x+(r%2)*3)%6<1);
+      const v = edge ? 0.25 : 0.5+((r*7+c*13)%5)/25+noise(x,y)*0.1;
+      const wc = theme?.wallNS || [55,45,20];
+      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+    }
+  } else if (type === 'wall_moss') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const mp = noise(x>>1, y>>1);
+      const v = 0.35 + mp*0.25 + noise(x,y)*0.12;
+      const wc = theme?.wallNS || [40,50,25];
+      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+    }
+  } else if (type === 'floor_leaves') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const n = noise(x, y);
+      const leafy = noise(x>>2, y>>2) > 0.5;
+      const r = leafy ? 90+n*40 : 45+n*20;
+      const g = leafy ? 50+n*25 : 35+n*15;
+      const b = leafy ? 20+n*10 : 18+n*10;
+      const v = 0.4 + n * 0.2;
+      set(x, y, r*v|0, g*v|0, b*v|0);
+    }
+  } else if (type === 'floor_stone') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const tile = (Math.floor(x/16)+Math.floor(y/16))%2;
+      const edge = (x%16<1)||(y%16<1);
+      const v = edge ? 0.18 : tile ? 0.32+noise(x,y)*0.12 : 0.28+noise(x,y)*0.12;
+      const fc = theme?.floorTop || [30,25,40];
+      set(x, y, fc[0]*v|0, fc[1]*v|0, fc[2]*v|0);
+    }
+  } else if (type === 'floor_mud') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const puddle = noise(x>>2,y>>2) > 0.65 ? 0.3 : 0;
+      const v = 0.3 + noise(x,y)*0.15 + puddle;
+      set(x, y, (35-puddle*15)*v|0, (30+puddle*10)*v|0, (18+puddle*20)*v|0);
+    }
+  } else if (type === 'floor_sand') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const v = 0.35 + noise(x,y)*0.15 + Math.sin(x*0.3+y*0.1)*0.05;
+      set(x, y, 50*v|0, 45*v|0, 35*v|0);
+    }
+  } else if (type === 'floor_lava') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const hot = noise(x>>1,y>>1); const v = 0.3+noise(x,y)*0.2;
+      const glow = hot > 0.6 ? (hot-0.6)*2.5 : 0;
+      set(x, y, Math.min(255,(40+glow*200)*v)|0, (15+glow*60)*v|0, (10+glow*10)*v|0);
+    }
+  } else if (type === 'floor_wet') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const v = 0.3+noise(x,y)*0.15;
+      set(x, y, 25*v|0, 40*v|0, 48*v|0);
+    }
+  } else if (type === 'floor_bone') {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const bone = noise(x>>2,y>>2)>0.7;
+      const v = 0.3+noise(x,y)*0.15;
+      set(x, y, bone?(55*v|0):(40*v|0), bone?(50*v|0):(30*v|0), bone?(40*v|0):(15*v|0));
+    }
+  } else { // ceil / default
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const v = 0.25+noise(x,y)*0.1;
+      const cc = theme?.ceilBot || [15,12,25];
+      set(x, y, cc[0]*v|0, cc[1]*v|0, cc[2]*v|0);
+    }
+  }
+  textureCache[key] = data;
+  return data;
+}
+
+const WALL_TEX_MAP = { bark: 'wall_bark', brick: 'wall_brick', slime: 'wall_slime', hellstone: 'wall_hellstone', coral: 'wall_coral', scale: 'wall_scale', moss: 'wall_moss' };
+const FLOOR_TEX_MAP = { leaves: 'floor_leaves', stone: 'floor_stone', mud: 'floor_mud', sand: 'floor_sand', lava: 'floor_lava', wet: 'floor_wet', bone: 'floor_bone' };
+
+// ========== 레이캐스팅 3D 뷰 (DOOM 스타일) ==========
+function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, monsterSpeech, dungeonKey }) {
+  const canvasRef = useRef(null);
+  const spriteCache = useRef({});
+  const animRef = useRef(null);
+  const smoothPos = useRef({ x: px + 0.5, y: py + 0.5, angle: [(-Math.PI / 2), 0, (Math.PI / 2), Math.PI][facing % 4] });
+  const propsRef = useRef({ px, py, facing, monsters, treasures, exitPos, monsterSpeech, dungeonKey });
+  const particlesRef = useRef([]);
+  const imgDataRef = useRef(null);
+
+  useEffect(() => {
+    propsRef.current = { px, py, facing, monsters, treasures, exitPos, monsterSpeech, dungeonKey };
+  });
+
+  const getSprite = (src) => {
+    if (spriteCache.current[src]) return spriteCache.current[src];
+    const img = new Image();
+    img.src = src;
+    img.onerror = () => {
+      if (src.includes('_nobg/')) {
+        const fb = new Image();
+        fb.src = src.replace('_nobg/', '/');
+        spriteCache.current[src] = fb;
+      }
+    };
+    spriteCache.current[src] = img;
+    return img;
   };
 
-  // 최대 시야 거리 4칸
-  const depth = 4;
-  const layers = [];
-  for (let d = 1; d <= depth; d++) {
-    const fx = px + dx * d;
-    const fy = py + dy * d;
-    const lx = fx + ldx;
-    const ly = fy + ldy;
-    const rx = fx + rdx;
-    const ry = fy + rdy;
+  const renderFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !maze) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    const grid = maze.grid;
+    const mW = maze.width;
+    const mH = maze.height;
+    const FOV = Math.PI / 3;
+    const HALF_FOV = FOV / 2;
+    const MAX_DEPTH = 16;
+    const now = Date.now();
 
-    layers.push({
-      depth: d,
-      front: isWall(fx, fy),
-      left: isWall(lx, ly),
-      right: isWall(rx, ry),
-      // 전방의 몬스터 객체 (monsterId 포함)
-      monster: monsters.find(m => !m.defeated && m.x === fx && m.y === fy) || null,
-      hasTreasure: treasures.some(t => !t.collected && t.x === fx && t.y === fy),
-      isExit: exitPos.x === fx && exitPos.y === fy,
+    const p = propsRef.current;
+    const theme = DUNGEON_3D_THEMES[p.dungeonKey] || DEFAULT_3D_THEME;
+    const facingAngle = [(-Math.PI / 2), 0, (Math.PI / 2), Math.PI][p.facing % 4];
+    const sp = smoothPos.current;
+
+    let angleDiff = facingAngle - sp.angle;
+    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+    const LERP = 0.16;
+    sp.x += (p.px + 0.5 - sp.x) * LERP;
+    sp.y += (p.py + 0.5 - sp.y) * LERP;
+    sp.angle += angleDiff * LERP;
+
+    const posX = sp.x, posY = sp.y, angle = sp.angle;
+    const cosA0 = Math.cos(angle), sinA0 = Math.sin(angle);
+
+    // 횃불 흔들림
+    const tf = 0.88 + Math.sin(now * 0.005) * 0.06 + Math.sin(now * 0.013) * 0.04 + Math.sin(now * 0.0073) * 0.03;
+
+    // 텍스처 로드
+    const wallTexType = WALL_TEX_MAP[theme.wallPattern] || 'wall_brick';
+    const floorTexType = FLOOR_TEX_MAP[theme.floorPattern] || 'floor_stone';
+    const wallTex = generateTexture(wallTexType, theme);
+    const wallTex2 = generateTexture(wallTexType === 'wall_bark' ? 'wall_bark' : wallTexType, theme); // EW용 (같은 텍스처, 밝기만 다름)
+    const floorTex = generateTexture(floorTexType, theme);
+    const ceilTex = generateTexture('ceil', theme);
+    const TS = 64; // 텍스처 사이즈
+
+    // ImageData 직접 조작 (fillRect보다 수배 빠름)
+    if (!imgDataRef.current || imgDataRef.current.width !== W) {
+      imgDataRef.current = ctx.createImageData(W, H);
+    }
+    const imgData = imgDataRef.current;
+    const buf = imgData.data;
+
+    // 횃불 거리 감쇠 (화면 중앙이 밝고 가장자리 어두움)
+    const torchCX = W / 2, torchCY = H * 0.4;
+    const torchR = W * 0.7;
+    const tc = theme.torchColor;
+    const ta = theme.torchAlpha;
+
+    const zBuffer = new Float32Array(W);
+
+    // ===== 레이캐스팅 (1px 해상도) =====
+    for (let col = 0; col < W; col++) {
+      const rayAngle = angle - HALF_FOV + (col / W) * FOV;
+      const sinR = Math.sin(rayAngle);
+      const cosR = Math.cos(rayAngle);
+      const deltaDistX = Math.abs(1 / (cosR || 1e-10));
+      const deltaDistY = Math.abs(1 / (sinR || 1e-10));
+      let stepX, stepY, sideDistX, sideDistY, hitSide = 0;
+      let mX = Math.floor(posX), mY = Math.floor(posY);
+
+      if (cosR < 0) { stepX = -1; sideDistX = (posX - mX) * deltaDistX; }
+      else { stepX = 1; sideDistX = (mX + 1 - posX) * deltaDistX; }
+      if (sinR < 0) { stepY = -1; sideDistY = (posY - mY) * deltaDistY; }
+      else { stepY = 1; sideDistY = (mY + 1 - posY) * deltaDistY; }
+
+      let hit = false, dist = MAX_DEPTH;
+      for (let s = 0; s < 64; s++) {
+        if (sideDistX < sideDistY) { sideDistX += deltaDistX; mX += stepX; hitSide = 1; }
+        else { sideDistY += deltaDistY; mY += stepY; hitSide = 0; }
+        if (mX < 0 || mX >= mW || mY < 0 || mY >= mH || grid[mY][mX] === 1) { hit = true; break; }
+      }
+      if (hit) {
+        dist = hitSide === 1
+          ? (mX - posX + (1 - stepX) / 2) / (cosR || 1e-10)
+          : (mY - posY + (1 - stepY) / 2) / (sinR || 1e-10);
+      }
+
+      const corrDist = dist * Math.cos(rayAngle - angle);
+      zBuffer[col] = corrDist;
+      const wallH = H / (corrDist || 0.001);
+      const wallTop = (H - wallH) / 2;
+      const wallBot = wallTop + wallH;
+
+      // 텍스처 U 좌표
+      let wallU = hitSide === 1 ? posY + dist * sinR : posX + dist * cosR;
+      wallU = wallU - Math.floor(wallU);
+      const texX = (wallU * TS) & (TS - 1);
+      const sideMul = hitSide === 1 ? 1.15 : 0.85; // EW 벽 밝게
+
+      const yTop = Math.max(0, Math.floor(wallTop));
+      const yBot = Math.min(H, Math.ceil(wallBot));
+
+      // 벽 셀 기반 변형 (덩굴/이끼 추가)
+      const wallHash = ((mX * 73 + mY * 137) & 0xFFFF);
+      const hasVine = theme.vineFactor && (wallHash % 5) < 2;
+
+      for (let row = yTop; row < yBot; row++) {
+        const wallV = (row - wallTop) / wallH;
+        const texY = (wallV * TS) & (TS - 1);
+        const tIdx = (texY * TS + texX) * 3;
+        let r = wallTex[tIdx], g = wallTex[tIdx + 1], b = wallTex[tIdx + 2];
+
+        // 덩굴 (숲 테마)
+        if (hasVine && theme.wallPattern === 'bark') {
+          const vineX = Math.sin(wallU * 6.28 + wallHash) * 0.15 + 0.5;
+          const vineW = 0.05 + Math.sin(wallV * 10) * 0.015;
+          if (Math.abs(wallU - vineX) < vineW) {
+            const vs = 0.8 + Math.sin(wallV * 20) * 0.15;
+            r = r * 0.3 + 20 * vs; g = g * 0.3 + 65 * vs; b = b * 0.3 + 12 * vs;
+          }
+        }
+
+        // 거리 감쇠 + 횃불 색상
+        const shade = Math.max(0.06, 1 - corrDist / MAX_DEPTH) * tf * sideMul;
+        r = r * shade | 0; g = g * shade | 0; b = b * shade | 0;
+
+        // 횃불 따뜻한 빛 가산
+        const tdx = col - torchCX, tdy = row - torchCY;
+        const tDist = Math.sqrt(tdx * tdx + tdy * tdy) / torchR;
+        if (tDist < 1) {
+          const tInt = (1 - tDist) * (1 - tDist) * ta * tf * 80;
+          r = Math.min(255, r + tc[0] / 255 * tInt | 0);
+          g = Math.min(255, g + tc[1] / 255 * tInt | 0);
+          b = Math.min(255, b + tc[2] / 255 * tInt | 0);
+        }
+
+        const idx = (row * W + col) * 4;
+        buf[idx] = r; buf[idx + 1] = g; buf[idx + 2] = b; buf[idx + 3] = 255;
+      }
+
+      // ===== 바닥/천장 텍스처 캐스팅 =====
+      for (let row = yBot; row < H; row++) {
+        // 바닥
+        const rowDist = H / (2.0 * row - H);
+        const floorX = posX + rowDist * cosR;
+        const floorY = posY + rowDist * sinR;
+        const ftx = ((floorX * TS) & (TS - 1));
+        const fty = ((floorY * TS) & (TS - 1));
+        const fIdx = (fty * TS + ftx) * 3;
+        const fShade = Math.max(0.04, 1 - rowDist / (MAX_DEPTH * 0.6)) * tf;
+        let fr = floorTex[fIdx] * fShade;
+        let fg = floorTex[fIdx + 1] * fShade;
+        let fb = floorTex[fIdx + 2] * fShade;
+
+        // 횃불
+        const fdx = col - torchCX, fdy = row - torchCY;
+        const fDist = Math.sqrt(fdx * fdx + fdy * fdy) / torchR;
+        if (fDist < 1) {
+          const fInt = (1 - fDist) * (1 - fDist) * ta * tf * 50;
+          fr = Math.min(255, fr + tc[0] / 255 * fInt);
+          fg = Math.min(255, fg + tc[1] / 255 * fInt);
+          fb = Math.min(255, fb + tc[2] / 255 * fInt);
+        }
+
+        const fidx = (row * W + col) * 4;
+        buf[fidx] = fr | 0; buf[fidx + 1] = fg | 0; buf[fidx + 2] = fb | 0; buf[fidx + 3] = 255;
+      }
+
+      for (let row = Math.min(yTop - 1, H / 2 | 0); row >= 0; row--) {
+        // 천장
+        const rowDist = H / (H - 2.0 * row);
+        const ceilX = posX + rowDist * cosR;
+        const ceilY = posY + rowDist * sinR;
+        const ctx2 = ((ceilX * TS) & (TS - 1));
+        const cty = ((ceilY * TS) & (TS - 1));
+        const cIdx = (cty * TS + ctx2) * 3;
+        const cShade = Math.max(0.03, 1 - rowDist / (MAX_DEPTH * 0.6)) * tf * 0.6;
+        let cr = ceilTex[cIdx] * cShade;
+        let cg = ceilTex[cIdx + 1] * cShade;
+        let cb = ceilTex[cIdx + 2] * cShade;
+
+        // 숲: 빛줄기
+        if (theme.wallPattern === 'bark') {
+          const lx = (col / W * 5 + Math.sin(now * 0.0003 + col * 0.01) * 0.5) % 1;
+          if (lx > 0.42 && lx < 0.58) {
+            const lInt = (0.58 - Math.abs(lx - 0.5)) * 15 * tf * (1 - row / (H * 0.5));
+            cr = Math.min(255, cr + 100 * lInt / 255 * 30);
+            cg = Math.min(255, cg + 200 * lInt / 255 * 30);
+            cb = Math.min(255, cb + 80 * lInt / 255 * 30);
+          }
+        }
+
+        const cidx = (row * W + col) * 4;
+        buf[cidx] = cr | 0; buf[cidx + 1] = cg | 0; buf[cidx + 2] = cb | 0; buf[cidx + 3] = 255;
+      }
+    }
+
+    // 비네팅 (픽셀 버퍼에 직접)
+    for (let row = 0; row < H; row++) {
+      for (let col = 0; col < W; col++) {
+        const vdx = (col - W / 2) / (W * 0.5);
+        const vdy = (row - H / 2) / (H * 0.5);
+        const vDist = Math.sqrt(vdx * vdx + vdy * vdy);
+        if (vDist > 0.5) {
+          const dark = Math.min(1, (vDist - 0.5) * 1.2);
+          const idx = (row * W + col) * 4;
+          buf[idx] = buf[idx] * (1 - dark * 0.55) | 0;
+          buf[idx + 1] = buf[idx + 1] * (1 - dark * 0.55) | 0;
+          buf[idx + 2] = buf[idx + 2] * (1 - dark * 0.55) | 0;
+        }
+      }
+    }
+
+    // 안개 오버레이 (픽셀 버퍼에)
+    if (theme.fogDensity > 0) {
+      const fogA = theme.fogDensity * 0.06 * tf;
+      const fr = theme.fogColor[0], fgg = theme.fogColor[1], fbb = theme.fogColor[2];
+      for (let i = 0; i < W * H * 4; i += 4) {
+        buf[i] = buf[i] * (1 - fogA) + fr * fogA | 0;
+        buf[i + 1] = buf[i + 1] * (1 - fogA) + fgg * fogA | 0;
+        buf[i + 2] = buf[i + 2] * (1 - fogA) + fbb * fogA | 0;
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    // ===== 스프라이트 (Canvas API로 그리기) =====
+    const sprites = [];
+    p.monsters.filter(m => !m.defeated).forEach(m => {
+      sprites.push({ x: m.x + 0.5, y: m.y + 0.5, type: 'monster', img: m.monsterId ? getSprite(`/monsters_nobg/${m.monsterId}_full.png`) : null, id: m.id, name: m.monsterName });
     });
-    if (layers[layers.length - 1].front) break;
-  }
+    p.treasures.filter(t => !t.collected).forEach(t => {
+      sprites.push({ x: t.x + 0.5, y: t.y + 0.5, type: 'treasure', img: getSprite('/ui/dungeon/dc_treasure_nobg.png') });
+    });
+    sprites.push({ x: p.exitPos.x + 0.5, y: p.exitPos.y + 0.5, type: 'exit', img: getSprite('/ui/dungeon/dc_exit_nobg.png') });
 
-  // 현재 칸에 있는 것들
-  const hereMonster = monsters.find(m => !m.defeated && m.x === px && m.y === py);
-  const hereTreasure = treasures.find(t => !t.collected && t.x === px && t.y === py);
-  const hereExit = exitPos.x === px && exitPos.y === py;
+    sprites.forEach(s => { s.dist = Math.sqrt((s.x - posX) ** 2 + (s.y - posY) ** 2); });
+    sprites.sort((a, b) => b.dist - a.dist);
 
-  // 전방 시야 거리 계산 (벽까지 몇 칸)
-  const viewDepth = layers.length > 0 && layers[layers.length - 1].front
-    ? layers[layers.length - 1].depth
-    : depth + 1; // 벽이 안 보이면 멀리
+    sprites.forEach(s => {
+      let nAngle = Math.atan2(s.y - posY, s.x - posX) - angle;
+      while (nAngle > Math.PI) nAngle -= 2 * Math.PI;
+      while (nAngle < -Math.PI) nAngle += 2 * Math.PI;
+      if (Math.abs(nAngle) > HALF_FOV + 0.3) return;
 
-  // 전방 가장 가까운 벽
-  const frontWall = layers.find(l => l.front);
+      const screenX = W / 2 + (nAngle / HALF_FOV) * (W / 2);
+      const corrD = Math.max(0.3, s.dist * Math.cos(nAngle));
+      const sprH = Math.min(H * 1.5, H / corrD);
+      const sprW = sprH * (s.type === 'monster' ? 0.8 : 0.7);
+      const sprTop = (H - sprH) / 2 + (s.type === 'treasure' ? sprH * 0.25 : 0);
+      const sprShade = Math.max(0.15, 1 - corrD / MAX_DEPTH) * tf;
+
+      const stripIdx = Math.floor(screenX);
+      if (stripIdx >= 0 && stripIdx < W && zBuffer[stripIdx] < corrD * 0.9) return;
+
+      // 그림자
+      if (corrD < 8) {
+        ctx.save();
+        ctx.globalAlpha = sprShade * 0.3;
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.ellipse(screenX, (H + sprH) / 2 - 2, sprW * 0.4, sprH * 0.05, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if (s.img && s.img.complete && s.img.naturalWidth > 0) {
+        ctx.save();
+        ctx.globalAlpha = sprShade;
+        ctx.drawImage(s.img, screenX - sprW / 2, sprTop, sprW, sprH - (s.type === 'treasure' ? sprH * 0.25 : 0));
+        ctx.restore();
+      } else {
+        ctx.globalAlpha = sprShade * 0.6;
+        ctx.fillStyle = { monster: '#e94560', treasure: '#ffa502', exit: '#2ed573' }[s.type] || '#fff';
+        ctx.beginPath();
+        ctx.ellipse(screenX, sprTop + sprH * 0.35, sprW * 0.3, sprH * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.font = `${Math.max(14, sprH * 0.35) | 0}px serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText({ monster: '👹', treasure: '📦', exit: '🚪' }[s.type], screenX, sprTop + sprH * 0.45);
+      }
+
+      if (s.type === 'monster' && p.monsterSpeech?.mobId === s.id && corrD < 4) {
+        ctx.save();
+        ctx.font = 'bold 12px sans-serif';
+        const txt = p.monsterSpeech.text;
+        const tw = ctx.measureText(txt).width + 14;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(screenX - tw / 2, sprTop - 26, tw, 22);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText(txt, screenX, sprTop - 10);
+        ctx.restore();
+      }
+    });
+
+    // ===== 파티클 (Canvas API) =====
+    const parts = particlesRef.current;
+    if (parts.length < 25) {
+      const pt = theme.particleType || 'dust';
+      if (pt === 'firefly') parts.push({ x: Math.random()*W, y: H*0.2+Math.random()*H*0.6, vx: (Math.random()-0.5)*0.5, vy: (Math.random()-0.5)*0.3, life: 200+Math.random()*300, maxLife: 500, size: 2.5+Math.random()*2, type: 'firefly' });
+      else if (pt === 'ember') parts.push({ x: Math.random()*W, y: H, vx: (Math.random()-0.5)*0.8, vy: -0.5-Math.random()*1.5, life: 100+Math.random()*150, maxLife: 250, size: 2+Math.random()*2, type: 'ember' });
+      else if (pt === 'bubble') parts.push({ x: Math.random()*W, y: H, vx: (Math.random()-0.5)*0.3, vy: -0.3-Math.random()*0.8, life: 150+Math.random()*200, maxLife: 350, size: 2.5+Math.random()*3, type: 'bubble' });
+      else if (pt === 'spore') parts.push({ x: Math.random()*W, y: H*0.3+Math.random()*H*0.5, vx: (Math.random()-0.5)*0.4, vy: -0.1+Math.random()*0.2, life: 200+Math.random()*250, maxLife: 450, size: 2+Math.random()*2, type: 'spore' });
+      else if (pt === 'drip' && Math.random()<0.15) parts.push({ x: Math.random()*W, y: 0, vx: 0, vy: 1+Math.random()*2, life: 80+Math.random()*60, maxLife: 140, size: 1.5, type: 'drip' });
+      else if (pt !== 'drip') parts.push({ x: Math.random()*W, y: Math.random()*H, vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.2, life: 100+Math.random()*200, maxLife: 300, size: 1.5+Math.random(), type: 'dust' });
+    }
+    ctx.save();
+    for (let pi = parts.length - 1; pi >= 0; pi--) {
+      const pp = parts[pi]; pp.x += pp.vx; pp.y += pp.vy; pp.life--;
+      if (pp.life <= 0 || pp.x < -10 || pp.x > W+10 || pp.y < -10 || pp.y > H+10) { parts.splice(pi, 1); continue; }
+      const al = Math.min(1, pp.life / (pp.maxLife * 0.3)) * 0.7;
+      if (pp.type === 'firefly') {
+        const pulse = 0.5 + Math.sin(now*0.008+pi*3)*0.5;
+        pp.vx += (Math.random()-0.5)*0.1; pp.vy += (Math.random()-0.5)*0.08; pp.vx *= 0.98; pp.vy *= 0.98;
+        const gl = ctx.createRadialGradient(pp.x, pp.y, 0, pp.x, pp.y, pp.size*6);
+        gl.addColorStop(0, `rgba(150,255,80,${al*pulse*0.35})`); gl.addColorStop(1, 'rgba(150,255,80,0)');
+        ctx.fillStyle = gl; ctx.fillRect(pp.x-pp.size*6, pp.y-pp.size*6, pp.size*12, pp.size*12);
+        ctx.fillStyle = `rgba(200,255,150,${al*pulse})`; ctx.beginPath(); ctx.arc(pp.x, pp.y, pp.size*0.8, 0, Math.PI*2); ctx.fill();
+      } else if (pp.type === 'ember') {
+        ctx.fillStyle = `rgba(255,${120+Math.random()*80|0},30,${al})`; ctx.beginPath(); ctx.arc(pp.x, pp.y, pp.size, 0, Math.PI*2); ctx.fill();
+      } else if (pp.type === 'bubble') {
+        ctx.strokeStyle = `rgba(120,200,255,${al*0.5})`; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(pp.x, pp.y, pp.size, 0, Math.PI*2); ctx.stroke();
+      } else if (pp.type === 'spore') {
+        ctx.fillStyle = `rgba(180,220,80,${al*0.5})`; ctx.beginPath(); ctx.arc(pp.x, pp.y, pp.size, 0, Math.PI*2); ctx.fill();
+      } else if (pp.type === 'drip') {
+        ctx.fillStyle = `rgba(100,180,220,${al*0.6})`; ctx.fillRect(pp.x, pp.y, 1.5, pp.size*3);
+      } else {
+        ctx.fillStyle = `rgba(200,180,160,${al*0.3})`; ctx.beginPath(); ctx.arc(pp.x, pp.y, pp.size, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // 나침반 UI
+    ctx.save();
+    ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(W/2-20, 6, 40, 22);
+    ctx.strokeStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.35)`; ctx.lineWidth = 1; ctx.strokeRect(W/2-20, 6, 40, 22);
+    ctx.fillStyle = `rgb(${Math.min(255,tc[0]+80)},${Math.min(255,tc[1]+80)},${Math.min(255,tc[2]+80)})`;
+    ctx.fillText(['북','동','남','서'][p.facing], W/2, 23);
+    ctx.restore();
+
+    // 방향 화살표
+    ctx.save(); ctx.font = '20px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.5)`;
+    const chk = (x2,y2) => x2>=0 && x2<mW && y2>=0 && y2<mH && grid[y2][x2]===0;
+    const gx = Math.floor(posX), gy = Math.floor(posY);
+    if (chk(gx+DIR_DX[p.facing], gy+DIR_DY[p.facing])) ctx.fillText('▲', W/2, H-10);
+    if (chk(gx+DIR_DX[(p.facing+3)%4], gy+DIR_DY[(p.facing+3)%4])) ctx.fillText('◀', 14, H/2);
+    if (chk(gx+DIR_DX[(p.facing+1)%4], gy+DIR_DY[(p.facing+1)%4])) ctx.fillText('▶', W-14, H/2);
+    ctx.restore();
+  }, [maze]); // eslint-disable-line
+
+  useEffect(() => {
+    if (!maze) return;
+    let running = true;
+    const loop = () => {
+      if (!running) return;
+      renderFrame();
+      animRef.current = requestAnimationFrame(loop);
+    };
+    animRef.current = requestAnimationFrame(loop);
+    return () => { running = false; if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [maze, renderFrame]);
 
   return (
-    <div className="dc-fpv">
-      {/* 메인 던전 복도 배경 */}
-      <img src="/ui/dungeon/dc_corridor_bg.png" alt="" className="dc-fpv-bg" />
-
-      {/* 깊이 안개 - 전방이 가까울수록 어둡게 */}
-      <div className="dc-fpv-depth-fog" style={{
-        opacity: frontWall ? Math.min(0.85, 0.3 + (1 - frontWall.depth / 5) * 0.6) : 0.1,
-      }} />
-
-      {/* 전방 벽이 가까우면 (depth 1~3) 벽 텍스처 표시 */}
-      {frontWall && frontWall.depth <= 3 && (
-        <div
-          className={`dc-fpv-deadend depth-${frontWall.depth}`}
-          style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/ui/dungeon/dc_wall_front.png)` }}
-        />
-      )}
-
-      {/* 전방 오브젝트 (깊이별) */}
-      {layers.map(layer => {
-        const d = layer.depth;
-        const scale = 1 / d;
-        const shade = Math.max(0.4, 1 - d * 0.15);
-
-        if (layer.front || d > 3) return null;
-        return (
-          <React.Fragment key={`ent-${d}`}>
-            {layer.monster && (
-              <div className="dc-fpv-entity monster" style={{
-                left: '50%', bottom: `${20 + d * 5}%`,
-                transform: `translateX(-50%) scale(${scale * 1.4})`,
-                opacity: shade, zIndex: 10 - d,
-              }}>
-                {monsterSpeech && monsterSpeech.mobId === layer.monster.id && (
-                  <div className="dc-monster-speech">
-                    <span>{monsterSpeech.text}</span>
-                  </div>
-                )}
-                <div className="dc-entity-shadow" />
-                {layer.monster.monsterId ? (
-                  <img
-                    src={`/monsters_nobg/${layer.monster.monsterId}_full.png`}
-                    alt={layer.monster.monsterName || ''}
-                    className="dc-entity-monster-img"
-                    onError={e => { e.target.onerror = null; e.target.src = `/monsters/${layer.monster.monsterId}_full.png`; }}
-                  />
-                ) : (
-                  <div className="dc-entity-monster-placeholder">👹</div>
-                )}
-              </div>
-            )}
-            {layer.hasTreasure && (
-              <div className="dc-fpv-entity treasure" style={{
-                left: '50%', bottom: `${15 + d * 5}%`,
-                transform: `translateX(-50%) scale(${scale * 1.2})`,
-                opacity: shade, zIndex: 10 - d,
-              }}>
-                <img src="/ui/dungeon/dc_treasure_nobg.png" alt="" className="dc-entity-img" onError={e => { e.target.onerror = null; e.target.src = '/ui/dungeon/dc_treasure.png'; }} />
-              </div>
-            )}
-            {layer.isExit && (
-              <div className="dc-fpv-entity exit" style={{
-                left: '50%', bottom: `${18 + d * 5}%`,
-                transform: `translateX(-50%) scale(${scale * 1.4})`,
-                opacity: shade, zIndex: 10 - d,
-              }}>
-                <img src="/ui/dungeon/dc_exit_nobg.png" alt="" className="dc-entity-img" onError={e => { e.target.onerror = null; e.target.src = '/ui/dungeon/dc_exit.png'; }} />
-              </div>
-            )}
-          </React.Fragment>
-        );
-      })}
-
-      {/* 현재 위치 오브젝트 */}
-      {hereMonster && (
-        <div className="dc-fpv-here-entity monster">
-          {monsterSpeech && monsterSpeech.mobId === hereMonster.id && (
-            <div className="dc-monster-speech here">
-              <span>{monsterSpeech.text}</span>
-            </div>
-          )}
-          {hereMonster.monsterId ? (
-            <img
-              src={`/monsters_nobg/${hereMonster.monsterId}_full.png`}
-              alt={hereMonster.monsterName || ''}
-              className="dc-here-entity-img"
-              onError={e => { e.target.onerror = null; e.target.src = `/monsters/${hereMonster.monsterId}_full.png`; }}
-            />
-          ) : (
-            <div className="dc-here-entity-placeholder">⚔️</div>
-          )}
-          <span className="dc-here-label">적과 조우!</span>
-        </div>
-      )}
-      {hereTreasure && (
-        <div className="dc-fpv-here-entity treasure">
-          <img src="/ui/dungeon/dc_treasure_nobg.png" alt="" className="dc-here-entity-img" onError={e => { e.target.onerror = null; e.target.src = '/ui/dungeon/dc_treasure.png'; }} />
-          <span className="dc-here-label">보물 발견!</span>
-        </div>
-      )}
-      {hereExit && (
-        <div className="dc-fpv-here-entity exit">
-          <img src="/ui/dungeon/dc_exit_nobg.png" alt="" className="dc-here-entity-img" onError={e => { e.target.onerror = null; e.target.src = '/ui/dungeon/dc_exit.png'; }} />
-          <span className="dc-here-label">출구 발견!</span>
-        </div>
-      )}
-
-      {/* 나침반 */}
-      <div className="dc-compass">
-        <span className="dc-compass-dir">{DIR_NAMES[facing]}</span>
-      </div>
-
-      {/* 이동 가능 방향 화살표 */}
-      <div className="dc-dir-arrows">
-        {!isWall(px + dx, py + dy) && <div className="dc-dir-arrow forward">▲</div>}
-        {!isWall(px + ldx, py + ldy) && <div className="dc-dir-arrow left">◀</div>}
-        {!isWall(px + rdx, py + rdy) && <div className="dc-dir-arrow right">▶</div>}
-        {!isWall(px + bdx, py + bdy) && <div className="dc-dir-arrow back">▼</div>}
-      </div>
-
-      {/* 먼지 파티클 */}
-      <div className="dc-dust-particles">
-        {[...Array(8)].map((_, i) => <div key={i} className="dc-dust" style={{ '--d': i }} />)}
-      </div>
-
-      {/* 횃불 이미지 (투명 배경) */}
-      <div className="dc-torch-wrap left">
-        <img src="/ui/dungeon/dc_torch_nobg.png" alt="" className="dc-torch-image"
-          onError={e => { e.target.style.display = 'none'; }} />
-        <div className="dc-torch-glow" />
-      </div>
-      <div className="dc-torch-wrap right">
-        <img src="/ui/dungeon/dc_torch_nobg.png" alt="" className="dc-torch-image"
-          onError={e => { e.target.style.display = 'none'; }} />
-        <div className="dc-torch-glow" />
-      </div>
-
-      {/* 비네팅 */}
-      <div className="dc-fpv-vignette" />
+    <div className="dc-fpv" style={{ position: 'relative', width: '100%', height: '100%', background: '#0a0a15' }}>
+      <canvas ref={canvasRef} width={640} height={400}
+        style={{ width: '100%', height: '100%', display: 'block' }} />
     </div>
   );
 }
@@ -345,7 +768,7 @@ function MiniMap({ maze, px, py, facing, explored, monsters, treasures, exitPos 
           width: cellSize, height: cellSize,
         }}>
           {isPlayer && <div className={`dc-mm-player facing-${facing}`} />}
-          {isExplored && monster && <div className="dc-mm-monster" />}
+          {isExplored && monster && <div className={`dc-mm-monster${monster.roaming ? ' roaming' : ''}`} />}
           {isExplored && treasure && <div className="dc-mm-treasure" />}
           {isExplored && isExit && <div className="dc-mm-exit" />}
         </div>
@@ -362,6 +785,48 @@ function MiniMap({ maze, px, py, facing, explored, monsters, treasures, exitPos 
 }
 
 // ========== 메인 던전 크롤러 ==========
+// ========== BFS 길찾기 ==========
+function bfsPath(maze, from, to) {
+  const { grid, width, height } = maze;
+  const key = (x, y) => `${x},${y}`;
+  const visited = new Set();
+  const queue = [{ x: from.x, y: from.y, path: [] }];
+  visited.add(key(from.x, from.y));
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (cur.x === to.x && cur.y === to.y) return cur.path;
+    for (const [dx, dy] of [[0,-1],[1,0],[0,1],[-1,0]]) {
+      const nx = cur.x + dx, ny = cur.y + dy;
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height && grid[ny][nx] === 0 && !visited.has(key(nx, ny))) {
+        visited.add(key(nx, ny));
+        queue.push({ x: nx, y: ny, path: [...cur.path, { x: nx, y: ny }] });
+      }
+    }
+  }
+  return null; // 경로 없음
+}
+
+// 현재 위치에서 목표까지 이동에 필요한 facing 방향 변환 계산
+function getMovesToTarget(cx, cy, currentFacing, tx, ty) {
+  const dx = tx - cx, dy = ty - cy;
+  // 목표 방향
+  let targetDir;
+  if (dy < 0) targetDir = DIR.N;
+  else if (dx > 0) targetDir = DIR.E;
+  else if (dy > 0) targetDir = DIR.S;
+  else targetDir = DIR.W;
+
+  const moves = [];
+  // 현재 방향 → 목표 방향까지 회전
+  let f = currentFacing;
+  const diff = (targetDir - f + 4) % 4;
+  if (diff === 1) { moves.push('right'); }
+  else if (diff === 2) { moves.push('right'); moves.push('right'); }
+  else if (diff === 3) { moves.push('left'); }
+  moves.push('forward');
+  return moves;
+}
+
 export default function DungeonCrawler({
   dungeonKey,
   stage,
@@ -376,6 +841,7 @@ export default function DungeonCrawler({
   onTreasure,   // (treasureData) => void — 보물 획득
   onClear,      // () => void — 던전 클리어 (출구 도달)
   onRetreat,    // () => void — 귀환
+  autoPath: autoPathProp, // 자동길찾기 모드
 }) {
   const [maze, setMaze] = useState(null);
   const [pos, setPos] = useState({ x: 1, y: 1 });
@@ -402,6 +868,11 @@ export default function DungeonCrawler({
   const [exitPopup, setExitPopup] = useState(null); // 'clear' | 'blocked'
   const [activeDir, setActiveDir] = useState(null); // 'forward'|'back'|'left'|'right'
   const [monsterSpeech, setMonsterSpeech] = useState(null); // { mobId, text }
+  const [autoPath, setAutoPath] = useState(!!autoPathProp);
+  const autoPathRef = useRef(!!autoPathProp);
+  const autoMoveQueue = useRef([]); // 자동이동 명령 큐
+  const autoTimer = useRef(null);
+  const [autoTick, setAutoTick] = useState(0); // 경로 재계산 트리거
   const logRef = useRef(null);
   const keyLock = useRef(false);
   const speechTimer = useRef(null);
@@ -573,9 +1044,9 @@ export default function DungeonCrawler({
       if (onTreasure) onTreasure({ gold: goldFound });
     }
 
-    // 출구 체크 (숨겨진 적은 필수 처치 대상 아님)
+    // 출구 체크 (숨겨진 적/배회형은 필수 처치 대상 아님)
     if (nx === maze.exitPos.x && ny === maze.exitPos.y) {
-      const allDefeated = monsters.filter(m => !m.hidden).every(m => m.defeated);
+      const allDefeated = monsters.filter(m => !m.hidden && !m.roaming).every(m => m.defeated);
       if (allDefeated) {
         addLog('🚪 출구를 발견했습니다!', 'heal');
         setExitPopup('clear');
@@ -593,6 +1064,180 @@ export default function DungeonCrawler({
     setMonsters(prev => prev.map(m => m.id === mobId ? { ...m, defeated: true } : m));
     addLog('적을 처치했습니다!', 'heal');
   }, [addLog]);
+
+  // ========== 배회형 몬스터 AI ==========
+  const posRef = useRef(pos);
+  useEffect(() => { posRef.current = pos; }, [pos]);
+  const monstersRef = useRef(monsters);
+  useEffect(() => { monstersRef.current = monsters; }, [monsters]);
+
+  useEffect(() => {
+    if (!maze || encounterAnim) return;
+    const grid = maze.grid;
+    const mW = maze.width, mH = maze.height;
+
+    const interval = setInterval(() => {
+      if (keyLock.current || encounterAnim) return;
+      const curPos = posRef.current;
+      const curMonsters = monstersRef.current;
+      const roamers = curMonsters.filter(m => m.roaming && !m.defeated);
+      if (roamers.length === 0) return;
+
+      let encountered = null;
+      const updated = curMonsters.map(m => {
+        if (!m.roaming || m.defeated || encountered) return m;
+
+        // 이동 가능한 방향 탐색
+        const dirs = [0, 1, 2, 3]; // N, E, S, W
+        const passable = dirs.filter(d => {
+          const nx = m.x + DIR_DX[d], ny = m.y + DIR_DY[d];
+          return nx >= 0 && nx < mW && ny >= 0 && ny < mH && grid[ny][nx] === 0;
+        });
+        if (passable.length === 0) return m;
+
+        // AI: 70% 직진 시도, 30% 방향 전환
+        let dir = m.roamDir;
+        if (!passable.includes(dir) || Math.random() < 0.3) {
+          // 플레이어 쪽으로 가끔 (20%) 끌림
+          const pdx = curPos.x - m.x, pdy = curPos.y - m.y;
+          const dist = Math.abs(pdx) + Math.abs(pdy);
+          if (dist < 8 && Math.random() < 0.35) {
+            // 플레이어 방향
+            if (Math.abs(pdx) > Math.abs(pdy)) dir = pdx > 0 ? 1 : 3;
+            else dir = pdy > 0 ? 2 : 0;
+            if (!passable.includes(dir)) dir = passable[Math.floor(Math.random() * passable.length)];
+          } else {
+            dir = passable[Math.floor(Math.random() * passable.length)];
+          }
+        }
+
+        const nx = m.x + DIR_DX[dir], ny = m.y + DIR_DY[dir];
+
+        // 다른 몬스터와 겹치지 않기
+        const blocked = curMonsters.some(o => o.id !== m.id && !o.defeated && o.x === nx && o.y === ny);
+        if (blocked) return { ...m, roamDir: passable[Math.floor(Math.random() * passable.length)] };
+
+        // 플레이어와 만남 체크
+        if (nx === curPos.x && ny === curPos.y) {
+          encountered = { ...m, x: nx, y: ny, roamDir: dir };
+          return encountered;
+        }
+
+        return { ...m, x: nx, y: ny, roamDir: dir };
+      });
+
+      setMonsters(updated);
+      monstersRef.current = updated;
+
+      // 배회 몬스터가 플레이어에게 도달
+      if (encountered) {
+        setEncounterAnim(true);
+        addLog(`👻 ${encountered.monsterName || '???'}이(가) 다가왔다!`, 'damage');
+        showMonsterSpeech(encountered.id, '발견했다! 도망칠 수 없다!', 3000);
+
+        setTimeout(() => {
+          const monsterPool = dbMonsters || [];
+          const stageMonsters = [];
+          const cnt = Math.min(3 + Math.floor(Math.random() * 2), monsterPool.length);
+          for (let i = 0; i < cnt; i++) {
+            stageMonsters.push(monsterPool[Math.floor(Math.random() * monsterPool.length)]);
+          }
+          if (onEncounter) onEncounter({
+            mobId: encountered.id,
+            monsters: stageMonsters,
+            isBoss: false,
+          });
+          setEncounterAnim(false);
+        }, 800);
+      }
+    }, 1800); // 1.8초마다 이동
+
+    return () => clearInterval(interval);
+  }, [maze, encounterAnim, dbMonsters, onEncounter, addLog, showMonsterSpeech]);
+
+  // ========== 자동길찾기 ==========
+  useEffect(() => { autoPathRef.current = autoPath; }, [autoPath]);
+
+  const planAutoPath = useCallback(() => {
+    if (!autoPathRef.current || !maze) return;
+    // 몬스터 + 보물 모두 목표로 설정
+    const alive = monsters.filter(m => !m.defeated && !m.hidden);
+    const uncollected = treasures.filter(t => !t.collected);
+    const targets = [
+      ...alive.map(m => ({ x: m.x, y: m.y })),
+      ...uncollected.map(t => ({ x: t.x, y: t.y })),
+    ];
+
+    let target = null;
+    let bestDist = Infinity;
+
+    for (const t of targets) {
+      const path = bfsPath(maze, pos, t);
+      if (path && path.length < bestDist) {
+        bestDist = path.length;
+        target = { x: t.x, y: t.y, path };
+      }
+    }
+
+    // 몬스터+보물 다 처리했으면 출구로
+    if (!target) {
+      const exitPath = bfsPath(maze, pos, maze.exitPos);
+      if (exitPath) {
+        target = { x: maze.exitPos.x, y: maze.exitPos.y, path: exitPath };
+      }
+    }
+
+    if (!target || target.path.length === 0) return;
+
+    // 경로의 각 스텝을 이동 명령(회전+전진)으로 변환
+    const allMoves = [];
+    let curX = pos.x, curY = pos.y, curF = facing;
+    for (const step of target.path) {
+      const moves = getMovesToTarget(curX, curY, curF, step.x, step.y);
+      for (const m of moves) {
+        if (m === 'left') curF = (curF + 3) % 4;
+        else if (m === 'right') curF = (curF + 1) % 4;
+      }
+      allMoves.push(...moves);
+      curX = step.x;
+      curY = step.y;
+    }
+    autoMoveQueue.current = allMoves;
+    setAutoTick(t => t + 1); // effect 재트리거
+  }, [maze, pos, facing, monsters, treasures]);
+
+  // 자동이동 실행 (큐에서 하나씩 꺼내서 move)
+  useEffect(() => {
+    if (!autoPath || encounterAnim || exitPopup) return;
+    if (autoMoveQueue.current.length === 0) {
+      // 큐가 비었으면 경로 재계산
+      const t = setTimeout(() => planAutoPath(), 400);
+      return () => clearTimeout(t);
+    }
+    autoTimer.current = setTimeout(() => {
+      if (!autoPathRef.current) return;
+      if (keyLock.current || encounterAnim) return;
+      const nextMove = autoMoveQueue.current.shift();
+      if (nextMove) move(nextMove);
+    }, 350);
+    return () => { if (autoTimer.current) clearTimeout(autoTimer.current); };
+  }, [autoPath, pos, facing, encounterAnim, exitPopup, planAutoPath, move, autoTick]);
+
+  // 자동모드 시작 시 경로 계산
+  useEffect(() => {
+    if (autoPath && maze) {
+      addLog('🧭 자동길찾기 시작!', 'heal');
+      planAutoPath();
+    }
+  }, [autoPath]); // eslint-disable-line
+
+  // 출구 팝업에서 자동 클리어
+  useEffect(() => {
+    if (autoPath && exitPopup === 'clear') {
+      const t = setTimeout(() => { setExitPopup(null); if (onClear) onClear(); }, 1500);
+      return () => clearTimeout(t);
+    }
+  }, [autoPath, exitPopup, onClear]);
 
   // 장비 정보 로드
   const loadEquipment = useCallback(async (ally) => {
@@ -970,9 +1615,10 @@ export default function DungeonCrawler({
     </div>
   );
 
+  const requiredMonsters = monsters.filter(m => !m.hidden && !m.roaming);
   const visibleMonsters = monsters.filter(m => !m.hidden);
-  const allDefeated = visibleMonsters.every(m => m.defeated);
-  const defeatedCount = visibleMonsters.filter(m => m.defeated).length;
+  const allDefeated = requiredMonsters.every(m => m.defeated);
+  const defeatedCount = requiredMonsters.filter(m => m.defeated).length;
 
   return (
     <div className="dc-container">
@@ -995,7 +1641,7 @@ export default function DungeonCrawler({
             <div className="dc-info-title">{stage?.name || dungeonKey}</div>
             <div className="dc-info-row">
               <span>🗡️ 처치</span>
-              <span className="dc-info-val">{defeatedCount}/{visibleMonsters.length}</span>
+              <span className="dc-info-val">{defeatedCount}/{requiredMonsters.length}</span>
             </div>
             <div className="dc-info-row">
               <span>👣 이동</span>
@@ -1012,27 +1658,12 @@ export default function DungeonCrawler({
           </div>
         </div>
 
-        <div className={`dc-upper-right ${moveAnim ? `dc-move-${moveAnim}` : ''}`}>
+        <div className="dc-upper-right">
           <FirstPersonView
             maze={maze} px={pos.x} py={pos.y} facing={facing}
             monsters={monsters.filter(m => !m.hidden)} treasures={treasures} exitPos={maze.exitPos}
-            monsterSpeech={monsterSpeech}
+            monsterSpeech={monsterSpeech} moveAnim={moveAnim} dungeonKey={dungeonKey}
           />
-          {/* 이동 시 좌우 휙 지나가는 선 효과 */}
-          {moveAnim === 'forward' && (
-            <div className="dc-speed-lines">
-              <div className="dc-speed-line left" />
-              <div className="dc-speed-line right" />
-              <div className="dc-speed-line left delay" />
-              <div className="dc-speed-line right delay" />
-            </div>
-          )}
-          {moveAnim === 'back' && (
-            <div className="dc-speed-lines back">
-              <div className="dc-speed-line left" />
-              <div className="dc-speed-line right" />
-            </div>
-          )}
         </div>
       </div>
 
@@ -1061,7 +1692,13 @@ export default function DungeonCrawler({
                 <span className="dc-ctrl-label">우회전</span>
               </button>
             </div>
-            <button className="dc-retreat-btn" onClick={() => setRetreatConfirm(true)}>🏃 귀환</button>
+            <button
+              className={`dc-autopath-btn ${autoPath ? 'active' : ''}`}
+              onClick={() => { setAutoPath(p => { autoPathRef.current = !p; if (!p) planAutoPath(); else autoMoveQueue.current = []; return !p; }); }}
+            >
+              {autoPath ? '⏸ 자동정지' : '🧭 자동길찾기'}
+            </button>
+            <button className="dc-retreat-btn" onClick={() => { setAutoPath(false); autoPathRef.current = false; autoMoveQueue.current = []; setRetreatConfirm(true); }}>🏃 귀환</button>
           </div>
         </div>
 
@@ -1426,7 +2063,7 @@ export default function DungeonCrawler({
                   </div>
                   <div className="dc-exit-title blocked">출구 봉쇄됨</div>
                   <div className="dc-exit-desc blocked">
-                    아직 <span className="dc-exit-remain">{monsters.filter(m => !m.hidden && !m.defeated).length}마리</span>의 몬스터가<br/>
+                    아직 <span className="dc-exit-remain">{monsters.filter(m => !m.hidden && !m.roaming && !m.defeated).length}마리</span>의 몬스터가<br/>
                     던전에 남아있습니다.
                   </div>
                   <div className="dc-exit-warning">

@@ -316,14 +316,15 @@ function DungeonArea({ character, charState, mySummons, activeSummonIds, onToggl
     setStagePopup(stage);
   };
 
-  const handleStartBattle = () => {
+  const handleStartBattle = (useAutoPath = false) => {
     if (!stagePopup || !dungeonDetail) return;
     if ((selectedDungeon?.ticketCount || 0) <= 0) return;
     // 로컬 티켓 카운트 차감 (서버에서 실제 차감은 Home.js에서 처리)
     setSelectedDungeon(prev => prev ? { ...prev, ticketCount: Math.max(0, (prev.ticketCount || 0) - 1) } : prev);
     setDungeons(prev => prev.map(d => d.key_name === selectedDungeon.key_name ? { ...d, ticketCount: Math.max(0, (d.ticketCount || 0) - 1) } : d));
+    const stageData = useAutoPath ? { ...stagePopup, autoPath: true } : stagePopup;
     setStagePopup(null);
-    onStartBattle(selectedDungeon.key_name, stagePopup);
+    onStartBattle(selectedDungeon.key_name, stageData);
   };
 
   const handleBack = () => {
@@ -554,14 +555,27 @@ function DungeonArea({ character, charState, mySummons, activeSummonIds, onToggl
                 })()}
                 {(() => {
                   const ck = (selectedDungeon && stagePopup) ? (contentCharges?.[`dungeon_${selectedDungeon.key_name}_${stagePopup.stageNumber}`] || { charges: 5 }) : { charges: 5 };
+                  const isCleared = stagePopup.stageNumber <= clearedStage;
+                  const canStart = (selectedDungeon?.ticketCount || 0) > 0 && ck.charges > 0;
                   return (
+                  <>
                   <button
-                    className={`dg-popup-start-btn ${((selectedDungeon?.ticketCount || 0) <= 0 || ck.charges === 0) ? 'disabled' : ''}`}
-                    onClick={handleStartBattle}
-                    disabled={(selectedDungeon?.ticketCount || 0) <= 0 || ck.charges === 0}
+                    className={`dg-popup-start-btn ${!canStart ? 'disabled' : ''}`}
+                    onClick={() => handleStartBattle(false)}
+                    disabled={!canStart}
                   >
                     {ck.charges === 0 ? '입장 횟수 부족' : (selectedDungeon?.ticketCount || 0) > 0 ? `⚔️ 전투 시작 (입장권 1장 + 행동력 2 소모)` : '🎫 입장권이 부족합니다'}
                   </button>
+                  {isCleared && (
+                    <button
+                      className={`dg-popup-auto-btn ${!canStart ? 'disabled' : ''}`}
+                      onClick={() => handleStartBattle(true)}
+                      disabled={!canStart}
+                    >
+                      🧭 자동길찾기 (클리어 던전)
+                    </button>
+                  )}
+                  </>
                   );
                 })()}
               </div>

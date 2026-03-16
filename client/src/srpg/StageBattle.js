@@ -620,13 +620,18 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
           const buildFn = buildEnemyTeamRef.current;
           if (buildFn) {
             const { enemyTeam, eliteInfo } = buildFn();
-            // 그리드 배치
-            const front = enemyTeam.filter(u => u.row === 'front');
-            const back = enemyTeam.filter(u => u.row === 'back');
-            front.slice(0, 3).forEach((u, i) => { u.gridCol = 0; u.gridRow = i; });
-            back.slice(0, 3).forEach((u, i) => { u.gridCol = 2; u.gridRow = i; });
-            const overflow = [...front.slice(3), ...back.slice(3)];
-            overflow.slice(0, 3).forEach((u, i) => { u.gridCol = 1; u.gridRow = i; });
+            // 웨이브 2~3: 랜덤 배치
+            const allSlots = [];
+            for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) allSlots.push({ r, c });
+            for (let i = allSlots.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [allSlots[i], allSlots[j]] = [allSlots[j], allSlots[i]];
+            }
+            enemyTeam.slice(0, 9).forEach((u, i) => {
+              u.gridRow = allSlots[i].r;
+              u.gridCol = allSlots[i].c;
+              u.row = allSlots[i].c <= 0 ? 'front' : 'back';
+            });
 
             if (eliteInfo) setEliteAlert(eliteInfo);
 

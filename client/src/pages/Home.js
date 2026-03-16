@@ -413,7 +413,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       try {
         const dRes = await api.get(`/dungeon/${dungeonKey}`);
         setCrawlerSavedState(null);
-        setDungeonCrawler({ dungeonKey, stage, dbMonsters: dRes.data.monsters || [] });
+        setDungeonCrawler({ dungeonKey, stage, dbMonsters: dRes.data.monsters || [], autoPath: !!stage?.autoPath });
         setCrawlerEncounter(null);
         setReturnDungeonKey(dungeonKey);
         setFighting(true);
@@ -658,6 +658,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           monsters={crawlerEncounter.monsters}
           groupKey={dungeonCrawler.dungeonKey}
           isBossEncounter={crawlerEncounter.isBoss}
+          autoPath={dungeonCrawler?.autoPath}
           onBattleEnd={(result, expGained, goldGained) => {
             if (result === 'victory') {
               // 크롤러 상태에서 처치한 몬스터 업데이트 (동기적으로 먼저 반영)
@@ -713,6 +714,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           charState={charState}
           activeSummons={mySummons.filter(s => activeSummonIds.includes(s.id))}
           activeMercenaries={myMercenaries}
+          autoPath={dungeonCrawler?.autoPath}
           savedState={crawlerSavedState}
           onSaveState={(state) => {
             setCrawlerSavedState(state);
