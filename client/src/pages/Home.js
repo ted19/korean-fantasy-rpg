@@ -67,6 +67,13 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [battleStageMonsters, setBattleStageMonsters] = useState(null);
   const [battleStageCleared, setBattleStageCleared] = useState(false);
   const [battleBlockMsg, setBattleBlockMsg] = useState(null);
+  const [battleLoading, setBattleLoading] = useState(null); // { type: 'dungeon'|'stage'|'tower'|'boss_raid'|'elemental', name: string }
+  const [showPatchNotes, setShowPatchNotes] = useState(() => {
+    const key = 'patchNotes_v7';
+    if (localStorage.getItem(key)) return false;
+    return true;
+  });
+  const [dungeonClearPopup, setDungeonClearPopup] = useState(null); // { dungeonKey, stageName, stepCount, monstersDefeated, treasuresFound, goldEarned }
   const [specialBattleCtx, setSpecialBattleCtx] = useState(null);
   const [returnSpecialType, setReturnSpecialType] = useState(null);
   // 던전 크롤러 상태
@@ -352,6 +359,13 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       setBattleBlockMsg('HP가 0입니다!\n마을 여관에서 휴식 후 다시 도전하세요.');
       return;
     }
+    // 로딩 팝업 표시
+    const loadingType = specialCtx?.type || (stage?.groupKey ? 'stage' : 'dungeon');
+    const loadingName = specialCtx?.type === 'tower' ? `무한의 탑 ${specialCtx.floor || ''}층`
+      : specialCtx?.type === 'boss_raid' ? '보스 토벌전'
+      : specialCtx?.type === 'elemental' ? '정령의 시련'
+      : DUNGEON_DISPLAY_NAMES[dungeonKey] || dungeonKey;
+    setBattleLoading({ type: loadingType, name: loadingName });
     const isTower = specialCtx?.type === 'tower';
     const isDungeon = !specialCtx && !stage?.groupKey; // 던전 전투인 경우
     const isBossRaid = specialCtx?.type === 'boss_raid';
@@ -360,6 +374,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     const staminaCost = isBossRaid ? 4 : isSpecialDungeon ? 3 : isDungeon ? 2 : (stage?.isBoss ? 2 : 1);
     if (!isTower) {
       if (charState.stamina < staminaCost) {
+        setBattleLoading(null);
         setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
         return;
       }
@@ -368,12 +383,14 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         try {
           await api.post('/dungeon/check-ticket', { dungeonKey });
         } catch (err) {
+          setBattleLoading(null);
           setBattleBlockMsg(err.response?.data?.message || '던전 티켓이 부족합니다!');
           return;
         }
         try {
           await api.post('/stage/check-charge', { contentType: `dungeon_${dungeonKey}_${stage?.stageNumber || 1}` });
         } catch (err) {
+          setBattleLoading(null);
           setBattleBlockMsg(err.response?.data?.message || '던전 입장 횟수를 모두 소진했습니다!');
           return;
         }
@@ -383,6 +400,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         const stRes = await api.post('/stage/spend-stamina', { cost: staminaCost });
         handleCharStateUpdate({ stamina: stRes.data.stamina, maxStamina: stRes.data.maxStamina, lastStaminaTime: stRes.data.last_stamina_time || new Date().toISOString() });
       } catch (err) {
+        setBattleLoading(null);
         setBattleBlockMsg(err.response?.data?.message || '행동력 차감에 실패했습니다.');
         return;
       }
@@ -417,6 +435,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         setCrawlerEncounter(null);
         setReturnDungeonKey(dungeonKey);
         setFighting(true);
+        setBattleLoading(null);
         saveBattleSession('crawler', { dungeonKey, stage });
         addLog(`${DUNGEON_DISPLAY_NAMES[dungeonKey] || dungeonKey} 던전 크롤러 모드 진입!`, 'system');
         return;
@@ -441,6 +460,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     setBattleStageMonsters(null);
     setSrpgBattle(true);
     setFighting(true);
+    setBattleLoading(null);
     const bType = specialCtx?.type === 'tower' ? 'tower' : 'srpg';
     saveBattleSession(bType, { dungeonKey, stage, specialCtx: specialCtx || null });
   };
@@ -460,10 +480,15 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       setBattleBlockMsg('HP가 0입니다!\n마을 여관에서 휴식 후 다시 도전하세요.');
       return;
     }
+    // 로딩 팝업 표시
+    const stageLoadingName = specialCtx?.type === 'elemental' ? '정령의 시련'
+      : STAGE_GROUP_NAMES[groupKey] || groupKey;
+    setBattleLoading({ type: specialCtx?.type || 'stage', name: stageLoadingName });
     // 스테이지 전투: 보스=2, 일반=1, 스페셜=3
     const isSpecial = !!specialCtx;
     const staminaCost = isSpecial ? 3 : (stage?.isBoss ? 2 : 1);
     if (charState.stamina < staminaCost) {
+      setBattleLoading(null);
       setBattleBlockMsg(`행동력이 부족합니다! (필요: ${staminaCost})\n시간이 지나면 자동으로 회복됩니다.`);
       return;
     }
@@ -472,6 +497,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       try {
         await api.post('/stage/check-charge', { contentType: `stage_${groupKey}_${stage.stageNumber}` });
       } catch (err) {
+        setBattleLoading(null);
         setBattleBlockMsg(err.response?.data?.message || '스테이지 입장 횟수를 모두 소진했습니다!');
         return;
       }
@@ -481,6 +507,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       const stRes = await api.post('/stage/spend-stamina', { cost: staminaCost });
       handleCharStateUpdate({ stamina: stRes.data.stamina, maxStamina: stRes.data.maxStamina, lastStaminaTime: stRes.data.last_stamina_time || new Date().toISOString() });
     } catch (err) {
+      setBattleLoading(null);
       setBattleBlockMsg(err.response?.data?.message || '행동력 차감에 실패했습니다.');
       return;
     }
@@ -521,6 +548,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     }
     setSrpgBattle(true);
     setFighting(true);
+    setBattleLoading(null);
     saveBattleSession('stage', { dungeonKey: stage.dungeonKey || 'forest', stage, monsters, groupKey, specialCtx: specialCtx || null });
   };
 
@@ -740,13 +768,15 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
               refreshCharState();
             }
           }}
-          onClear={async () => {
+          onClear={async (stats) => {
             // 던전 클리어 - 크롤러 상태도 삭제
+            const dKey = dungeonCrawler.dungeonKey;
+            const stageNum = dungeonCrawler.stage?.stageNumber || 1;
             api.delete('/battle/crawler/clear').catch(() => {});
             try {
               await api.post('/dungeon/clear-stage', {
-                dungeonKey: dungeonCrawler.dungeonKey,
-                stageNumber: dungeonCrawler.stage?.stageNumber || 1,
+                dungeonKey: dKey,
+                stageNumber: stageNum,
                 expGained: 0,
                 goldGained: 0,
               });
@@ -757,8 +787,18 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
             setCrawlerEncounter(null);
             setCrawlerSavedState(null);
             setFighting(false);
-            setCurrentLocation('dungeon');
             clearBattleSession();
+            // 클리어 축하 팝업 표시
+            setDungeonClearPopup({
+              dungeonKey: dKey,
+              dungeonName: DUNGEON_DISPLAY_NAMES[dKey] || dKey,
+              stageNumber: stageNum,
+              stepCount: stats?.stepCount || 0,
+              monstersDefeated: stats?.monstersDefeated || 0,
+              totalMonsters: stats?.totalMonsters || 0,
+              treasuresFound: stats?.treasuresFound || 0,
+              totalTreasures: stats?.totalTreasures || 0,
+            });
           }}
           onRetreat={() => {
             setDungeonCrawler(null);
@@ -954,6 +994,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         onLogout={onLogout}
         onGoToCharacterSelect={onGoToCharacterSelect}
         prologueCleared={prologueCleared}
+        onShowPatchNotes={() => setShowPatchNotes(true)}
       />
 
       <main className="game-main-top">
@@ -1056,6 +1097,178 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
           </div>
         );
       })()}
+
+      {/* 던전 클리어 축하 팝업 */}
+      {dungeonClearPopup && (
+        <div className="dclear-overlay">
+          <div className="dclear-popup">
+            {/* 배경 이미지 */}
+            <div className="dclear-bg">
+              <img src="/ui/dungeon/dc_clear_bg.png" alt="" onError={e => { e.target.style.display = 'none'; }} />
+              <div className="dclear-bg-overlay" />
+            </div>
+
+            {/* 빛줄기 효과 */}
+            <div className="dclear-rays">
+              {[...Array(12)].map((_, i) => (
+                <div key={i} className="dclear-ray" style={{ '--ri': i }} />
+              ))}
+            </div>
+
+            {/* 골드 파티클 */}
+            <div className="dclear-particles">
+              {[...Array(20)].map((_, i) => (
+                <div key={i} className="dclear-particle" style={{ '--pi': i }} />
+              ))}
+            </div>
+
+            {/* 엠블럼 */}
+            <div className="dclear-emblem-wrap">
+              <div className="dclear-emblem-glow" />
+              <img src="/ui/dungeon/dc_clear_emblem.png" alt="" className="dclear-emblem-img"
+                onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }} />
+              <div className="dclear-emblem-fallback" style={{ display: 'none' }}>🏆</div>
+            </div>
+
+            {/* 타이틀 */}
+            <div className="dclear-title">던전 클리어!</div>
+            <div className="dclear-dungeon-name">{dungeonClearPopup.dungeonName}</div>
+            <div className="dclear-stage-badge">Stage {dungeonClearPopup.stageNumber}</div>
+
+            {/* 통계 카드 */}
+            <div className="dclear-stats">
+              <div className="dclear-stat">
+                <span className="dclear-stat-icon">👣</span>
+                <span className="dclear-stat-label">탐험</span>
+                <span className="dclear-stat-value">{dungeonClearPopup.stepCount}걸음</span>
+              </div>
+              <div className="dclear-stat">
+                <span className="dclear-stat-icon">⚔️</span>
+                <span className="dclear-stat-label">처치</span>
+                <span className="dclear-stat-value">{dungeonClearPopup.monstersDefeated}/{dungeonClearPopup.totalMonsters}</span>
+              </div>
+              <div className="dclear-stat">
+                <span className="dclear-stat-icon">📦</span>
+                <span className="dclear-stat-label">보물</span>
+                <span className="dclear-stat-value">{dungeonClearPopup.treasuresFound}/{dungeonClearPopup.totalTreasures}</span>
+              </div>
+            </div>
+
+            {/* 등급 표시 */}
+            <div className="dclear-rank">
+              <span className="dclear-rank-label">탐험 등급</span>
+              <span className={`dclear-rank-grade ${
+                dungeonClearPopup.monstersDefeated >= dungeonClearPopup.totalMonsters &&
+                dungeonClearPopup.treasuresFound >= dungeonClearPopup.totalTreasures ? 'grade-s' :
+                dungeonClearPopup.monstersDefeated >= dungeonClearPopup.totalMonsters ? 'grade-a' :
+                dungeonClearPopup.treasuresFound > 0 ? 'grade-b' : 'grade-c'
+              }`}>
+                {dungeonClearPopup.monstersDefeated >= dungeonClearPopup.totalMonsters &&
+                 dungeonClearPopup.treasuresFound >= dungeonClearPopup.totalTreasures ? 'S' :
+                 dungeonClearPopup.monstersDefeated >= dungeonClearPopup.totalMonsters ? 'A' :
+                 dungeonClearPopup.treasuresFound > 0 ? 'B' : 'C'}
+              </span>
+            </div>
+
+            {/* 확인 버튼 */}
+            <button className="dclear-btn" onClick={() => { setDungeonClearPopup(null); setCurrentLocation('dungeon'); }}>
+              <span className="dclear-btn-icon">✨</span> 확인
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 패치노트 팝업 */}
+      {showPatchNotes && (
+        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v7', '1'); }}>
+          <div className="patch-notes-popup" onClick={e => e.stopPropagation()}>
+            <div className="patch-notes-header">
+              <div className="patch-notes-badge">NEW</div>
+              <h2 className="patch-notes-title">패치 노트 v7</h2>
+              <div className="patch-notes-date">2026.03.17</div>
+            </div>
+            <div className="patch-notes-body">
+              <div className="patch-section">
+                <h3>던전 3D 크롤러</h3>
+                <ul>
+                  <li><span className="patch-tag new">신규</span> DOOM 스타일 <b>3D 레이캐스팅 엔진</b>으로 던전 탐험 전면 개편</li>
+                  <li><span className="patch-tag new">신규</span> 던전별 고유 테마 텍스처 — 숲/동굴/늪/해저/마왕성/용의둥지 <b>7종</b></li>
+                  <li><span className="patch-tag new">신규</span> 바닥/천장 원근 텍스처 + 횃불 조명 + 배회 몬스터 AI</li>
+                  <li><span className="patch-tag new">신규</span> 자동 길찾기 (BFS) + 자동 전투 모드</li>
+                  <li><span className="patch-tag improve">개선</span> 벽돌 줄눈/균열/얼룩 등 <b>벽 텍스처 전면 개선</b> (해상도 800x500)</li>
+                  <li><span className="patch-tag improve">개선</span> 벽 장식 추가 — 횃대, 두개골, 쇠사슬, 균열, 풍화 얼룩</li>
+                  <li><span className="patch-tag improve">개선</span> 바닥 장식 추가 — 뼈다귀, 자갈, 웅덩이</li>
+                  <li><span className="patch-tag improve">개선</span> 필수 처치 몬스터도 <b>배회</b>하도록 변경</li>
+                  <li><span className="patch-tag new">신규</span> 던전 클리어 축하 팝업 (등급 S/A/B/C, 통계 표시)</li>
+                  <li><span className="patch-tag improve">개선</span> 보물상자 팝업 전면 개편 (코인 이펙트, CSS 폴백)</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>전투/진형 시스템</h3>
+                <ul>
+                  <li><span className="patch-tag improve">개선</span> 아군 공격 바운스 모션 + 웨이브 적 배치 랜덤화</li>
+                  <li><span className="patch-tag fix">수정</span> 진형에 배치 안 한 유닛이 전투에 참전하던 버그 수정</li>
+                  <li><span className="patch-tag fix">수정</span> 주인공 진형 제외 시 HP/MP가 0이 되던 버그 수정</li>
+                  <li><span className="patch-tag fix">수정</span> 던전 탐험에서 진형 미배치 유닛이 표시되던 버그 수정</li>
+                  <li><span className="patch-tag fix">수정</span> 크롤러 전투 퀘스트 진행 카운트 안 되던 버그 수정</li>
+                  <li><span className="patch-tag fix">수정</span> 용병/소환수 장비 레벨 제한 미적용 버그 수정</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>장비 시스템</h3>
+                <ul>
+                  <li><span className="patch-tag new">신규</span> 마법사 공용 무기 <b>지팡이</b> 13종 + <b>로브</b> 13종 + <b>관모</b> 13종</li>
+                  <li><span className="patch-tag fix">수정</span> 폭풍궁, 뇌광검 등 일부 아이템 스탯 미표시 수정</li>
+                  <li><span className="patch-tag improve">개선</span> 전 장비 물공/마공/물방/마방 세부 스탯 적용</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>UI/UX</h3>
+                <ul>
+                  <li><span className="patch-tag new">신규</span> 던전/스테이지 진입 <b>로딩 팝업</b> (전투 팁)</li>
+                  <li><span className="patch-tag new">신규</span> 상단 네비 <b>패치노트 버튼</b> 추가</li>
+                  <li><span className="patch-tag fix">수정</span> 업적 중복 표시 버그 수정</li>
+                </ul>
+              </div>
+            </div>
+            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v7', '1'); }}>
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 전투 로딩 팝업 */}
+      {battleLoading && (
+        <div className="battle-loading-overlay">
+          <div className="battle-loading-popup">
+            <div className="battle-loading-icon">
+              <div className="battle-loading-sword" />
+              <div className="battle-loading-shield" />
+            </div>
+            <div className="battle-loading-title">{battleLoading.name}</div>
+            <div className="battle-loading-subtitle">
+              {battleLoading.type === 'dungeon' ? '던전 진입 준비 중...' :
+               battleLoading.type === 'stage' ? '전투 준비 중...' :
+               battleLoading.type === 'tower' ? '탑 진입 준비 중...' :
+               battleLoading.type === 'boss_raid' ? '보스 소환 중...' :
+               battleLoading.type === 'elemental' ? '정령 소환 중...' : '준비 중...'}
+            </div>
+            <div className="battle-loading-bar">
+              <div className="battle-loading-bar-fill" />
+            </div>
+            <div className="battle-loading-tip">
+              {['진형 배치를 잘 활용하면 전투가 유리해집니다.',
+                '소환수의 속성을 적에게 맞추면 큰 피해를 줄 수 있습니다.',
+                '용병의 피로도가 높으면 전투력이 떨어집니다.',
+                '보스 몬스터는 특수 패턴을 가지고 있습니다.',
+                '스킬 조합에 따라 연계 효과가 발동됩니다.',
+                '정예 몬스터는 더 좋은 보상을 드롭합니다.',
+              ][Math.floor(Math.random() * 6)]}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 전투 불가 팝업 */}
       {battleBlockMsg && (

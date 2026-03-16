@@ -122,7 +122,7 @@ function StaminaDisplay({ stamina, maxStamina, lastStaminaTime }) {
   );
 }
 
-function TopNav({ character, charState, currentLocation, onLocationChange, onLogout, onGoToCharacterSelect, prologueCleared }) {
+function TopNav({ character, charState, currentLocation, onLocationChange, onLogout, onGoToCharacterSelect, prologueCleared, onShowPatchNotes }) {
   const [imgError, setImgError] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showCharPopup, setShowCharPopup] = useState(false);
@@ -416,6 +416,15 @@ function TopNav({ character, charState, currentLocation, onLocationChange, onLog
               <span className="top-nav-v2-btn-name">{item.name}</span>
             </button>
           ))}
+          {onShowPatchNotes && (
+            <button className="top-nav-v2-btn patch-notes" onClick={() => { onShowPatchNotes(); setMenuOpen(false); }}>
+              <div className="top-nav-v2-btn-icon-wrap">
+                <span className="top-nav-v2-btn-icon" style={{ fontSize: '18px' }}>📋</span>
+                {!localStorage.getItem('patchNotes_v7') && <div className="top-nav-patch-dot" />}
+              </div>
+              <span className="top-nav-v2-btn-name">패치</span>
+            </button>
+          )}
           <button className="top-nav-v2-btn logout" onClick={() => { setShowLogoutPopup(true); setMenuOpen(false); }}>
             <div className="top-nav-v2-btn-icon-wrap">
               <NavIcon src="/ui/logout_icon.png" fallback="🚪" className="top-nav-v2-btn-icon" />

@@ -2784,6 +2784,30 @@ body {
   color: var(--red);
 }
 
+/* Patch Notes Button */
+.top-nav-v2-btn.patch-notes {
+  opacity: 0.7;
+  position: relative;
+}
+.top-nav-v2-btn.patch-notes:hover {
+  opacity: 1;
+  background: rgba(255,165,2,0.08);
+}
+.top-nav-patch-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: #e94560;
+  border-radius: 50%;
+  animation: patchDotPulse 1.5s ease-in-out infinite;
+}
+@keyframes patchDotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
 /* Logout Popup */
 .logout-popup-overlay {
   position: fixed;
@@ -5756,6 +5780,435 @@ body {
   font-size: 16px;
   position: relative;
   z-index: 1;
+}
+
+/* === 던전 클리어 축하 팝업 === */
+.dclear-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.92);
+  z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.5s;
+}
+.dclear-popup {
+  position: relative;
+  width: 420px; max-width: 94vw;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 40px 32px 28px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(26,26,46,0.95) 0%, rgba(16,12,30,0.98) 100%);
+  border: 1px solid rgba(255,200,50,0.25);
+  box-shadow: 0 0 80px rgba(255,165,2,0.15), 0 0 200px rgba(255,165,2,0.05), 0 20px 60px rgba(0,0,0,0.7);
+  animation: dclearPopIn 0.7s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes dclearPopIn {
+  0% { transform: scale(0.3) translateY(50px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+/* 배경 */
+.dclear-bg { position: absolute; inset: 0; overflow: hidden; border-radius: 20px; z-index: 0; }
+.dclear-bg img { width: 100%; height: 100%; object-fit: cover; opacity: 0.2; }
+.dclear-bg-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 0%, rgba(16,12,30,0.9) 70%); }
+/* 빛줄기 */
+.dclear-rays { position: absolute; inset: -50px; z-index: 0; pointer-events: none; }
+.dclear-ray {
+  position: absolute; top: 50%; left: 50%;
+  width: 2px; height: 200px;
+  background: linear-gradient(180deg, rgba(255,200,50,0.15) 0%, transparent 100%);
+  transform-origin: top center;
+  transform: rotate(calc(var(--ri) * 30deg));
+  opacity: 0;
+  animation: dclearRayFade 3s ease-in-out infinite;
+  animation-delay: calc(var(--ri) * 0.2s);
+}
+@keyframes dclearRayFade {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+/* 파티클 */
+.dclear-particles { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; border-radius: 20px; }
+.dclear-particle {
+  position: absolute;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: #ffd700;
+  box-shadow: 0 0 6px rgba(255,215,0,0.8);
+  bottom: -10px;
+  left: calc(5% + var(--pi) * 4.5%);
+  animation: dclearParticleUp 2.5s ease-out infinite;
+  animation-delay: calc(var(--pi) * 0.15s);
+}
+.dclear-particle:nth-child(odd) { background: #fff; width: 3px; height: 3px; }
+.dclear-particle:nth-child(3n) { background: #fbbf24; width: 5px; height: 5px; }
+@keyframes dclearParticleUp {
+  0% { transform: translateY(0) scale(0); opacity: 0; }
+  15% { opacity: 1; transform: translateY(-40px) scale(1); }
+  100% { transform: translateY(-350px) scale(0); opacity: 0; }
+}
+/* 엠블럼 */
+.dclear-emblem-wrap {
+  position: relative; z-index: 2;
+  width: 110px; height: 110px;
+  margin-bottom: 12px;
+  animation: dclearEmblemPop 0.8s 0.2s cubic-bezier(0.34,1.56,0.64,1) backwards;
+}
+@keyframes dclearEmblemPop {
+  0% { transform: scale(0) rotate(-30deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.dclear-emblem-glow {
+  position: absolute; inset: -20px;
+  background: radial-gradient(circle, rgba(255,200,50,0.4) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: dclearGlowPulse 2s ease-in-out infinite;
+}
+@keyframes dclearGlowPulse {
+  0%,100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+.dclear-emblem-img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 20px rgba(255,200,50,0.5)); }
+.dclear-emblem-fallback {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 60px;
+  filter: drop-shadow(0 0 20px rgba(255,200,50,0.5));
+}
+/* 타이틀 */
+.dclear-title {
+  position: relative; z-index: 2;
+  font-size: 28px; font-weight: 900;
+  color: #ffd700;
+  text-shadow: 0 0 30px rgba(255,215,0,0.5), 0 0 60px rgba(255,165,2,0.2), 0 2px 8px rgba(0,0,0,0.9);
+  letter-spacing: 6px;
+  margin-bottom: 6px;
+  animation: dclearTitleSlide 0.6s 0.4s ease-out backwards;
+}
+@keyframes dclearTitleSlide {
+  0% { transform: translateY(20px) scale(0.8); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.dclear-dungeon-name {
+  position: relative; z-index: 2;
+  font-size: 15px; color: #ccc;
+  margin-bottom: 4px; letter-spacing: 1px;
+  animation: dclearTitleSlide 0.5s 0.5s ease-out backwards;
+}
+.dclear-stage-badge {
+  position: relative; z-index: 2;
+  font-size: 11px; font-weight: 700;
+  color: #ffa502; background: rgba(255,165,2,0.15);
+  padding: 2px 12px; border-radius: 10px;
+  border: 1px solid rgba(255,165,2,0.3);
+  margin-bottom: 20px;
+  animation: dclearTitleSlide 0.5s 0.55s ease-out backwards;
+}
+/* 통계 카드 */
+.dclear-stats {
+  position: relative; z-index: 2;
+  display: flex; gap: 12px;
+  margin-bottom: 16px;
+  animation: dclearTitleSlide 0.5s 0.6s ease-out backwards;
+}
+.dclear-stat {
+  display: flex; flex-direction: column; align-items: center;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px 16px; min-width: 80px;
+  transition: border-color 0.3s;
+}
+.dclear-stat:hover { border-color: rgba(255,200,50,0.3); }
+.dclear-stat-icon { font-size: 20px; margin-bottom: 4px; }
+.dclear-stat-label { font-size: 11px; color: #888; margin-bottom: 2px; }
+.dclear-stat-value { font-size: 16px; font-weight: 800; color: #eee; }
+/* 등급 */
+.dclear-rank {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 20px;
+  animation: dclearTitleSlide 0.5s 0.7s ease-out backwards;
+}
+.dclear-rank-label { font-size: 13px; color: #888; }
+.dclear-rank-grade {
+  font-size: 36px; font-weight: 900; letter-spacing: 2px;
+  animation: dclearRankPop 0.6s 0.9s cubic-bezier(0.34,1.56,0.64,1) backwards;
+}
+@keyframes dclearRankPop {
+  0% { transform: scale(0) rotate(-20deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.dclear-rank-grade.grade-s { color: #ffd700; text-shadow: 0 0 30px rgba(255,215,0,0.8), 0 0 60px rgba(255,215,0,0.4); }
+.dclear-rank-grade.grade-a { color: #e94560; text-shadow: 0 0 20px rgba(233,69,96,0.6); }
+.dclear-rank-grade.grade-b { color: #1e90ff; text-shadow: 0 0 20px rgba(30,144,255,0.5); }
+.dclear-rank-grade.grade-c { color: #2ed573; text-shadow: 0 0 15px rgba(46,213,115,0.4); }
+/* 버튼 */
+.dclear-btn {
+  position: relative; z-index: 2;
+  padding: 12px 40px;
+  background: linear-gradient(135deg, #ffa502, #e94560);
+  border: none; border-radius: 12px;
+  color: #fff; font-size: 16px; font-weight: 800;
+  cursor: pointer; letter-spacing: 2px;
+  transition: all 0.2s;
+  animation: dclearTitleSlide 0.5s 0.8s ease-out backwards;
+  box-shadow: 0 4px 20px rgba(233,69,96,0.3);
+}
+.dclear-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 30px rgba(233,69,96,0.5);
+}
+.dclear-btn-icon { margin-right: 4px; }
+
+/* === 패치노트 팝업 === */
+.patch-notes-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s;
+}
+.patch-notes-popup {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+  border: 1px solid rgba(233,69,96,0.4);
+  border-radius: 16px;
+  width: 520px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 60px rgba(233,69,96,0.15), 0 20px 40px rgba(0,0,0,0.5);
+  animation: slideUp 0.4s ease-out;
+}
+@keyframes slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.patch-notes-header {
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  text-align: center;
+  position: relative;
+}
+.patch-notes-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #e94560, #ff6b6b);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 10px;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  animation: patchBadgePulse 2s ease-in-out infinite;
+}
+@keyframes patchBadgePulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(233,69,96,0.4); }
+  50% { box-shadow: 0 0 20px rgba(233,69,96,0.7); }
+}
+.patch-notes-title {
+  margin: 0;
+  font-size: 22px;
+  color: #ffa502;
+  text-shadow: 0 0 20px rgba(255,165,2,0.3);
+}
+.patch-notes-date {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+.patch-notes-body {
+  padding: 20px 28px;
+  overflow-y: auto;
+  flex: 1;
+}
+.patch-section {
+  margin-bottom: 18px;
+}
+.patch-section h3 {
+  font-size: 14px;
+  color: #e94560;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(233,69,96,0.2);
+}
+.patch-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.patch-section li {
+  font-size: 13px;
+  color: #ccc;
+  padding: 5px 0;
+  padding-left: 12px;
+  position: relative;
+  line-height: 1.5;
+}
+.patch-section li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #666;
+}
+.patch-section li b {
+  color: #ffa502;
+}
+.patch-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.patch-tag.new {
+  background: rgba(46,213,115,0.2);
+  color: #2ed573;
+  border: 1px solid rgba(46,213,115,0.3);
+}
+.patch-tag.fix {
+  background: rgba(30,144,255,0.2);
+  color: #1e90ff;
+  border: 1px solid rgba(30,144,255,0.3);
+}
+.patch-tag.improve {
+  background: rgba(255,165,2,0.2);
+  color: #ffa502;
+  border: 1px solid rgba(255,165,2,0.3);
+}
+.patch-item-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.patch-item-grade {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.patch-item-grade span {
+  font-weight: 400;
+  opacity: 0.8;
+  margin-left: 4px;
+}
+.patch-item-grade.advanced { background: rgba(46,213,115,0.15); color: #2ed573; border: 1px solid rgba(46,213,115,0.2); }
+.patch-item-grade.rare { background: rgba(30,144,255,0.15); color: #1e90ff; border: 1px solid rgba(30,144,255,0.2); }
+.patch-item-grade.heroic { background: rgba(160,82,255,0.15); color: #a052ff; border: 1px solid rgba(160,82,255,0.2); }
+.patch-item-grade.legend { background: rgba(255,165,2,0.15); color: #ffa502; border: 1px solid rgba(255,165,2,0.2); }
+.patch-item-grade.myth { background: rgba(233,69,96,0.15); color: #e94560; border: 1px solid rgba(233,69,96,0.2); }
+.patch-item-grade.transcend { background: rgba(255,215,0,0.15); color: #ffd700; border: 1px solid rgba(255,215,0,0.3); }
+.patch-notes-close {
+  margin: 0 28px 20px;
+  padding: 12px;
+  background: linear-gradient(135deg, #e94560, #d63447);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.patch-notes-close:hover {
+  background: linear-gradient(135deg, #ff6b6b, #e94560);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(233,69,96,0.4);
+}
+
+/* === 전투 로딩 팝업 === */
+.battle-loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.92);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s;
+}
+.battle-loading-popup {
+  text-align: center;
+  padding: 48px 60px;
+  min-width: 360px;
+}
+.battle-loading-icon {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+}
+.battle-loading-sword,
+.battle-loading-shield {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+}
+.battle-loading-sword {
+  top: 0; left: 10px;
+  background: linear-gradient(135deg, #ffa502, #e94560);
+  clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%);
+  animation: battleLoadSpin 2s linear infinite;
+}
+.battle-loading-shield {
+  bottom: 0; right: 10px;
+  background: linear-gradient(135deg, #1e90ff, #2ed573);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: battleLoadSpin 2s linear infinite reverse;
+}
+@keyframes battleLoadSpin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.15); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.battle-loading-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffa502;
+  margin-bottom: 8px;
+  text-shadow: 0 0 20px rgba(255,165,2,0.4);
+}
+.battle-loading-subtitle {
+  font-size: 15px;
+  color: #aaa;
+  margin-bottom: 28px;
+  letter-spacing: 2px;
+}
+.battle-loading-bar {
+  width: 280px;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  margin: 0 auto 24px;
+  overflow: hidden;
+}
+.battle-loading-bar-fill {
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(90deg, #e94560, #ffa502, #1e90ff);
+  border-radius: 2px;
+  animation: battleLoadBar 1.2s ease-in-out infinite;
+}
+@keyframes battleLoadBar {
+  0% { width: 10%; margin-left: 0; }
+  50% { width: 40%; margin-left: 30%; }
+  100% { width: 10%; margin-left: 90%; }
+}
+.battle-loading-tip {
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
+  max-width: 320px;
+  margin: 0 auto;
+  line-height: 1.5;
 }
 
 /* === 전투 불가 팝업 === */

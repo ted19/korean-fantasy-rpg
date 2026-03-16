@@ -129,6 +129,7 @@ export default function CrawlerBattle({
   const popupId = useRef(0);
   const battleSummonIdsRef = useRef([]);
   const battleMercIdsRef = useRef([]);
+  const playerInBattleRef = useRef(true);
   const contributionRef = useRef({}); // unitId -> { damage, kills }
   const monsterSpeechTimer = useRef(null);
   const initDone = useRef(false);
@@ -168,15 +169,44 @@ export default function CrawlerBattle({
         crit_rate: charState.critRate || 5, evasion: charState.evasion || 3, level: charState.level || character.level || 1,
         element: character.element || CLASS_ELEMENT_MAP[character.class_type] || 'neutral',
       };
-      const playerTeam = [createCardPlayerUnit(playerData, learnedSkills, passiveBonuses)];
+      const playerUnit = createCardPlayerUnit(playerData, learnedSkills, passiveBonuses);
+
+      // 진형 기반 유닛 필터링
+      let battleSummons = activeSummons || [];
+      let battleMercs = (activeMercenaries || []).filter(m => m.fatigue === undefined || m.fatigue > 0);
+      let playerInFormation = true;
+      try {
+        const [summonRes, mercRes, fRes] = await Promise.all([
+          api.get('/summon/my'),
+          api.get('/mercenary/my'),
+          api.get('/formation/list'),
+        ]);
+        const freshSummons = summonRes.data.summons || [];
+        const freshMercs = mercRes.data.mercenaries || [];
+        const mainFormation = fRes.data.formations?.find(f => f.slotIndex === 0);
+        if (mainFormation?.gridData) {
+          const grid = mainFormation.gridData;
+          const hasUnits = grid.some(row => row.some(cell => cell && cell.unitId));
+          if (hasUnits) {
+            const unitIds = new Set();
+            grid.forEach(row => row.forEach(cell => { if (cell?.unitId) unitIds.add(cell.unitId); }));
+            playerInFormation = unitIds.has('player');
+            battleSummons = freshSummons.filter(s => unitIds.has(`summon_${s.id}`));
+            battleMercs = freshMercs.filter(m => unitIds.has(`merc_${m.id}`) && (m.fatigue === undefined || m.fatigue > 0));
+          }
+        }
+      } catch {}
+
+      playerInBattleRef.current = playerInFormation;
+      const playerTeam = playerInFormation ? [playerUnit] : [];
 
       // 소환수
-      const summons = (activeSummons || []).map(s => createCardSummonUnit(s));
+      const summons = battleSummons.map(s => createCardSummonUnit(s));
       battleSummonIdsRef.current = summons.map(s => s.summonId);
       playerTeam.push(...summons);
 
       // 용병
-      const mercs = (activeMercenaries || []).filter(m => m.fatigue === undefined || m.fatigue > 0).map(m => createCardMercenaryUnit(m));
+      const mercs = battleMercs.map(m => createCardMercenaryUnit(m));
       battleMercIdsRef.current = mercs.map(m => m.mercId);
       playerTeam.push(...mercs);
 
@@ -381,6 +411,10 @@ export default function CrawlerBattle({
           mercExpMap[mId] = c.exp;
         }
       }
+      // 처치 몬스터 목록 (퀘스트 진행용)
+      const monstersDefeated = unitsRef.current
+        .filter(u => u.team === 'enemy' && u.hp <= 0)
+        .map(u => u.name?.replace(/^🔥\s*/, '') || '???');
       try {
         await api.post('/stage/battle-result', {
           victory: true, expGained: playerExp, goldGained: totalGold,
@@ -388,6 +422,8 @@ export default function CrawlerBattle({
           summonExpMap, mercExpMap,
           playerHp: playerUnit ? Math.max(1, playerUnit.hp) : undefined,
           playerMp: playerUnit ? Math.max(0, playerUnit.mp) : undefined,
+          monstersDefeated,
+          dungeonKey: groupKey,
         });
       } catch {}
       addLog(`승리! EXP +${totalExp}, Gold +${totalGold}`, 'heal');
@@ -397,7 +433,8 @@ export default function CrawlerBattle({
         await api.post('/stage/battle-result', {
           victory: false, expGained: 0, goldGained: 0,
           activeSummonIds: battleSummonIdsRef.current, activeMercenaryIds: battleMercIdsRef.current,
-          playerHp: 0, playerMp: 0,
+          playerHp: playerInBattleRef.current ? 0 : undefined,
+          playerMp: playerInBattleRef.current ? 0 : undefined,
         });
       } catch {}
       addLog('패배...', 'damage');

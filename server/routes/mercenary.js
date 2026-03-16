@@ -385,6 +385,10 @@ router.post('/:mercId/equip', auth, async (req, res) => {
     const ownedCount = invRows.reduce((s, r) => s + (r.quantity || 1), 0);
     if (item.slot !== slot) return res.status(400).json({ message: '해당 슬롯에 장착할 수 없는 아이템입니다.' });
     if (item.class_restriction) return res.status(400).json({ message: '클래스 제한 아이템은 용병에 장착할 수 없습니다.' });
+    const merc = mercs[0];
+    if (item.required_level && merc.level < item.required_level) {
+      return res.status(400).json({ message: `용병 레벨이 부족합니다. (필요: Lv.${item.required_level}, 현재: Lv.${merc.level})` });
+    }
 
     // 장착 중인 총 개수 확인 (캐릭터 + 소환수 + 용병)
     const [eqCnt] = await conn.query('SELECT COUNT(*) as cnt FROM equipment WHERE character_id = ? AND item_id = ?', [char.id, itemId]);

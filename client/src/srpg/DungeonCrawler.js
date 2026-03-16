@@ -70,7 +70,7 @@ function generateMaze(width, height, monsterCount, stage, dbMonsters) {
     }
   }
 
-  // 몬스터 배치 (실제 몬스터 템플릿 ID 배정)
+  // 몬스터 배치 (실제 몬스터 템플릿 ID 배정) — 필수 처치, 전부 배회
   const shuffled = emptyTiles.sort(() => Math.random() - 0.5);
   const monsters = [];
   const count = Math.min(monsterCount || 5, shuffled.length);
@@ -79,6 +79,7 @@ function generateMaze(width, height, monsterCount, stage, dbMonsters) {
     const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
     monsters.push({
       id: `mob_${i}`, ...shuffled[i], defeated: false,
+      roaming: true, roamDir: Math.floor(Math.random() * 4),
       monsterId: template?.id || null,
       monsterName: template?.name || '???',
     });
@@ -107,7 +108,7 @@ function generateMaze(width, height, monsterCount, stage, dbMonsters) {
     if (t) treasures.push({ id: `tr_${i}`, ...t, collected: false });
   }
 
-  // 배회형 몬스터 (1~2마리, 던전을 돌아다니며 플레이어와 마주치면 전투)
+  // 추가 배회형 몬스터 (1~2마리, 선택 처치 보너스)
   const roamStart = treasureStart + treasureCount;
   const roamCount = Math.min(1 + Math.floor(Math.random() * 2), Math.max(0, shuffled.length - roamStart - 2));
   for (let i = 0; i < roamCount; i++) {
@@ -115,10 +116,10 @@ function generateMaze(width, height, monsterCount, stage, dbMonsters) {
     if (slot) {
       const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
       monsters.push({
-        id: `roam_${i}`, ...slot, defeated: false, roaming: true,
+        id: `roam_${i}`, ...slot, defeated: false, roaming: true, hidden: true,
         monsterId: template?.id || null,
         monsterName: template?.name || '???',
-        roamDir: Math.floor(Math.random() * 4), // 초기 이동 방향
+        roamDir: Math.floor(Math.random() * 4),
       });
     }
   }
@@ -211,7 +212,7 @@ const DEFAULT_3D_THEME = DUNGEON_3D_THEMES.cave;
 // ========== 프로시저럴 텍스처 생성 (64x64, 캐시) ==========
 const textureCache = {};
 function generateTexture(type, theme) {
-  const key = type + '_' + (theme?.name || 'default');
+  const key = type + '_' + (theme?.name || 'default') + '_v2';
   if (textureCache[key]) return textureCache[key];
   const S = 64;
   const data = new Uint8Array(S * S * 3);
@@ -221,60 +222,147 @@ function generateTexture(type, theme) {
 
   if (type === 'wall_bark') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const grain = Math.sin(y * 0.4 + x * 0.12 + noise(x, y) * 3) * 0.2;
-      const ring = Math.sin(Math.sqrt((x-32)*(x-32)+(y-32)*(y-32)) * 0.3) * 0.1;
-      const crack = (noise(x>>1, y>>1) > 0.88) ? -0.25 : 0;
-      const v = 0.45 + grain + ring + crack + noise(x, y) * 0.15;
+      // 석조 블록 구조 (나무 뿌리 사이 돌벽)
+      const blockH = 12, blockW = 20;
+      const bRow = Math.floor(y / blockH);
+      const bOff = (bRow % 2) * (blockW / 2);
+      const bx = (x + bOff) % blockW;
+      const by = y % blockH;
+      const isJoint = by < 1 || bx < 1;
+      const jointDark = isJoint ? -0.12 : 0;
+      // 나무결
+      const grain = Math.sin(y * 0.4 + x * 0.12 + noise(x, y) * 3) * 0.18;
+      const ring = Math.sin(Math.sqrt((x-32)*(x-32)+(y-32)*(y-32)) * 0.3) * 0.08;
+      const crack = (noise(x>>1, y>>1) > 0.88) ? -0.22 : 0;
+      const v = 0.45 + grain + ring + crack + jointDark + noise(x, y) * 0.12;
       const mossy = y > 44 ? (y - 44) / 20 * noise(x*3, y*2) : 0;
-      set(x, y, (55*(1-mossy)+20*mossy)*v|0, (70*(1-mossy)+85*mossy)*v|0, (35*(1-mossy)+25*mossy)*v|0);
+      // 나뭇결에 거칠기
+      const rough = (noise(x * 4, y * 4) - 0.5) * 0.06;
+      const vf = v + rough;
+      set(x, y, Math.max(0,(55*(1-mossy)+20*mossy)*vf)|0, Math.max(0,(70*(1-mossy)+85*mossy)*vf)|0, Math.max(0,(35*(1-mossy)+25*mossy)*vf)|0);
     }
   } else if (type === 'wall_brick') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const row = Math.floor(y / 8);
-      const off = (row % 2) * 16;
-      const bx = (x + off) % 32;
-      const isGrout = (y % 8 < 1) || (bx < 1);
-      const brickN = noise(Math.floor((x+off)/32)*7+row*13, row);
-      const v = isGrout ? 0.2 + noise(x,y)*0.1 : 0.5 + brickN * 0.2 + noise(x,y) * 0.12;
-      const wc = theme?.wallNS || [45,35,60];
-      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+      const brickH = 8, brickW = 16;
+      const row = Math.floor(y / brickH);
+      const off = (row % 2) * (brickW / 2);
+      const bx = (x + off) % brickW;
+      const by = y % brickH;
+      // 줄눈 (모르타르) - 2px 두께로 더 선명하게
+      const isGroutH = by < 1;
+      const isGroutV = bx < 1;
+      const isGroutEdge = by === 1 || bx === 1; // 줄눈 하이라이트 엣지
+      const brickId = Math.floor((x + off) / brickW) * 7 + row * 13;
+      const brickN = noise(brickId, row);
+      const wc = theme?.wallNS || [45, 35, 60];
+      if (isGroutH || isGroutV) {
+        // 줄눈: 어두운 모르타르
+        const gv = 0.15 + noise(x, y) * 0.08;
+        const gc = theme?.wallAccent || [20, 18, 25];
+        set(x, y, gc[0] * gv | 0, gc[1] * gv | 0, gc[2] * gv | 0);
+      } else if (isGroutEdge) {
+        // 줄눈 바로 옆: 살짝 밝은 엣지 (입체감)
+        const ev = 0.35 + noise(x, y) * 0.1;
+        set(x, y, wc[0] * ev * 1.1 | 0, wc[1] * ev * 1.1 | 0, wc[2] * ev * 1.1 | 0);
+      } else {
+        // 벽돌 본체
+        let v = 0.42 + brickN * 0.2 + noise(x, y) * 0.1;
+        // 벽돌 색조 변형 (같은 줄 다른 벽돌마다 약간 다른 색)
+        const colorShift = (brickId * 37 % 100) / 100 * 0.12 - 0.06;
+        v += colorShift;
+        // 균열 (일부 벽돌에만)
+        if (brickN > 0.75) {
+          const crackLine = Math.abs(Math.sin(bx * 0.8 + by * 1.2 + brickN * 10));
+          if (crackLine > 0.95) v *= 0.55;
+        }
+        // 얼룩/풍화 (벽돌 아래쪽에 약간)
+        if (by > 5) v *= 0.92 + noise(x * 3, y * 2) * 0.06;
+        // 벽돌 표면 거칠기
+        v += (noise(x * 5, y * 5) - 0.5) * 0.06;
+        set(x, y, Math.min(255, wc[0] * v) | 0, Math.min(255, wc[1] * v) | 0, Math.min(255, wc[2] * v) | 0);
+      }
     }
   } else if (type === 'wall_slime') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const base = 0.4 + noise(x,y)*0.15;
-      const drip = y > 40 ? Math.sin(x*0.5)*0.5+0.5 : 0;
-      const glow = drip * (y-40)/24 * 0.4;
+      // 석조 블록 + 슬라임 침식
+      const bH = 10, bW = 18;
+      const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 9;
+      const bx = (x + bOff) % bW; const by = y % bH;
+      const isJoint = by < 1 || bx < 1;
+      let base = isJoint ? 0.2 : 0.4 + noise(x,y)*0.15;
+      // 슬라임 흘러내림
+      const drip = y > 35 ? Math.sin(x*0.5+noise(x*2,0)*3)*0.5+0.5 : 0;
+      const glow = drip * (y-35)/29 * 0.5;
+      // 석조 표면 거칠기
+      base += (noise(x*3, y*3) - 0.5) * 0.06;
       const wc = theme?.wallNS || [30,50,55];
-      set(x, y, wc[0]*base|0, (wc[1]+glow*80)*base|0, (wc[2]+glow*60)*base|0);
+      set(x, y, Math.max(0,wc[0]*base)|0, Math.max(0,(wc[1]+glow*90)*base)|0, Math.max(0,(wc[2]+glow*70)*base)|0);
     }
   } else if (type === 'wall_hellstone') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      // 용암석 블록 + 균열 발광
+      const bH = 10, bW = 14;
+      const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 7;
+      const bx = (x + bOff) % bW; const by = y % bH;
+      const isJoint = by < 1 || bx < 1;
       const crack = Math.sin(x*0.4+y*0.25+noise(x,y)*5);
-      const glow = crack > 0.82 ? 0.5 + (crack-0.82)*3 : 0;
-      const v = 0.35 + noise(x,y)*0.2;
-      set(x, y, Math.min(255,(60+glow*300)*v)|0, (20+glow*80)*v|0, 20*v|0);
+      const glow = crack > 0.8 ? 0.5 + (crack-0.8)*4 : 0;
+      const jointGlow = isJoint ? 0.3 + Math.sin(x*0.3+y*0.2)*0.15 : 0;
+      let v = isJoint ? 0.15 : 0.35 + noise(x,y)*0.18 + (noise(x*4,y*4)-0.5)*0.06;
+      const totalGlow = glow + jointGlow;
+      set(x, y, Math.min(255,(60+totalGlow*300)*v)|0, Math.max(0,(20+totalGlow*100)*v)|0, Math.max(0,(15+jointGlow*40)*v)|0);
     }
   } else if (type === 'wall_coral') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      // 산호 벽돌 + 해초 패턴
+      const bH = 10, bW = 16;
+      const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 8;
+      const bx = (x + bOff) % bW; const by = y % bH;
+      const isJoint = by < 1 || bx < 1;
       const pat = Math.sin(x*0.3+y*0.2)*Math.cos(x*0.2-y*0.3);
-      const v = 0.4 + pat*0.15 + noise(x,y)*0.15;
+      let v = isJoint ? 0.18 + noise(x,y)*0.06 : 0.4 + pat*0.12 + noise(x,y)*0.12;
+      // 산호 돌기
+      const bump = noise(x*2, y*2) > 0.8 ? 0.1 : 0;
+      v += bump + (noise(x*5,y*5)-0.5)*0.05;
       const wc = theme?.wallNS || [25,45,65];
-      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+      set(x, y, Math.max(0,wc[0]*v)|0, Math.max(0,wc[1]*v)|0, Math.max(0,wc[2]*v)|0);
     }
   } else if (type === 'wall_scale') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const r = Math.floor(y/6); const c = Math.floor((x+(r%2)*3)/6);
-      const edge = (y%6<1)||((x+(r%2)*3)%6<1);
-      const v = edge ? 0.25 : 0.5+((r*7+c*13)%5)/25+noise(x,y)*0.1;
+      // 비늘 패턴 (더 세밀하게)
+      const scaleH = 5, scaleW = 5;
+      const r2 = Math.floor(y/scaleH); const off2 = (r2%2)*Math.floor(scaleW/2);
+      const sx = (x+off2)%scaleW; const sy = y%scaleH;
+      const edge = sy < 1 || sx < 1;
+      const scaleId = Math.floor((x+off2)/scaleW)*7+r2*13;
+      const colorVar = (scaleId % 10) / 50 - 0.1;
+      let v = edge ? 0.2 : 0.45+((scaleId%5)/20)+noise(x,y)*0.08+colorVar;
+      // 비늘 광택
+      if (!edge && sx === Math.floor(scaleW/2) && sy === Math.floor(scaleH/2)) v += 0.08;
+      v += (noise(x*4,y*4)-0.5)*0.05;
       const wc = theme?.wallNS || [55,45,20];
-      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+      set(x, y, Math.max(0,wc[0]*v)|0, Math.max(0,wc[1]*v)|0, Math.max(0,wc[2]*v)|0);
     }
   } else if (type === 'wall_moss') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      // 이끼 낀 석조벽
+      const bH = 10, bW = 16;
+      const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 8;
+      const bx = (x + bOff) % bW; const by = y % bH;
+      const isJoint = by < 1 || bx < 1;
       const mp = noise(x>>1, y>>1);
-      const v = 0.35 + mp*0.25 + noise(x,y)*0.12;
-      const wc = theme?.wallNS || [40,50,25];
-      set(x, y, wc[0]*v|0, wc[1]*v|0, wc[2]*v|0);
+      let v = isJoint ? 0.18 + noise(x,y)*0.06 : 0.35 + mp*0.22 + noise(x,y)*0.1;
+      // 이끼 패치 (불규칙)
+      const mossP = noise(x*2+13, y*2+7);
+      if (mossP > 0.55 && !isJoint) {
+        const mInt = (mossP - 0.55) * 3;
+        const wc = theme?.wallNS || [40,50,25];
+        set(x, y, Math.max(0,(wc[0]-10*mInt)*v)|0, Math.max(0,(wc[1]+15*mInt)*v)|0, Math.max(0,(wc[2]-5*mInt)*v)|0);
+      } else {
+        v += (noise(x*4,y*4)-0.5)*0.05;
+        const wc = theme?.wallNS || [40,50,25];
+        set(x, y, Math.max(0,wc[0]*v)|0, Math.max(0,wc[1]*v)|0, Math.max(0,wc[2]*v)|0);
+      }
     }
   } else if (type === 'floor_leaves') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
@@ -464,9 +552,16 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
       const yTop = Math.max(0, Math.floor(wallTop));
       const yBot = Math.min(H, Math.ceil(wallBot));
 
-      // 벽 셀 기반 변형 (덩굴/이끼 추가)
+      // 벽 셀 기반 변형 (장식/덩굴/이끼)
       const wallHash = ((mX * 73 + mY * 137) & 0xFFFF);
       const hasVine = theme.vineFactor && (wallHash % 5) < 2;
+      // 벽 장식 종류 결정 (해시 기반, 약 30% 벽에 장식)
+      const decorType = wallHash % 10; // 0-2: 장식 있음
+      const hasTorch = decorType === 0 && corrDist < 6;  // 횃대
+      const hasSkull = decorType === 1 && corrDist < 5;   // 두개골
+      const hasChain = decorType === 2 && corrDist < 5;   // 쇠사슬
+      const hasCrack = (wallHash % 7) === 0;              // 벽 균열
+      const hasStain = (wallHash % 6) === 0;              // 얼룩
 
       for (let row = yTop; row < yBot; row++) {
         const wallV = (row - wallTop) / wallH;
@@ -481,6 +576,78 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
           if (Math.abs(wallU - vineX) < vineW) {
             const vs = 0.8 + Math.sin(wallV * 20) * 0.15;
             r = r * 0.3 + 20 * vs; g = g * 0.3 + 65 * vs; b = b * 0.3 + 12 * vs;
+          }
+        }
+
+        // === 벽 장식 오버레이 ===
+        // 횃대 (벽 중앙 상단 1/3에 횃대 모양)
+        if (hasTorch) {
+          const tu = wallU, tv = wallV;
+          // 횃대 받침 (세로 막대)
+          if (Math.abs(tu - 0.5) < 0.03 && tv > 0.25 && tv < 0.55) {
+            r = 50; g = 35; b = 20; // 나무색 막대
+          }
+          // 불꽃 (위쪽에 삼각형)
+          if (tv > 0.12 && tv < 0.3) {
+            const flameW = 0.06 * (1 - (tv - 0.12) / 0.18);
+            if (Math.abs(tu - 0.5) < flameW) {
+              const fi = 1 - (tv - 0.12) / 0.18;
+              const flicker = 0.8 + Math.sin(now * 0.01 + wallHash) * 0.2;
+              r = Math.min(255, r * 0.2 + 255 * fi * flicker);
+              g = Math.min(255, g * 0.2 + 160 * fi * flicker);
+              b = Math.min(255, b * 0.1 + 30 * fi * flicker);
+            }
+          }
+          // 횃대 고정 브라켓
+          if (Math.abs(tv - 0.55) < 0.025 && Math.abs(tu - 0.5) < 0.06) {
+            r = 60; g = 55; b = 50; // 쇠 색
+          }
+        }
+
+        // 두개골 (벽 중앙 하단)
+        if (hasSkull) {
+          const su = wallU - 0.5, sv = wallV - 0.65;
+          const sdist = Math.sqrt(su * su * 4 + sv * sv * 6);
+          if (sdist < 0.1) {
+            // 두개골 윤곽
+            const sint = 1 - sdist / 0.1;
+            r = r * (1 - sint * 0.7) + 180 * sint * 0.7;
+            g = r * 0.9; b = r * 0.75;
+            // 눈구멍
+            if ((Math.abs(su + 0.015) < 0.015 || Math.abs(su - 0.015) < 0.015) && Math.abs(sv + 0.01) < 0.015) {
+              r *= 0.15; g *= 0.15; b *= 0.15;
+            }
+          }
+        }
+
+        // 쇠사슬 (벽에 세로로 매달린 사슬)
+        if (hasChain) {
+          const cu = wallU - 0.35;
+          if (Math.abs(cu) < 0.015) {
+            const link = Math.sin(wallV * 40) * 0.5 + 0.5;
+            r = r * 0.4 + 90 * link; g = r * 0.85; b = r * 0.75;
+          }
+        }
+
+        // 벽 균열 (어두운 선)
+        if (hasCrack) {
+          const crU = wallU * 64, crV = wallV * 64;
+          const crLine = Math.sin(crU * 0.7 + crV * 1.3 + wallHash * 0.01);
+          if (Math.abs(crLine) < 0.04 && wallV > 0.2 && wallV < 0.8) {
+            r *= 0.4; g *= 0.4; b *= 0.4;
+          }
+        }
+
+        // 얼룩/풍화 (불규칙한 어두운 패치)
+        if (hasStain) {
+          const stX = wallU * 10 + wallHash * 0.001;
+          const stY = wallV * 8;
+          const stN = Math.sin(stX * 2.3) * Math.cos(stY * 1.7) * 0.5 + 0.5;
+          if (stN > 0.7 && wallV > 0.4) {
+            const stInt = (stN - 0.7) * 2;
+            r *= 1 - stInt * 0.35;
+            g *= 1 - stInt * 0.3;
+            b *= 1 - stInt * 0.25;
           }
         }
 
@@ -515,6 +682,50 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
         let fr = floorTex[fIdx] * fShade;
         let fg = floorTex[fIdx + 1] * fShade;
         let fb = floorTex[fIdx + 2] * fShade;
+
+        // 바닥 장식 (타일 좌표 기반 해시로 결정)
+        const fCellX = Math.floor(floorX), fCellY = Math.floor(floorY);
+        const fHash = ((fCellX * 97 + fCellY * 151) & 0xFFFF);
+        const fLocalX = floorX - fCellX, fLocalY = floorY - fCellY;
+
+        // 뼈다귀 (약 15% 타일)
+        if (fHash % 7 === 0 && rowDist < 5) {
+          const boneAngle = fHash * 0.1;
+          const bx = (fLocalX - 0.5) * Math.cos(boneAngle) - (fLocalY - 0.5) * Math.sin(boneAngle);
+          const by2 = (fLocalX - 0.5) * Math.sin(boneAngle) + (fLocalY - 0.5) * Math.cos(boneAngle);
+          if (Math.abs(by2) < 0.04 && Math.abs(bx) < 0.2) {
+            // 뼈 본체
+            fr = fr * 0.3 + 140 * fShade; fg = fg * 0.3 + 130 * fShade; fb = fb * 0.3 + 110 * fShade;
+          }
+          // 뼈 끝 마디
+          if ((Math.abs(bx - 0.18) < 0.04 || Math.abs(bx + 0.18) < 0.04) && Math.abs(by2) < 0.06) {
+            fr = fr * 0.5 + 120 * fShade; fg = fg * 0.5 + 110 * fShade; fb = fb * 0.5 + 95 * fShade;
+          }
+        }
+
+        // 자갈/돌 (약 20% 타일)
+        if (fHash % 5 === 0 && rowDist < 6) {
+          const sx = fLocalX - 0.3 - (fHash % 4) * 0.1;
+          const sy = fLocalY - 0.4 - (fHash % 3) * 0.1;
+          const sd = Math.sqrt(sx * sx + sy * sy);
+          if (sd < 0.06) {
+            const sv = 0.6 + (fHash % 20) / 100;
+            fr = 55 * sv * fShade; fg = 50 * sv * fShade; fb = 45 * sv * fShade;
+          }
+        }
+
+        // 웅덩이/물기 (약 10% 타일, 가까운 곳만)
+        if (fHash % 10 === 3 && rowDist < 4) {
+          const px2 = fLocalX - 0.5, py2 = fLocalY - 0.5;
+          const pd = Math.sqrt(px2 * px2 + py2 * py2);
+          if (pd < 0.15) {
+            const pInt = 1 - pd / 0.15;
+            // 반사광 (약간 밝게)
+            fr = fr * (1 - pInt * 0.3) + 20 * pInt * fShade;
+            fg = fg * (1 - pInt * 0.3) + 30 * pInt * fShade;
+            fb = fb * (1 - pInt * 0.2) + 40 * pInt * fShade;
+          }
+        }
 
         // 횃불
         const fdx = col - torchCX, fdy = row - torchCY;
@@ -730,8 +941,8 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
 
   return (
     <div className="dc-fpv" style={{ position: 'relative', width: '100%', height: '100%', background: '#0a0a15' }}>
-      <canvas ref={canvasRef} width={640} height={400}
-        style={{ width: '100%', height: '100%', display: 'block' }} />
+      <canvas ref={canvasRef} width={800} height={500}
+        style={{ width: '100%', height: '100%', display: 'block', imageRendering: 'auto' }} />
     </div>
   );
 }
@@ -768,7 +979,7 @@ function MiniMap({ maze, px, py, facing, explored, monsters, treasures, exitPos 
           width: cellSize, height: cellSize,
         }}>
           {isPlayer && <div className={`dc-mm-player facing-${facing}`} />}
-          {isExplored && monster && <div className={`dc-mm-monster${monster.roaming ? ' roaming' : ''}`} />}
+          {isExplored && monster && <div className={`dc-mm-monster${monster.hidden ? ' roaming' : ''}`} />}
           {isExplored && treasure && <div className="dc-mm-treasure" />}
           {isExplored && isExit && <div className="dc-mm-exit" />}
         </div>
@@ -878,6 +1089,10 @@ export default function DungeonCrawler({
   const speechTimer = useRef(null);
   const monsterSpeechTimer = useRef(null);
   const initDone = useRef(false);
+  // 진형 필터링된 소환수/용병
+  const [filteredSummons, setFilteredSummons] = useState(activeSummons || []);
+  const [filteredMercs, setFilteredMercs] = useState(activeMercenaries || []);
+  const [playerInFormation, setPlayerInFormation] = useState(true);
 
   const showMonsterSpeech = useCallback((mobId, text, duration = 5000) => {
     if (monsterSpeechTimer.current) clearTimeout(monsterSpeechTimer.current);
@@ -895,6 +1110,35 @@ export default function DungeonCrawler({
     setLog(prev => [...prev.slice(-50), { text, type, id: Date.now() + Math.random() }]);
     setUnreadLog(prev => prev + 1);
   }, []);
+
+  // 진형 기반 유닛 필터링 (던전 진입 시 1회)
+  useEffect(() => {
+    (async () => {
+      try {
+        const [summonRes, mercRes, fRes] = await Promise.all([
+          api.get('/summon/my'), api.get('/mercenary/my'), api.get('/formation/list'),
+        ]);
+        let fSummons = summonRes.data.summons || [];
+        let fMercs = mercRes.data.mercenaries || [];
+        let pInF = true;
+        const mainF = fRes.data.formations?.find(f => f.slotIndex === 0);
+        if (mainF?.gridData) {
+          const g = mainF.gridData;
+          const has = g.some(row => row.some(c => c && c.unitId));
+          if (has) {
+            const ids = new Set();
+            g.forEach(row => row.forEach(c => { if (c?.unitId) ids.add(c.unitId); }));
+            pInF = ids.has('player');
+            fSummons = fSummons.filter(s => ids.has(`summon_${s.id}`));
+            fMercs = fMercs.filter(m => ids.has(`merc_${m.id}`));
+          }
+        }
+        setFilteredSummons(fSummons);
+        setFilteredMercs(fMercs);
+        setPlayerInFormation(pInF);
+      } catch {}
+    })();
+  }, []); // eslint-disable-line
 
   // 미로 생성 또는 저장된 상태 복원
   useEffect(() => {
@@ -1004,9 +1248,9 @@ export default function DungeonCrawler({
       // 전투 리액션 말풍선
       {
         const rParty = [];
-        if (character) rParty.push({ id: 'player', name: character.name });
-        (activeSummons || []).forEach(s => rParty.push({ id: `summon_${s.id}`, name: s.name }));
-        (activeMercenaries || []).forEach(m => rParty.push({ id: `merc_${m.id}`, name: m.name }));
+        if (character && playerInFormation) rParty.push({ id: 'player', name: character.name });
+        (filteredSummons || []).forEach(s => rParty.push({ id: `summon_${s.id}`, name: s.name }));
+        (filteredMercs || []).forEach(m => rParty.push({ id: `merc_${m.id}`, name: m.name }));
         if (rParty.length > 0) {
           const rSpeaker = rParty[Math.floor(Math.random() * rParty.length)];
           const rText = ENCOUNTER_REACT[Math.floor(Math.random() * ENCOUNTER_REACT.length)];
@@ -1044,9 +1288,9 @@ export default function DungeonCrawler({
       if (onTreasure) onTreasure({ gold: goldFound });
     }
 
-    // 출구 체크 (숨겨진 적/배회형은 필수 처치 대상 아님)
+    // 출구 체크 (숨겨진 적은 필수 처치 대상 아님, 배회 몬스터는 필수)
     if (nx === maze.exitPos.x && ny === maze.exitPos.y) {
-      const allDefeated = monsters.filter(m => !m.hidden && !m.roaming).every(m => m.defeated);
+      const allDefeated = monsters.filter(m => !m.hidden).every(m => m.defeated);
       if (allDefeated) {
         addLog('🚪 출구를 발견했습니다!', 'heal');
         setExitPopup('clear');
@@ -1234,7 +1478,11 @@ export default function DungeonCrawler({
   // 출구 팝업에서 자동 클리어
   useEffect(() => {
     if (autoPath && exitPopup === 'clear') {
-      const t = setTimeout(() => { setExitPopup(null); if (onClear) onClear(); }, 1500);
+      const t = setTimeout(() => {
+        setExitPopup(null);
+        const stats = { stepCount, monstersDefeated: monsters.filter(m => m.defeated).length, totalMonsters: monsters.filter(m => !m.hidden).length, treasuresFound: treasures.filter(t2 => t2.collected).length, totalTreasures: treasures.length };
+        if (onClear) onClear(stats);
+      }, 1500);
       return () => clearTimeout(t);
     }
   }, [autoPath, exitPopup, onClear]);
@@ -1543,9 +1791,9 @@ export default function DungeonCrawler({
     // 15% 확률로 말풍선
     if (Math.random() < 0.15) {
       const party = [];
-      if (character) party.push({ id: 'player', name: character.name });
-      (activeSummons || []).forEach(s => party.push({ id: `summon_${s.id}`, name: s.name }));
-      (activeMercenaries || []).forEach(m => party.push({ id: `merc_${m.id}`, name: m.name }));
+      if (character && playerInFormation) party.push({ id: 'player', name: character.name });
+      (filteredSummons || []).forEach(s => party.push({ id: `summon_${s.id}`, name: s.name }));
+      (filteredMercs || []).forEach(m => party.push({ id: `merc_${m.id}`, name: m.name }));
 
       if (party.length > 0) {
         const speaker = party[Math.floor(Math.random() * party.length)];
@@ -1582,8 +1830,8 @@ export default function DungeonCrawler({
       {
         const aParty = [];
         if (character) aParty.push({ id: 'player', name: character.name });
-        (activeSummons || []).forEach(s => aParty.push({ id: `summon_${s.id}`, name: s.name }));
-        (activeMercenaries || []).forEach(m => aParty.push({ id: `merc_${m.id}`, name: m.name }));
+        (filteredSummons || []).forEach(s => aParty.push({ id: `summon_${s.id}`, name: s.name }));
+        (filteredMercs || []).forEach(m => aParty.push({ id: `merc_${m.id}`, name: m.name }));
         if (aParty.length > 0) {
           const aSpeaker = aParty[Math.floor(Math.random() * aParty.length)];
           const aText = AMBUSH_REACT[Math.floor(Math.random() * AMBUSH_REACT.length)];
@@ -1615,7 +1863,7 @@ export default function DungeonCrawler({
     </div>
   );
 
-  const requiredMonsters = monsters.filter(m => !m.hidden && !m.roaming);
+  const requiredMonsters = monsters.filter(m => !m.hidden);
   const visibleMonsters = monsters.filter(m => !m.hidden);
   const allDefeated = requiredMonsters.every(m => m.defeated);
   const defeatedCount = requiredMonsters.filter(m => m.defeated).length;
@@ -1706,8 +1954,8 @@ export default function DungeonCrawler({
         <div className="dc-party-bar" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/ui/dungeon/dc_party_bg.png)` }}>
           {(() => {
             const party = [];
-            // 플레이어
-            if (character) {
+            // 플레이어 (진형에 배치된 경우만)
+            if (character && playerInFormation) {
               party.push({
                 id: 'player', name: character.name, level: charState?.level || character.level,
                 hp: charState?.currentHp ?? character.current_hp, maxHp: charState?.maxHp ?? character.hp,
@@ -1716,8 +1964,8 @@ export default function DungeonCrawler({
                 type: 'player', classType: character.class_type,
               });
             }
-            // 소환수
-            (activeSummons || []).forEach(s => {
+            // 소환수 (진형 필터링 적용)
+            (filteredSummons || []).forEach(s => {
               const tid = s.template_id || s.summon_id || s.id;
               party.push({
                 id: `summon_${s.id}`, name: s.name, level: s.level,
@@ -1725,8 +1973,8 @@ export default function DungeonCrawler({
                 imageUrl: `/summons_nobg/${tid}_icon.png`, type: 'summon',
               });
             });
-            // 용병
-            (activeMercenaries || []).forEach(m => {
+            // 용병 (진형 필터링 적용)
+            (filteredMercs || []).forEach(m => {
               const tid = m.template_id || m.id;
               party.push({
                 id: `merc_${m.id}`, name: m.name, level: m.level,
@@ -1977,23 +2225,33 @@ export default function DungeonCrawler({
       {treasurePopup && (
         <div className="dc-treasure-popup">
           <div className="dc-treasure-popup-inner">
+            <div className="dc-treasure-rays" />
             <div className="dc-treasure-glow" />
-            <img src="/ui/dungeon/dc_treasure_popup_bg.png" alt="" className="dc-treasure-popup-bg"
-              onError={e => { e.target.style.display = 'none'; }} />
             <div className="dc-treasure-chest-wrap">
-              <img src="/ui/dungeon/dc_treasure.png" alt="" className="dc-treasure-chest-img" />
+              <img src="/ui/dungeon/dc_treasure.png" alt="" className="dc-treasure-chest-img"
+                onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
+              <div className="dc-treasure-chest-css" style={{ display: 'none' }}>
+                <div className="dc-css-chest-body" />
+                <div className="dc-css-chest-lid" />
+                <div className="dc-css-chest-glow-inner" />
+              </div>
               <div className="dc-treasure-sparkles">
-                {[...Array(12)].map((_, i) => (
-                  <div key={i} className="dc-treasure-sparkle" style={{ '--i': i }} />
+                {[...Array(16)].map((_, i) => (
+                  <div key={i} className="dc-treasure-sparkle" style={{ '--i': i, '--angle': `${i * 22.5}deg` }} />
+                ))}
+              </div>
+              <div className="dc-treasure-coins">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="dc-treasure-coin" style={{ '--ci': i }} />
                 ))}
               </div>
             </div>
             <div className="dc-treasure-title">보물 발견!</div>
             <div className="dc-treasure-gold">
-              <span className="dc-treasure-gold-icon">💰</span>
+              <img src="/ui/gold_coin.png" alt="" className="dc-treasure-gold-coin-img"
+                onError={e => { e.target.style.display = 'none'; }} />
               <span className="dc-treasure-gold-amount">+{treasurePopup.gold}G</span>
             </div>
-            <div className="dc-treasure-rays" />
           </div>
         </div>
       )}
@@ -2051,7 +2309,11 @@ export default function DungeonCrawler({
                     <span className="dc-exit-stage-label">탐험 완료</span>
                     <span className="dc-exit-step-count">{stepCount}걸음</span>
                   </div>
-                  <button className="dc-exit-btn clear" onClick={() => { setExitPopup(null); if (onClear) onClear(); }}>
+                  <button className="dc-exit-btn clear" onClick={() => {
+                    setExitPopup(null);
+                    const stats = { stepCount, monstersDefeated: monsters.filter(m => m.defeated).length, totalMonsters: monsters.filter(m => !m.hidden).length, treasuresFound: treasures.filter(t2 => t2.collected).length, totalTreasures: treasures.length };
+                    if (onClear) onClear(stats);
+                  }}>
                     <span className="dc-exit-btn-icon">🏆</span> 밖으로 나가기
                   </button>
                 </>
@@ -2063,7 +2325,7 @@ export default function DungeonCrawler({
                   </div>
                   <div className="dc-exit-title blocked">출구 봉쇄됨</div>
                   <div className="dc-exit-desc blocked">
-                    아직 <span className="dc-exit-remain">{monsters.filter(m => !m.hidden && !m.roaming && !m.defeated).length}마리</span>의 몬스터가<br/>
+                    아직 <span className="dc-exit-remain">{monsters.filter(m => !m.hidden && !m.defeated).length}마리</span>의 몬스터가<br/>
                     던전에 남아있습니다.
                   </div>
                   <div className="dc-exit-warning">

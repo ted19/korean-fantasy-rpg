@@ -62,6 +62,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   const [eliteAlert, setEliteAlert] = useState(null); // { name, icon, monsterId, tier }
   const battleSummonIdsRef = useRef([]);
   const battleMercIdsRef = useRef([]);
+  const playerInBattleRef = useRef(true);
   const contributionRef = useRef({}); // unitId -> { damage, kills }
   const initDoneRef = useRef(false); // 중복 초기화 방지
   const logRef = useRef(null);
@@ -294,7 +295,10 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
 
       const summonUnits = battleSummons.slice(0, 5).map(s => createCardSummonUnit(s));
       const mercUnits = battleMercs.slice(0, 5).map(m => createCardMercenaryUnit(m));
-      const playerTeam = [playerUnit, ...summonUnits, ...mercUnits].slice(0, 9);
+      // 진형에 플레이어가 배치되어 있는지 확인 (진형 없으면 항상 참전)
+      const playerInFormation = !formationGrid || formationUnitIds.has('player');
+      playerInBattleRef.current = playerInFormation;
+      const playerTeam = [...(playerInFormation ? [playerUnit] : []), ...summonUnits, ...mercUnits].slice(0, 9);
 
       // 코스메틱 효과 주입 (장착된 오라가 없으면 기본 오라 적용)
       for (const unit of playerTeam) {
@@ -987,12 +991,13 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
         goldGained: rewards.gold,
         victory: true,
         groupKey: groupKey || null,
+        dungeonKey: stage?.dungeonKey || null,
         activeSummonIds: battleSummonIdsRef.current,
         activeMercenaryIds: battleMercIdsRef.current,
         summonExpMap,
         mercExpMap,
-        playerHp: playerUnit ? playerUnit.hp : 0,
-        playerMp: playerUnit ? playerUnit.mp : 0,
+        playerHp: playerUnit ? playerUnit.hp : undefined,
+        playerMp: playerUnit ? playerUnit.mp : undefined,
       }).then(res => {
         setResultData(res.data);
         if (res.data.droppedMaterials && res.data.droppedMaterials.length > 0) {
@@ -1018,7 +1023,8 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       addLog(`\n전투 패배...`, 'damage');
       api.post('/stage/battle-result', {
         monstersDefeated: [], expGained: 0, goldGained: 0, victory: false,
-        playerHp: 0, playerMp: 0,
+        playerHp: playerInBattleRef.current ? 0 : undefined,
+        playerMp: playerInBattleRef.current ? 0 : undefined,
         activeSummonIds: battleSummonIdsRef.current,
         activeMercenaryIds: battleMercIdsRef.current,
       }).catch(() => {});

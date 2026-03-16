@@ -2066,6 +2066,7 @@
 }
 
 /* ===== 보물 발견 팝업 ===== */
+/* ===== 보물 발견 팝업 (전면 개편) ===== */
 .dc-treasure-popup {
   position: absolute;
   inset: 0;
@@ -2074,12 +2075,12 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  animation: dcTreasureAppear 0.5s ease-out;
+  background: radial-gradient(circle, rgba(255,165,2,0.08) 0%, transparent 60%);
+  animation: dcTreasureAppear 0.4s ease-out;
 }
-
 @keyframes dcTreasureAppear {
   0% { opacity: 0; }
-  30% { opacity: 1; }
+  100% { opacity: 1; }
 }
 
 .dc-treasure-popup-inner {
@@ -2087,184 +2088,285 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 30px 40px;
+  padding: 36px 50px;
   animation: dcTreasureFloat 3.5s ease-in-out forwards;
 }
-
 @keyframes dcTreasureFloat {
-  0% { transform: scale(0.3); opacity: 0; }
-  15% { transform: scale(1.1); opacity: 1; }
-  25% { transform: scale(1); }
+  0% { transform: scale(0.2) translateY(20px); opacity: 0; }
+  12% { transform: scale(1.1) translateY(-5px); opacity: 1; }
+  22% { transform: scale(1); }
   75% { transform: scale(1) translateY(0); opacity: 1; }
-  100% { transform: scale(0.8) translateY(-30px); opacity: 0; }
+  100% { transform: scale(0.7) translateY(-40px); opacity: 0; }
 }
 
-.dc-treasure-popup-bg {
-  position: absolute;
-  inset: -30px;
-  width: calc(100% + 60px);
-  height: calc(100% + 60px);
-  object-fit: contain;
-  opacity: 0.3;
-  z-index: 0;
-}
-
-.dc-treasure-glow {
-  position: absolute;
-  inset: -60px;
-  background: radial-gradient(circle, rgba(255, 165, 2, 0.25) 0%, rgba(255, 165, 2, 0.05) 40%, transparent 70%);
-  border-radius: 50%;
-  z-index: 0;
-  animation: dcTreasureGlowPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes dcTreasureGlowPulse {
-  0%, 100% { transform: scale(1); opacity: 0.7; }
-  50% { transform: scale(1.15); opacity: 1; }
-}
-
-.dc-treasure-chest-wrap {
-  position: relative;
-  z-index: 2;
-  margin-bottom: 10px;
-}
-
-.dc-treasure-chest-img {
-  width: 100px;
-  height: 100px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 12px rgba(255, 165, 2, 0.6)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.7));
-  animation: dcTreasureChestBounce 0.6s ease-out;
-}
-
-@keyframes dcTreasureChestBounce {
-  0% { transform: translateY(-40px) rotate(-15deg); }
-  40% { transform: translateY(5px) rotate(3deg); }
-  60% { transform: translateY(-3px) rotate(-1deg); }
-  100% { transform: translateY(0) rotate(0deg); }
-}
-
-/* Sparkle particles */
-.dc-treasure-sparkles {
-  position: absolute;
-  inset: -30px;
-  pointer-events: none;
-}
-
-.dc-treasure-sparkle {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: #ffa502;
-  border-radius: 50%;
-  box-shadow: 0 0 8px rgba(255, 165, 2, 0.8);
-  animation: dcSparkle 1.5s ease-out infinite;
-  animation-delay: calc(var(--i) * 0.12s);
-  top: 50%;
-  left: 50%;
-}
-
-.dc-treasure-sparkle:nth-child(odd) { background: #fbbf24; width: 4px; height: 4px; }
-.dc-treasure-sparkle:nth-child(3n) { background: #fff; width: 3px; height: 3px; }
-
-@keyframes dcSparkle {
-  0% { transform: translate(0, 0) scale(0); opacity: 0; }
-  20% { opacity: 1; transform: translate(calc(cos(var(--i) * 30deg) * 40px), calc(sin(var(--i) * 30deg) * 40px)) scale(1); }
-  100% { transform: translate(calc(cos(var(--i) * 30deg) * 70px), calc(sin(var(--i) * 30deg) * 70px)) scale(0); opacity: 0; }
-}
-
-/* Fallback sparkle positions since CSS trig may not be supported */
-.dc-treasure-sparkle:nth-child(1) { animation-name: dcSparkle1; }
-.dc-treasure-sparkle:nth-child(2) { animation-name: dcSparkle2; }
-.dc-treasure-sparkle:nth-child(3) { animation-name: dcSparkle3; }
-.dc-treasure-sparkle:nth-child(4) { animation-name: dcSparkle4; }
-.dc-treasure-sparkle:nth-child(5) { animation-name: dcSparkle5; }
-.dc-treasure-sparkle:nth-child(6) { animation-name: dcSparkle6; }
-.dc-treasure-sparkle:nth-child(7) { animation-name: dcSparkle7; }
-.dc-treasure-sparkle:nth-child(8) { animation-name: dcSparkle8; }
-.dc-treasure-sparkle:nth-child(9) { animation-name: dcSparkle9; }
-.dc-treasure-sparkle:nth-child(10) { animation-name: dcSparkle10; }
-.dc-treasure-sparkle:nth-child(11) { animation-name: dcSparkle11; }
-.dc-treasure-sparkle:nth-child(12) { animation-name: dcSparkle12; }
-
-@keyframes dcSparkle1 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(40px,0) scale(1); } 100% { transform: translate(70px,0) scale(0); opacity:0; } }
-@keyframes dcSparkle2 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(35px,20px) scale(1); } 100% { transform: translate(60px,35px) scale(0); opacity:0; } }
-@keyframes dcSparkle3 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(20px,35px) scale(1); } 100% { transform: translate(35px,60px) scale(0); opacity:0; } }
-@keyframes dcSparkle4 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(0,40px) scale(1); } 100% { transform: translate(0,70px) scale(0); opacity:0; } }
-@keyframes dcSparkle5 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(-20px,35px) scale(1); } 100% { transform: translate(-35px,60px) scale(0); opacity:0; } }
-@keyframes dcSparkle6 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(-35px,20px) scale(1); } 100% { transform: translate(-60px,35px) scale(0); opacity:0; } }
-@keyframes dcSparkle7 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(-40px,0) scale(1); } 100% { transform: translate(-70px,0) scale(0); opacity:0; } }
-@keyframes dcSparkle8 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(-35px,-20px) scale(1); } 100% { transform: translate(-60px,-35px) scale(0); opacity:0; } }
-@keyframes dcSparkle9 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(-20px,-35px) scale(1); } 100% { transform: translate(-35px,-60px) scale(0); opacity:0; } }
-@keyframes dcSparkle10 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(0,-40px) scale(1); } 100% { transform: translate(0,-70px) scale(0); opacity:0; } }
-@keyframes dcSparkle11 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(20px,-35px) scale(1); } 100% { transform: translate(35px,-60px) scale(0); opacity:0; } }
-@keyframes dcSparkle12 { 0% { transform: translate(0,0) scale(0); opacity:0; } 20% { opacity:1; transform: translate(35px,-20px) scale(1); } 100% { transform: translate(60px,-35px) scale(0); opacity:0; } }
-
-.dc-treasure-title {
-  position: relative;
-  z-index: 2;
-  font-size: 1.4rem;
-  font-weight: 900;
-  color: #ffa502;
-  text-shadow: 0 0 15px rgba(255, 165, 2, 0.6), 0 2px 8px rgba(0, 0, 0, 0.9);
-  letter-spacing: 3px;
-  margin-bottom: 6px;
-}
-
-.dc-treasure-gold {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.dc-treasure-gold-icon {
-  font-size: 1.3rem;
-  filter: drop-shadow(0 0 6px rgba(255, 165, 2, 0.5));
-}
-
-.dc-treasure-gold-amount {
-  font-size: 1.5rem;
-  font-weight: 900;
-  color: #fbbf24;
-  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5), 0 2px 6px rgba(0, 0, 0, 0.8);
-  animation: dcGoldCount 0.6s ease-out;
-}
-
-@keyframes dcGoldCount {
-  0% { transform: scale(0); }
-  50% { transform: scale(1.3); }
-  100% { transform: scale(1); }
-}
-
+/* 회전 광선 */
 .dc-treasure-rays {
   position: absolute;
-  inset: -80px;
+  width: 300px; height: 300px;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 0;
   background: conic-gradient(
     from 0deg,
-    transparent 0deg, rgba(255, 165, 2, 0.05) 10deg, transparent 20deg,
-    transparent 30deg, rgba(255, 165, 2, 0.04) 40deg, transparent 50deg,
-    transparent 60deg, rgba(255, 165, 2, 0.05) 70deg, transparent 80deg,
-    transparent 90deg, rgba(255, 165, 2, 0.04) 100deg, transparent 110deg,
-    transparent 120deg, rgba(255, 165, 2, 0.05) 130deg, transparent 140deg,
-    transparent 150deg, rgba(255, 165, 2, 0.04) 160deg, transparent 170deg,
-    transparent 180deg, rgba(255, 165, 2, 0.05) 190deg, transparent 200deg,
-    transparent 210deg, rgba(255, 165, 2, 0.04) 220deg, transparent 230deg,
-    transparent 240deg, rgba(255, 165, 2, 0.05) 250deg, transparent 260deg,
-    transparent 270deg, rgba(255, 165, 2, 0.04) 280deg, transparent 290deg,
-    transparent 300deg, rgba(255, 165, 2, 0.05) 310deg, transparent 320deg,
-    transparent 330deg, rgba(255, 165, 2, 0.04) 340deg, transparent 350deg,
+    transparent 0deg, rgba(255,200,50,0.08) 8deg, transparent 16deg,
+    transparent 22.5deg, rgba(255,200,50,0.06) 30deg, transparent 38deg,
+    transparent 45deg, rgba(255,200,50,0.08) 53deg, transparent 61deg,
+    transparent 67.5deg, rgba(255,200,50,0.06) 75deg, transparent 83deg,
+    transparent 90deg, rgba(255,200,50,0.08) 98deg, transparent 106deg,
+    transparent 112.5deg, rgba(255,200,50,0.06) 120deg, transparent 128deg,
+    transparent 135deg, rgba(255,200,50,0.08) 143deg, transparent 151deg,
+    transparent 157.5deg, rgba(255,200,50,0.06) 165deg, transparent 173deg,
+    transparent 180deg, rgba(255,200,50,0.08) 188deg, transparent 196deg,
+    transparent 202.5deg, rgba(255,200,50,0.06) 210deg, transparent 218deg,
+    transparent 225deg, rgba(255,200,50,0.08) 233deg, transparent 241deg,
+    transparent 247.5deg, rgba(255,200,50,0.06) 255deg, transparent 263deg,
+    transparent 270deg, rgba(255,200,50,0.08) 278deg, transparent 286deg,
+    transparent 292.5deg, rgba(255,200,50,0.06) 300deg, transparent 308deg,
+    transparent 315deg, rgba(255,200,50,0.08) 323deg, transparent 331deg,
+    transparent 337.5deg, rgba(255,200,50,0.06) 345deg, transparent 353deg,
     transparent 360deg
   );
-  animation: dcTreasureRaySpin 10s linear infinite;
   border-radius: 50%;
+  animation: dcTreasureRaySpin 8s linear infinite;
+}
+@keyframes dcTreasureRaySpin {
+  from { transform: translate(-50%,-50%) rotate(0deg); }
+  to { transform: translate(-50%,-50%) rotate(360deg); }
 }
 
-@keyframes dcTreasureRaySpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* 글로우 */
+.dc-treasure-glow {
+  position: absolute;
+  width: 200px; height: 200px;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -55%);
+  background: radial-gradient(circle, rgba(255,180,50,0.35) 0%, rgba(255,165,2,0.1) 40%, transparent 70%);
+  border-radius: 50%;
+  z-index: 0;
+  animation: dcTreasureGlowPulse 1.2s ease-in-out infinite;
+}
+@keyframes dcTreasureGlowPulse {
+  0%, 100% { transform: translate(-50%,-55%) scale(1); opacity: 0.7; }
+  50% { transform: translate(-50%,-55%) scale(1.2); opacity: 1; }
+}
+
+/* 보물상자 래퍼 */
+.dc-treasure-chest-wrap {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 12px;
+  width: 120px; height: 120px;
+}
+
+/* 이미지 보물상자 */
+.dc-treasure-chest-img {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 16px rgba(255,180,50,0.7)) drop-shadow(0 6px 16px rgba(0,0,0,0.8));
+  animation: dcTreasureChestBounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes dcTreasureChestBounce {
+  0% { transform: translateY(-50px) scale(0.3) rotate(-20deg); opacity: 0; }
+  50% { transform: translateY(8px) scale(1.05) rotate(3deg); opacity: 1; }
+  70% { transform: translateY(-4px) scale(0.98) rotate(-1deg); }
+  100% { transform: translateY(0) scale(1) rotate(0deg); }
+}
+
+/* CSS 폴백 보물상자 (이미지 로드 실패 시) */
+.dc-treasure-chest-css {
+  width: 100px; height: 80px;
+  position: relative;
+  margin: 10px auto;
+  animation: dcTreasureChestBounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.dc-css-chest-body {
+  position: absolute;
+  bottom: 0; left: 5px;
+  width: 90px; height: 45px;
+  background: linear-gradient(180deg, #b8860b 0%, #8b6914 30%, #6b4f10 100%);
+  border-radius: 4px 4px 6px 6px;
+  border: 2px solid #d4a017;
+  box-shadow: inset 0 -4px 8px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.6);
+}
+.dc-css-chest-body::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px; height: 16px;
+  background: linear-gradient(180deg, #ffd700, #b8860b);
+  border-radius: 3px;
+  border: 1px solid #d4a017;
+  box-shadow: 0 0 8px rgba(255,215,0,0.6);
+}
+.dc-css-chest-lid {
+  position: absolute;
+  bottom: 40px; left: 0;
+  width: 100px; height: 35px;
+  background: linear-gradient(180deg, #d4a017 0%, #b8860b 40%, #8b6914 100%);
+  border-radius: 12px 12px 3px 3px;
+  border: 2px solid #d4a017;
+  transform-origin: bottom center;
+  animation: dcCssLidOpen 0.6s 0.3s ease-out forwards;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.3);
+}
+@keyframes dcCssLidOpen {
+  0% { transform: rotateX(0deg); }
+  100% { transform: rotateX(-110deg) translateY(-5px); }
+}
+.dc-css-chest-glow-inner {
+  position: absolute;
+  bottom: 30px; left: 15px;
+  width: 70px; height: 30px;
+  background: radial-gradient(ellipse, rgba(255,215,0,0.8) 0%, rgba(255,165,2,0.3) 60%, transparent 100%);
+  border-radius: 50%;
+  opacity: 0;
+  animation: dcCssGlowAppear 0.4s 0.6s ease-out forwards;
+}
+@keyframes dcCssGlowAppear {
+  0% { opacity: 0; transform: scaleY(0.3); }
+  100% { opacity: 1; transform: scaleY(1); }
+}
+
+/* 스파클 파티클 (16개) */
+.dc-treasure-sparkles {
+  position: absolute;
+  inset: -40px;
+  pointer-events: none;
+}
+.dc-treasure-sparkle {
+  position: absolute;
+  width: 5px; height: 5px;
+  background: #ffd700;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255,215,0,0.9);
+  top: 50%; left: 50%;
+  opacity: 0;
+  animation: dcSparkleOut 1.8s ease-out infinite;
+  animation-delay: calc(var(--i) * 0.1s);
+}
+.dc-treasure-sparkle:nth-child(odd) { background: #fff; width: 3px; height: 3px; box-shadow: 0 0 4px #fff; }
+.dc-treasure-sparkle:nth-child(3n) { background: #fbbf24; width: 4px; height: 4px; }
+.dc-treasure-sparkle:nth-child(1)  { animation-name: dcSp0; }
+.dc-treasure-sparkle:nth-child(2)  { animation-name: dcSp1; }
+.dc-treasure-sparkle:nth-child(3)  { animation-name: dcSp2; }
+.dc-treasure-sparkle:nth-child(4)  { animation-name: dcSp3; }
+.dc-treasure-sparkle:nth-child(5)  { animation-name: dcSp4; }
+.dc-treasure-sparkle:nth-child(6)  { animation-name: dcSp5; }
+.dc-treasure-sparkle:nth-child(7)  { animation-name: dcSp6; }
+.dc-treasure-sparkle:nth-child(8)  { animation-name: dcSp7; }
+.dc-treasure-sparkle:nth-child(9)  { animation-name: dcSp8; }
+.dc-treasure-sparkle:nth-child(10) { animation-name: dcSp9; }
+.dc-treasure-sparkle:nth-child(11) { animation-name: dcSp10; }
+.dc-treasure-sparkle:nth-child(12) { animation-name: dcSp11; }
+.dc-treasure-sparkle:nth-child(13) { animation-name: dcSp12; }
+.dc-treasure-sparkle:nth-child(14) { animation-name: dcSp13; }
+.dc-treasure-sparkle:nth-child(15) { animation-name: dcSp14; }
+.dc-treasure-sparkle:nth-child(16) { animation-name: dcSp15; }
+@keyframes dcSp0  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(50px,0)scale(1)}100%{transform:translate(80px,0)scale(0);opacity:0} }
+@keyframes dcSp1  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(46px,19px)scale(1)}100%{transform:translate(74px,30px)scale(0);opacity:0} }
+@keyframes dcSp2  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(35px,35px)scale(1)}100%{transform:translate(57px,57px)scale(0);opacity:0} }
+@keyframes dcSp3  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(19px,46px)scale(1)}100%{transform:translate(30px,74px)scale(0);opacity:0} }
+@keyframes dcSp4  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(0,50px)scale(1)}100%{transform:translate(0,80px)scale(0);opacity:0} }
+@keyframes dcSp5  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(-19px,46px)scale(1)}100%{transform:translate(-30px,74px)scale(0);opacity:0} }
+@keyframes dcSp6  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(-35px,35px)scale(1)}100%{transform:translate(-57px,57px)scale(0);opacity:0} }
+@keyframes dcSp7  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(-46px,19px)scale(1)}100%{transform:translate(-74px,30px)scale(0);opacity:0} }
+@keyframes dcSp8  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(-50px,0)scale(1)}100%{transform:translate(-80px,0)scale(0);opacity:0} }
+@keyframes dcSp9  { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(-46px,-19px)scale(1)}100%{transform:translate(-74px,-30px)scale(0);opacity:0} }
+@keyframes dcSp10 { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(-35px,-35px)scale(1)}100%{transform:translate(-57px,-57px)scale(0);opacity:0} }
+@keyframes dcSp11 { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(-19px,-46px)scale(1)}100%{transform:translate(-30px,-74px)scale(0);opacity:0} }
+@keyframes dcSp12 { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(0,-50px)scale(1)}100%{transform:translate(0,-80px)scale(0);opacity:0} }
+@keyframes dcSp13 { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(19px,-46px)scale(1)}100%{transform:translate(30px,-74px)scale(0);opacity:0} }
+@keyframes dcSp14 { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(35px,-35px)scale(1)}100%{transform:translate(57px,-57px)scale(0);opacity:0} }
+@keyframes dcSp15 { 0%{transform:translate(0,0)scale(0);opacity:0}15%{opacity:1;transform:translate(46px,-19px)scale(1)}100%{transform:translate(74px,-30px)scale(0);opacity:0} }
+
+/* 튀어오르는 코인 이펙트 */
+.dc-treasure-coins {
+  position: absolute;
+  inset: -20px;
+  pointer-events: none;
+}
+.dc-treasure-coin {
+  position: absolute;
+  width: 12px; height: 12px;
+  background: radial-gradient(circle at 35% 35%, #ffd700, #b8860b);
+  border-radius: 50%;
+  border: 1px solid #d4a017;
+  top: 40%; left: 50%;
+  opacity: 0;
+  animation: dcCoinBurst 1.2s ease-out forwards;
+  animation-delay: calc(0.2s + var(--ci) * 0.06s);
+  box-shadow: 0 0 4px rgba(255,215,0,0.6);
+}
+.dc-treasure-coin:nth-child(odd) { width: 10px; height: 10px; }
+.dc-treasure-coin:nth-child(1) { animation-name: dcCoin0; }
+.dc-treasure-coin:nth-child(2) { animation-name: dcCoin1; }
+.dc-treasure-coin:nth-child(3) { animation-name: dcCoin2; }
+.dc-treasure-coin:nth-child(4) { animation-name: dcCoin3; }
+.dc-treasure-coin:nth-child(5) { animation-name: dcCoin4; }
+.dc-treasure-coin:nth-child(6) { animation-name: dcCoin5; }
+.dc-treasure-coin:nth-child(7) { animation-name: dcCoin6; }
+.dc-treasure-coin:nth-child(8) { animation-name: dcCoin7; }
+@keyframes dcCoin0 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(-25px,-50px)scale(1)rotate(90deg)}80%{opacity:1}100%{transform:translate(-30px,20px)scale(0.5)rotate(270deg);opacity:0} }
+@keyframes dcCoin1 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(20px,-60px)scale(1)rotate(-60deg)}80%{opacity:1}100%{transform:translate(25px,15px)scale(0.5)rotate(-200deg);opacity:0} }
+@keyframes dcCoin2 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(-40px,-35px)scale(1)rotate(120deg)}80%{opacity:1}100%{transform:translate(-45px,25px)scale(0.5)rotate(300deg);opacity:0} }
+@keyframes dcCoin3 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(35px,-45px)scale(1)rotate(-90deg)}80%{opacity:1}100%{transform:translate(40px,18px)scale(0.5)rotate(-250deg);opacity:0} }
+@keyframes dcCoin4 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(-10px,-55px)scale(1)rotate(45deg)}80%{opacity:1}100%{transform:translate(-12px,22px)scale(0.5)rotate(180deg);opacity:0} }
+@keyframes dcCoin5 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(10px,-40px)scale(1)rotate(-120deg)}80%{opacity:1}100%{transform:translate(15px,20px)scale(0.5)rotate(-300deg);opacity:0} }
+@keyframes dcCoin6 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(-35px,-55px)scale(1)rotate(80deg)}80%{opacity:1}100%{transform:translate(-38px,15px)scale(0.5)rotate(240deg);opacity:0} }
+@keyframes dcCoin7 { 0%{transform:translate(0,0)scale(0);opacity:0}20%{opacity:1;transform:translate(30px,-35px)scale(1)rotate(-40deg)}80%{opacity:1}100%{transform:translate(35px,25px)scale(0.5)rotate(-180deg);opacity:0} }
+
+/* 타이틀 텍스트 */
+.dc-treasure-title {
+  position: relative;
+  z-index: 3;
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffd700;
+  text-shadow: 0 0 20px rgba(255,215,0,0.6), 0 0 40px rgba(255,165,2,0.3), 0 2px 8px rgba(0,0,0,0.9);
+  letter-spacing: 4px;
+  margin-bottom: 8px;
+  animation: dcTreasureTitlePop 0.5s 0.2s ease-out backwards;
+}
+@keyframes dcTreasureTitlePop {
+  0% { transform: scale(0) translateY(10px); opacity: 0; }
+  60% { transform: scale(1.15) translateY(-2px); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* 골드 표시 */
+.dc-treasure-gold {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0,0,0,0.4);
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,215,0,0.3);
+  animation: dcTreasureGoldSlide 0.4s 0.35s ease-out backwards;
+}
+@keyframes dcTreasureGoldSlide {
+  0% { transform: translateY(15px) scale(0.5); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.dc-treasure-gold-coin-img {
+  width: 22px; height: 22px;
+  filter: drop-shadow(0 0 4px rgba(255,215,0,0.6));
+}
+.dc-treasure-gold-amount {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: #ffd700;
+  text-shadow: 0 0 12px rgba(255,215,0,0.5), 0 2px 6px rgba(0,0,0,0.8);
+  animation: dcGoldCount 0.5s 0.4s ease-out backwards;
+}
+@keyframes dcGoldCount {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.3); }
+  100% { transform: scale(1); }
 }
 
 /* ===== 귀환 확인 팝업 ===== */

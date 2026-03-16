@@ -506,6 +506,10 @@ router.post('/:summonId/equip', auth, async (req, res) => {
     if (invRows.length === 0) return res.status(400).json({ message: '보유하지 않은 아이템입니다.' });
     const ownedCount = invRows.reduce((s, r) => s + (r.quantity || 1), 0);
 
+    // 레벨 제한
+    if (item.required_level && summon.level < item.required_level) {
+      return res.status(400).json({ message: `소환수 레벨이 부족합니다. (필요: Lv.${item.required_level}, 현재: Lv.${summon.level})` });
+    }
     // 슬롯 유효성
     if (item.slot !== slot) {
       return res.status(400).json({ message: '해당 슬롯에 장착할 수 없는 아이템입니다.' });

@@ -136,6 +136,13 @@ async function initialize() {
   await pool.query(`ALTER TABLE items MODIFY COLUMN type ENUM('weapon', 'armor', 'potion', 'helmet', 'chest', 'boots', 'ring', 'necklace', 'shield') NOT NULL`).catch(() => {});
   await pool.query(`ALTER TABLE items ADD COLUMN slot VARCHAR(20) DEFAULT NULL`).catch(() => {});
   await pool.query(`ALTER TABLE items ADD COLUMN weapon_hand ENUM('1h', '2h') DEFAULT NULL`).catch(() => {});
+  // 세부 스탯 컬럼 추가
+  await pool.query("ALTER TABLE items ADD COLUMN effect_phys_attack INT DEFAULT 0").catch(() => {});
+  await pool.query("ALTER TABLE items ADD COLUMN effect_phys_defense INT DEFAULT 0").catch(() => {});
+  await pool.query("ALTER TABLE items ADD COLUMN effect_mag_attack INT DEFAULT 0").catch(() => {});
+  await pool.query("ALTER TABLE items ADD COLUMN effect_mag_defense INT DEFAULT 0").catch(() => {});
+  await pool.query("ALTER TABLE items ADD COLUMN effect_crit_rate INT DEFAULT 0").catch(() => {});
+  await pool.query("ALTER TABLE items ADD COLUMN effect_evasion INT DEFAULT 0").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS inventory (
@@ -385,7 +392,14 @@ async function initialize() {
     ('소재 장인', '재료를 총 200개 수집하세요.', 'achievement', 'collect_material', 'any', 200, 1000, 800, NULL, 0, 1, NULL, 0, 31, '⚗️'),
     ('소재 대가', '재료를 총 500개 수집하세요.', 'achievement', 'collect_material', 'any', 500, 3000, 2000, NULL, 0, 1, NULL, 0, 32, '🔮')
   `);
-  } // end if (!questsExist)
+  } // end if (items count === 0) — covers items + quests seed
+
+  // 기존 DB 중복 퀘스트 정리 (가장 작은 id만 남기고 나머지 삭제)
+  await pool.query(`
+    DELETE q1 FROM quests q1
+    INNER JOIN quests q2
+    WHERE q1.id > q2.id AND q1.title = q2.title AND q1.category = q2.category
+  `).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS character_quests (
@@ -6247,6 +6261,188 @@ async function initialize() {
   await pool.query("UPDATE items SET effect_phys_attack=12, effect_mag_attack=3, effect_crit_rate=3 WHERE name='혈혼의 낫'").catch(() => {});
   await pool.query("UPDATE items SET effect_phys_attack=28, effect_mag_attack=8, effect_crit_rate=5 WHERE name='영혼 수확자'").catch(() => {});
   await pool.query("UPDATE items SET effect_phys_attack=52, effect_mag_attack=15, effect_crit_rate=8 WHERE name='사신의 대낫'").catch(() => {});
+
+  // 기존 effect_attack/effect_defense → 세부 스탯 자동 마이그레이션
+  // (effect_phys_attack 등이 모두 0인 무기/방어구에 대해 effect_attack→phys_attack 매핑)
+  await pool.query(`
+    UPDATE items SET
+      effect_phys_attack = effect_attack,
+      effect_mag_attack = 0
+    WHERE type = 'weapon' AND weapon_hand = '1h'
+      AND effect_phys_attack = 0 AND effect_mag_attack = 0
+      AND effect_attack > 0 AND class_restriction IS NULL
+  `).catch(() => {});
+  await pool.query(`
+    UPDATE items SET
+      effect_phys_attack = effect_attack,
+      effect_mag_attack = 0
+    WHERE type = 'weapon' AND weapon_hand = '2h'
+      AND effect_phys_attack = 0 AND effect_mag_attack = 0
+      AND effect_attack > 0 AND class_restriction IS NULL
+  `).catch(() => {});
+  // 클래스 무기: 풍수사/저승사자 → 마공 위주, 무당 → 마공+물공, 승려 → 물공 위주
+  await pool.query(`
+    UPDATE items SET
+      effect_mag_attack = effect_attack,
+      effect_phys_attack = FLOOR(effect_attack * 0.2)
+    WHERE type = 'weapon' AND effect_phys_attack = 0 AND effect_mag_attack = 0
+      AND effect_attack > 0 AND class_restriction = '풍수사'
+  `).catch(() => {});
+  await pool.query(`
+    UPDATE items SET
+      effect_mag_attack = FLOOR(effect_attack * 0.6),
+      effect_phys_attack = FLOOR(effect_attack * 0.5)
+    WHERE type = 'weapon' AND effect_phys_attack = 0 AND effect_mag_attack = 0
+      AND effect_attack > 0 AND class_restriction = '무당'
+  `).catch(() => {});
+  await pool.query(`
+    UPDATE items SET
+      effect_phys_attack = effect_attack,
+      effect_mag_attack = FLOOR(effect_attack * 0.3)
+    WHERE type = 'weapon' AND effect_phys_attack = 0 AND effect_mag_attack = 0
+      AND effect_attack > 0 AND class_restriction = '승려'
+  `).catch(() => {});
+  await pool.query(`
+    UPDATE items SET
+      effect_mag_attack = FLOOR(effect_attack * 0.8),
+      effect_phys_attack = FLOOR(effect_attack * 0.4)
+    WHERE type = 'weapon' AND effect_phys_attack = 0 AND effect_mag_attack = 0
+      AND effect_attack > 0 AND class_restriction = '저승사자'
+  `).catch(() => {});
+  // 방어구: effect_defense → phys_defense 위주, mag_defense 일부
+  await pool.query(`
+    UPDATE items SET
+      effect_phys_defense = effect_defense,
+      effect_mag_defense = FLOOR(effect_defense * 0.5)
+    WHERE type IN ('chest','helmet','boots','shield')
+      AND effect_phys_defense = 0 AND effect_mag_defense = 0
+      AND effect_defense > 0
+  `).catch(() => {});
+  // 액세서리: defense → mag_defense 위주
+  await pool.query(`
+    UPDATE items SET
+      effect_mag_defense = effect_defense,
+      effect_phys_defense = FLOOR(effect_defense * 0.3)
+    WHERE type IN ('ring','necklace')
+      AND effect_phys_defense = 0 AND effect_mag_defense = 0
+      AND effect_defense > 0
+  `).catch(() => {});
+
+  // ===== 마법사 계열 공용 무기(지팡이) & 로브 방어구 추가 =====
+  const mageItems = [
+    // 지팡이 (마공 위주 공용 무기)
+    "('견습 지팡이', 'weapon', 'weapon', '2h', '마력이 약하게 깃든 지팡이.', 60, 30, 0, 8, 0, 0, 1, NULL)",
+    "('마력 지팡이', 'weapon', 'weapon', '2h', '마력이 응축된 지팡이.', 250, 125, 0, 18, 0, 0, 3, NULL)",
+    "('영목 지팡이', 'weapon', 'weapon', '2h', '영목으로 만든 지팡이.', 700, 350, 0, 35, 0, 0, 6, NULL)",
+    "('청동 마장', 'weapon', 'weapon', '2h', '청동에 마력을 새긴 지팡이.', 1300, 650, 0, 45, 0, 0, 7, NULL)",
+    "('백은 마장', 'weapon', 'weapon', '2h', '백은에 룬이 새겨진 지팡이.', 2700, 1350, 0, 55, 0, 0, 10, NULL)",
+    "('황금 마장', 'weapon', 'weapon', '2h', '황금빛 마력이 흐르는 지팡이.', 3800, 1900, 0, 68, 0, 0, 15, NULL)",
+    "('월영 지팡이', 'weapon', 'weapon', '2h', '달의 그림자가 깃든 지팡이.', 2200, 1100, 0, 60, 0, 0, 20, NULL)",
+    "('뇌전 마장', 'weapon', 'weapon', '2h', '번개 마력이 깃든 지팡이.', 3800, 1900, 0, 70, 0, 0, 28, NULL)",
+    "('청룡 마장', 'weapon', 'weapon', '2h', '청룡의 마력이 깃든 지팡이.', 6500, 3250, 0, 85, 0, 0, 38, NULL)",
+    "('봉황 마장', 'weapon', 'weapon', '2h', '봉황의 불꽃이 타오르는 지팡이.', 10000, 5000, 0, 100, 0, 0, 50, NULL)",
+    "('기린 마장', 'weapon', 'weapon', '2h', '기린의 뿔로 만든 지팡이.', 20000, 10000, 0, 120, 0, 0, 65, NULL)",
+    "('이무기 마장', 'weapon', 'weapon', '2h', '이무기의 여의주가 박힌 지팡이.', 35000, 17500, 0, 140, 0, 0, 80, NULL)",
+    "('천제 마장', 'weapon', 'weapon', '2h', '하늘의 마력이 깃든 궁극의 지팡이.', 50000, 25000, 0, 165, 0, 0, 95, NULL)",
+
+    // 로브 (마방 위주 방어구)
+    "('견습 로브', 'chest', 'chest', NULL, '마력이 약하게 깃든 로브.', 70, 35, 5, 10, 0, 0, 1, NULL)",
+    "('마력 로브', 'chest', 'chest', NULL, '마력으로 짜인 로브.', 280, 140, 15, 20, 0, 0, 3, NULL)",
+    "('영사 로브', 'chest', 'chest', NULL, '영사의 기운이 깃든 로브.', 600, 300, 25, 30, 0, 0, 6, NULL)",
+    "('청동 문양 로브', 'chest', 'chest', NULL, '청동 문양이 새겨진 로브.', 900, 450, 30, 40, 0, 0, 7, NULL)",
+    "('백은 문양 로브', 'chest', 'chest', NULL, '백은 실로 수놓은 로브.', 2200, 1100, 40, 50, 0, 0, 10, NULL)",
+    "('황금 문양 로브', 'chest', 'chest', NULL, '황금 룬이 새겨진 로브.', 3000, 1500, 50, 60, 0, 0, 15, NULL)",
+    "('비룡 로브', 'chest', 'chest', NULL, '비룡의 비늘로 짠 로브.', 1800, 900, 45, 55, 0, 0, 20, NULL)",
+    "('백호 로브', 'chest', 'chest', NULL, '백호의 기운이 깃든 로브.', 3000, 1500, 55, 65, 0, 0, 28, NULL)",
+    "('현무 로브', 'chest', 'chest', NULL, '현무의 마력이 깃든 로브.', 5000, 2500, 65, 80, 0, 0, 38, NULL)",
+    "('봉황 로브', 'chest', 'chest', NULL, '봉황의 깃털로 짠 로브.', 8000, 4000, 80, 95, 0, 0, 50, NULL)",
+    "('기린 로브', 'chest', 'chest', NULL, '기린의 영기가 깃든 로브.', 16000, 8000, 100, 115, 0, 0, 65, NULL)",
+    "('이무기 로브', 'chest', 'chest', NULL, '이무기의 비늘 로브.', 28000, 14000, 130, 135, 0, 0, 80, NULL)",
+    "('천제 로브', 'chest', 'chest', NULL, '하늘의 기운이 깃든 궁극의 로브.', 40000, 20000, 160, 160, 0, 0, 95, NULL)",
+
+    // 마법 모자 (마방 위주 헬멧)
+    "('견습 두건', 'helmet', 'helmet', NULL, '마력이 깃든 두건.', 40, 20, 3, 5, 0, 0, 1, NULL)",
+    "('마력 두건', 'helmet', 'helmet', NULL, '마력으로 짜인 두건.', 180, 90, 10, 12, 0, 0, 3, NULL)",
+    "('영사 관모', 'helmet', 'helmet', NULL, '영사의 관모.', 400, 200, 15, 18, 0, 0, 6, NULL)",
+    "('청동 관모', 'helmet', 'helmet', NULL, '청동 문양이 새겨진 관모.', 600, 300, 18, 25, 0, 0, 7, NULL)",
+    "('백은 관모', 'helmet', 'helmet', NULL, '백은 장식 관모.', 1400, 700, 22, 30, 0, 0, 10, NULL)",
+    "('황금 관모', 'helmet', 'helmet', NULL, '황금 룬이 새겨진 관모.', 2000, 1000, 28, 38, 0, 0, 15, NULL)",
+    "('비룡 관모', 'helmet', 'helmet', NULL, '비룡 뿔 장식 관모.', 1200, 600, 25, 35, 0, 0, 20, NULL)",
+    "('백호 관모', 'helmet', 'helmet', NULL, '백호의 기운이 깃든 관모.', 2000, 1000, 30, 42, 0, 0, 28, NULL)",
+    "('현무 관모', 'helmet', 'helmet', NULL, '현무의 마력 관모.', 3500, 1750, 38, 50, 0, 0, 38, NULL)",
+    "('봉황 관모', 'helmet', 'helmet', NULL, '봉황 깃털 관모.', 5500, 2750, 45, 60, 0, 0, 50, NULL)",
+    "('기린 관모', 'helmet', 'helmet', NULL, '기린의 뿔 관모.', 10000, 5000, 55, 72, 0, 0, 65, NULL)",
+    "('이무기 관모', 'helmet', 'helmet', NULL, '이무기 비늘 관모.', 18000, 9000, 70, 85, 0, 0, 80, NULL)",
+    "('천제 관모', 'helmet', 'helmet', NULL, '천제의 왕관.', 28000, 14000, 85, 100, 0, 0, 95, NULL)",
+  ];
+  for (const v of mageItems) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+  // 마법 아이템 세부 스탯 설정 (지팡이: 마공, 로브/관모: 마방)
+  const mageStatUpdates = [
+    // 지팡이 → 마공 위주
+    ["견습 지팡이", { effect_mag_attack: 6, effect_phys_attack: 1 }],
+    ["마력 지팡이", { effect_mag_attack: 13, effect_phys_attack: 2 }],
+    ["영목 지팡이", { effect_mag_attack: 22, effect_phys_attack: 3 }],
+    ["청동 마장", { effect_mag_attack: 25, effect_phys_attack: 3 }],
+    ["백은 마장", { effect_mag_attack: 30, effect_phys_attack: 4 }],
+    ["황금 마장", { effect_mag_attack: 38, effect_phys_attack: 5 }],
+    ["월영 지팡이", { effect_mag_attack: 32, effect_phys_attack: 4 }],
+    ["뇌전 마장", { effect_mag_attack: 40, effect_phys_attack: 5 }],
+    ["청룡 마장", { effect_mag_attack: 52, effect_phys_attack: 6 }],
+    ["봉황 마장", { effect_mag_attack: 65, effect_phys_attack: 8 }],
+    ["기린 마장", { effect_mag_attack: 80, effect_phys_attack: 10 }],
+    ["이무기 마장", { effect_mag_attack: 98, effect_phys_attack: 12 }],
+    ["천제 마장", { effect_mag_attack: 120, effect_phys_attack: 15 }],
+    // 로브 → 마방 위주
+    ["견습 로브", { effect_mag_defense: 4, effect_phys_defense: 1 }],
+    ["마력 로브", { effect_mag_defense: 8, effect_phys_defense: 2 }],
+    ["영사 로브", { effect_mag_defense: 12, effect_phys_defense: 4 }],
+    ["청동 문양 로브", { effect_mag_defense: 15, effect_phys_defense: 5 }],
+    ["백은 문양 로브", { effect_mag_defense: 20, effect_phys_defense: 7 }],
+    ["황금 문양 로브", { effect_mag_defense: 25, effect_phys_defense: 10 }],
+    ["비룡 로브", { effect_mag_defense: 22, effect_phys_defense: 8 }],
+    ["백호 로브", { effect_mag_defense: 28, effect_phys_defense: 12 }],
+    ["현무 로브", { effect_mag_defense: 35, effect_phys_defense: 15 }],
+    ["봉황 로브", { effect_mag_defense: 45, effect_phys_defense: 20 }],
+    ["기린 로브", { effect_mag_defense: 55, effect_phys_defense: 25 }],
+    ["이무기 로브", { effect_mag_defense: 68, effect_phys_defense: 30 }],
+    ["천제 로브", { effect_mag_defense: 80, effect_phys_defense: 38 }],
+    // 관모 → 마방 위주
+    ["견습 두건", { effect_mag_defense: 3, effect_phys_defense: 1 }],
+    ["마력 두건", { effect_mag_defense: 5, effect_phys_defense: 2 }],
+    ["영사 관모", { effect_mag_defense: 8, effect_phys_defense: 3 }],
+    ["청동 관모", { effect_mag_defense: 10, effect_phys_defense: 4 }],
+    ["백은 관모", { effect_mag_defense: 14, effect_phys_defense: 5 }],
+    ["황금 관모", { effect_mag_defense: 18, effect_phys_defense: 7 }],
+    ["비룡 관모", { effect_mag_defense: 15, effect_phys_defense: 6 }],
+    ["백호 관모", { effect_mag_defense: 20, effect_phys_defense: 8 }],
+    ["현무 관모", { effect_mag_defense: 25, effect_phys_defense: 10 }],
+    ["봉황 관모", { effect_mag_defense: 32, effect_phys_defense: 13 }],
+    ["기린 관모", { effect_mag_defense: 40, effect_phys_defense: 16 }],
+    ["이무기 관모", { effect_mag_defense: 50, effect_phys_defense: 20 }],
+    ["천제 관모", { effect_mag_defense: 60, effect_phys_defense: 25 }],
+  ];
+  for (const [name, stats] of mageStatUpdates) {
+    const sets = Object.entries(stats).map(([k, v]) => `${k}=${v}`).join(', ');
+    await pool.query(`UPDATE items SET ${sets} WHERE name = ?`, [name]).catch(() => {});
+  }
+  // 마법 아이템 등급 설정
+  const mageGrades = {
+    '고급': ['청동 마장','청동 문양 로브','청동 관모','월영 지팡이','비룡 로브','비룡 관모',
+             '뇌전 마장','백호 로브','백호 관모'],
+    '희귀': ['백은 마장','백은 문양 로브','백은 관모','현무 로브','현무 관모','청룡 마장'],
+    '영웅': ['황금 마장','황금 문양 로브','황금 관모','봉황 마장','봉황 로브','봉황 관모'],
+    '전설': ['기린 마장','기린 로브','기린 관모'],
+    '신화': ['이무기 마장','이무기 로브','이무기 관모'],
+    '초월': ['천제 마장','천제 로브','천제 관모'],
+  };
+  for (const [grade, names] of Object.entries(mageGrades)) {
+    const maxEnh = grade === '초월' ? 25 : grade === '신화' ? 20 : grade === '전설' ? 15 : grade === '영웅' ? 12 : 10;
+    for (const nm of names) {
+      await pool.query("UPDATE items SET grade = ?, max_enhance = ? WHERE name = ?", [grade, maxEnh, nm]).catch(() => {});
+    }
+  }
 
   // -- 스태미나 공식 개선: 기본 15, Lv당 1/3 증가 --
   // (calcMaxStamina 함수에서 처리 - 코드 변경 필요)

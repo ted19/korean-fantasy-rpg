@@ -527,7 +527,7 @@ router.post('/battle-result', auth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const { monstersDefeated, expGained, goldGained, victory, activeSummonIds, activeMercenaryIds, summonExpMap, mercExpMap, playerHp, playerMp } = req.body;
+    const { monstersDefeated, expGained, goldGained, victory, activeSummonIds, activeMercenaryIds, summonExpMap, mercExpMap, playerHp, playerMp, dungeonKey } = req.body;
 
     const [chars] = await conn.query(
       req.selectedCharId
@@ -783,6 +783,18 @@ router.post('/battle-result', auth, async (req, res) => {
              AND q.type = 'hunt_location' AND q.target = 'any'`,
           [monstersDefeated.length, char.id]
         );
+        // hunt_location 특정 위치 (메인 퀘스트 등) - dungeonKey 또는 groupKey 기반
+        const location = dungeonKey || req.body.groupKey;
+        if (location) {
+          await conn.query(
+            `UPDATE character_quests cq
+             JOIN quests q ON cq.quest_id = q.id
+             SET cq.progress = cq.progress + ?
+             WHERE cq.character_id = ? AND cq.status = 'active'
+               AND q.type = 'hunt_location' AND q.target = ?`,
+            [monstersDefeated.length, char.id, location]
+          );
+        }
       }
 
       // collect_material 'any' (일일/업적)
