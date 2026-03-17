@@ -102,7 +102,7 @@ export function getTerrainEffect(tileType) {
   }
   // tileKey 매칭 (타워맵 테마 타일: cave_floor, goblin_grass 등)
   if (tileType && tileType.includes('_')) {
-    const suffix = tileType.split('_').pop();
+    const suffix = tileType.split('_').pop(); // eslint-disable-line no-unused-vars
     // wall 키워드: 벽/절벽/나무/뼈/기둥 → 이동불가
     if (['wall', 'cliff', 'tree', 'bone', 'pillar', 'rock'].some(k => tileType.includes(k))) {
       return { moveCost: 99, defBonus: 4, evasion: 0, label: '장애물' };

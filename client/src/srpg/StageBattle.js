@@ -6,7 +6,7 @@ import {
   executeAttack, executeSkill, executeGuard,
   onTurnStart, decideAIAction, checkBattleEnd, calculateRewards, isStunned, isCharmed,
 } from './cardBattleEngine';
-import { rollEliteTier, applyEliteStats, ELITE_TIERS } from './battleEngine';
+import { rollEliteTier, applyEliteStats } from './battleEngine';
 import api from '../api';
 import './StageBattle.css';
 import './SrpgBattle.css';
@@ -53,7 +53,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   const [waveTransition, setWaveTransition] = useState(false); // 웨이브 전환 연출 중
   const buildEnemyTeamRef = useRef(null);
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
-  const [retreatFailed, setRetreatFailed] = useState(false); // 후퇴 실패 여부
+  const [, setRetreatFailed] = useState(false); // 후퇴 실패 여부
   const [retreatDisabled, setRetreatDisabled] = useState(!!savedRetreatFailed); // 후퇴 버튼 비활성화 (DB에서 복원)
   const [retreatResult, setRetreatResult] = useState(null); // 'success' | 'fail'
   const [retreatDisplayPct, setRetreatDisplayPct] = useState(50);

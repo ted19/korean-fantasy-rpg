@@ -1275,9 +1275,9 @@ router.post('/session/penalty', auth, async (req, res) => {
       expLoss = Math.floor(currentExp * 0.1);
       hpLoss = currentHp; // HP 0
     } else if (penaltyType === 'retreat') {
-      // 후퇴: 골드 10% 차감, 경험치 5% 차감
+      // 후퇴: HP 30% 차감, 골드 10% 차감
+      hpLoss = Math.floor(maxHp * 0.3);
       goldLoss = Math.floor(currentGold * 0.1);
-      expLoss = Math.floor(currentExp * 0.05);
     }
 
     const newGold = Math.max(0, currentGold - goldLoss);

@@ -395,11 +395,22 @@ async function initialize() {
   } // end if (items count === 0) — covers items + quests seed
 
   // 기존 DB 중복 퀘스트 정리 (가장 작은 id만 남기고 나머지 삭제)
+  // 1) 중복 character_quests 먼저 삭제 (FK 제약)
   await pool.query(`
-    DELETE q1 FROM quests q1
-    INNER JOIN quests q2
-    WHERE q1.id > q2.id AND q1.title = q2.title AND q1.category = q2.category
+    DELETE cq FROM character_quests cq
+    INNER JOIN quests q ON cq.quest_id = q.id
+    WHERE q.id NOT IN (
+      SELECT min_id FROM (SELECT MIN(id) as min_id FROM quests GROUP BY title, category) t
+    )
   `).catch(() => {});
+  // 2) 중복 퀘스트 삭제
+  await pool.query(`
+    DELETE FROM quests WHERE id NOT IN (
+      SELECT min_id FROM (SELECT MIN(id) as min_id FROM quests GROUP BY title, category) t
+    )
+  `).catch(() => {});
+  // 3) UNIQUE 제약 추가 (향후 중복 방지)
+  await pool.query(`ALTER TABLE quests ADD UNIQUE INDEX uq_quest_title_cat (title, category)`).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS character_quests (
@@ -5233,6 +5244,10 @@ async function initialize() {
       UNIQUE KEY unique_merc_slot (mercenary_id, slot)
     )
   `);
+
+  // 용병/소환수 장비 강화 레벨 컬럼 추가
+  await pool.query("ALTER TABLE mercenary_equipment ADD COLUMN enhance_level INT DEFAULT 0").catch(() => {});
+  await pool.query("ALTER TABLE summon_equipment ADD COLUMN enhance_level INT DEFAULT 0").catch(() => {});
 
   const [existingMercSkills] = await pool.query('SELECT COUNT(*) as cnt FROM mercenary_skills');
   if (existingMercSkills[0].cnt === 0) {

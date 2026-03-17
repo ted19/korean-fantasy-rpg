@@ -373,7 +373,7 @@ router.get('/:summonId/equipment', auth, async (req, res) => {
 
     // 소환수 장착 장비
     const [equipped] = await pool.query(
-      `SELECT se.slot, se.item_id, it.*
+      `SELECT se.slot, se.item_id, se.enhance_level as equip_enhance_level, it.*
        FROM summon_equipment se
        JOIN items it ON se.item_id = it.id
        WHERE se.summon_id = ?`,
@@ -399,6 +399,8 @@ router.get('/:summonId/equipment', auth, async (req, res) => {
         effect_mag_defense: e.effect_mag_defense,
         effect_crit_rate: e.effect_crit_rate,
         effect_evasion: e.effect_evasion,
+        grade: e.grade, enhance_level: e.equip_enhance_level || 0, max_enhance: e.max_enhance,
+        required_level: e.required_level,
       };
     });
 
@@ -436,7 +438,7 @@ router.get('/:summonId/equipment', auth, async (req, res) => {
               it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense,
               it.effect_crit_rate, it.effect_evasion,
               it.required_level, it.class_restriction,
-              IFNULL(it.grade, '일반') as grade, it.cosmetic_effect
+              IFNULL(it.grade, '일반') as grade, it.max_enhance, it.cosmetic_effect
        FROM inventory i
        JOIN items it ON i.item_id = it.id
        WHERE i.character_id = ? AND it.type != 'potion'
@@ -616,8 +618,8 @@ router.post('/:summonId/equip', auth, async (req, res) => {
 
     // 새 장비 장착
     await conn.query(
-      'INSERT INTO summon_equipment (summon_id, slot, item_id) VALUES (?, ?, ?)',
-      [summonId, slot, itemId]
+      'INSERT INTO summon_equipment (summon_id, slot, item_id, enhance_level) VALUES (?, ?, ?, ?)',
+      [summonId, slot, itemId, invRows[0]?.enhance_level || 0]
     );
     await conn.query(
       `UPDATE character_summons SET hp = hp + ?, mp = mp + ?, attack = attack + ?, defense = defense + ?,

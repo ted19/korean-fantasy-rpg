@@ -49,10 +49,10 @@ const TYPE_ICONS = {
   talisman: '📜',
 };
 
-function EquipImg({ itemId, fallback, className }) {
+function EquipImg({ itemId, fallback, className, style }) {
   const [err, setErr] = useState(false);
-  if (err || !itemId) return <span className={className}>{fallback}</span>;
-  return <img src={`/equipment/${itemId}_icon.png`} alt="" className={className} onError={() => setErr(true)} />;
+  if (err || !itemId) return <span className={className} style={style}>{fallback}</span>;
+  return <img src={`/equipment/${itemId}_icon.png`} alt="" className={className} style={style} onError={() => setErr(true)} />;
 }
 
 function SummonEquipment({ summon, onLog, onSummonUpdate }) {
@@ -66,6 +66,7 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
   const [invTooltip, setInvTooltip] = useState(null);
   const [summonStats, setSummonStats] = useState(summon);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [levelLockPopup, setLevelLockPopup] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -81,6 +82,11 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleEquip = async (itemId, slot) => {
+    const item = inventory.find(i => i.item_id === itemId);
+    if (item && item.required_level > (summonStats?.level || 1)) {
+      setLevelLockPopup({ itemName: item.name, itemLevel: item.required_level, unitLevel: summonStats?.level || 1, grade: item.grade, unitName: summonStats?.name || '소환수' });
+      return;
+    }
     try {
       const res = await api.post(`/summon/${summon.id}/equip`, { itemId, slot });
       onLog(res.data.message, 'system');
@@ -88,7 +94,12 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
       onSummonUpdate();
       loadData();
     } catch (err) {
-      onLog(err.response?.data?.message || '장착 실패', 'damage');
+      const msg = err.response?.data?.message || '장착 실패';
+      if (msg.includes('레벨')) {
+        setLevelLockPopup({ itemName: item?.name || '아이템', itemLevel: item?.required_level || 0, unitLevel: summonStats?.level || 1, grade: item?.grade, unitName: summonStats?.name || '소환수' });
+      } else {
+        onLog(msg, 'damage');
+      }
     }
   };
 
@@ -200,7 +211,8 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                     >
                       {item ? (
                         <div className="equip-slot-item">
-                          <EquipImg itemId={item.item_id} fallback={TYPE_ICONS[item.type] || slot.icon} className="equip-slot-img" />
+                          <EquipImg itemId={item.item_id} fallback={TYPE_ICONS[item.type] || slot.icon} className="equip-slot-img"
+                            style={item.grade && GRADE_COLORS[item.grade] ? { border: `2px solid ${GRADE_COLORS[item.grade]}`, borderRadius: '4px' } : undefined} />
 
                           {item.type === 'weapon' && item.weapon_hand && <span className="weapon-hand-tag">{item.weapon_hand === '2h' ? '양손' : '한손'}</span>}
                         </div>
@@ -225,14 +237,12 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                   {tooltip.grade && <div className="tooltip-grade" style={{ color: GRADE_COLORS[tooltip.grade] || '#aaa' }}>[{tooltip.grade}]{tooltip.enhance_level > 0 ? ` 강화 ${tooltip.enhance_level}/${tooltip.max_enhance || '?'}` : ''}</div>}
                   <div className="tooltip-desc">{tooltip.description}</div>
                   <div className="tooltip-stats">
-                    {tooltip.effect_hp !== 0 && <span className="ts hp">HP+{tooltip.effect_hp}</span>}
-                    {tooltip.effect_mp !== 0 && <span className="ts mp">MP+{tooltip.effect_mp}</span>}
-                    {!!tooltip.effect_phys_attack && <span className="ts atk">물공+{tooltip.effect_phys_attack}</span>}
-                    {!!tooltip.effect_mag_attack && <span className="ts atk">마공+{tooltip.effect_mag_attack}</span>}
-                    {!!tooltip.effect_phys_defense && <span className="ts def">물방+{tooltip.effect_phys_defense}</span>}
-                    {!!tooltip.effect_mag_defense && <span className="ts def">마방+{tooltip.effect_mag_defense}</span>}
-                    {!!tooltip.effect_crit_rate && <span className="ts atk">치명+{tooltip.effect_crit_rate}</span>}
-                    {!!tooltip.effect_evasion && <span className="ts def">회피+{tooltip.effect_evasion}</span>}
+                    {(() => {
+                      const el=tooltip.enhance_level||0;const gm={'일반':1,'고급':1.2,'희귀':1.5,'영웅':1.8,'전설':2,'신화':2.5,'초월':3};
+                      const pct=el>0?el*0.06*(gm[tooltip.grade]||1):0;const e=(v)=>v>0&&el>0?Math.floor(v*pct):0;
+                      const s=(label,val,cls)=>{const ev=e(val||0);if(!val&&!ev)return null;return <span key={label} className={`ts ${cls}`}>{label}+{(val||0)+ev}{ev>0&&<span style={{color:'#fbbf24',fontSize:'9px'}}>(+{ev})</span>}</span>;};
+                      return <>{s('HP',tooltip.effect_hp,'hp')}{s('MP',tooltip.effect_mp,'mp')}{s('물공',tooltip.effect_phys_attack,'atk')}{s('마공',tooltip.effect_mag_attack,'atk')}{s('물방',tooltip.effect_phys_defense,'def')}{s('마방',tooltip.effect_mag_defense,'def')}{s('치명',tooltip.effect_crit_rate,'atk')}{s('회피',tooltip.effect_evasion,'def')}</>;
+                    })()}
                   </div>
                   <div className="tooltip-hint">클릭하여 해제</div>
                 </div>
@@ -315,7 +325,8 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                                 <span className="inv-cell-aura-icon">✨</span>
                               </div>
                             ) : (
-                              <EquipImg itemId={item.item_id} fallback={TYPE_ICONS[item.type] || TYPE_ICONS[item.slot]} className="inv-cell-img" />
+                              <EquipImg itemId={item.item_id} fallback={TYPE_ICONS[item.type] || TYPE_ICONS[item.slot]} className="inv-cell-img"
+                                style={item.grade && GRADE_COLORS[item.grade] ? { border: `2px solid ${GRADE_COLORS[item.grade]}`, borderRadius: '4px' } : undefined} />
                             )}
 
                             <span className="inv-cell-name" style={item.grade && GRADE_COLORS[item.grade] ? { color: GRADE_COLORS[item.grade] } : (item.type === 'cosmetic' ? { color: COSMETIC_EFFECT_COLORS[item.cosmetic_effect] || '#ddd' } : undefined)}>
@@ -336,14 +347,12 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                     {invTooltip.grade && <div className="tooltip-grade" style={{ color: GRADE_COLORS[invTooltip.grade] || '#aaa' }}>[{invTooltip.grade}]{invTooltip.enhance_level > 0 ? ` 강화 ${invTooltip.enhance_level}/${invTooltip.max_enhance || '?'}` : ''}</div>}
                     <div className="tooltip-desc">{invTooltip.description}</div>
                     <div className="tooltip-stats">
-                      {invTooltip.effect_hp !== 0 && <span className="ts hp">HP+{invTooltip.effect_hp}</span>}
-                      {invTooltip.effect_mp !== 0 && <span className="ts mp">MP+{invTooltip.effect_mp}</span>}
-                      {!!invTooltip.effect_phys_attack && <span className="ts atk">물공+{invTooltip.effect_phys_attack}</span>}
-                      {!!invTooltip.effect_mag_attack && <span className="ts atk">마공+{invTooltip.effect_mag_attack}</span>}
-                      {!!invTooltip.effect_phys_defense && <span className="ts def">물방+{invTooltip.effect_phys_defense}</span>}
-                      {!!invTooltip.effect_mag_defense && <span className="ts def">마방+{invTooltip.effect_mag_defense}</span>}
-                      {!!invTooltip.effect_crit_rate && <span className="ts atk">치명+{invTooltip.effect_crit_rate}</span>}
-                      {!!invTooltip.effect_evasion && <span className="ts def">회피+{invTooltip.effect_evasion}</span>}
+                      {(() => {
+                        const el=invTooltip.enhance_level||0;const gm={'일반':1,'고급':1.2,'희귀':1.5,'영웅':1.8,'전설':2,'신화':2.5,'초월':3};
+                        const pct=el>0?el*0.06*(gm[invTooltip.grade]||1):0;const e=(v)=>v>0&&el>0?Math.floor(v*pct):0;
+                        const s=(label,val,cls)=>{const ev=e(val||0);if(!val&&!ev)return null;return <span key={label} className={`ts ${cls}`}>{label}+{(val||0)+ev}{ev>0&&<span style={{color:'#fbbf24',fontSize:'9px'}}>(+{ev})</span>}</span>;};
+                        return <>{s('HP',invTooltip.effect_hp,'hp')}{s('MP',invTooltip.effect_mp,'mp')}{s('물공',invTooltip.effect_phys_attack,'atk')}{s('마공',invTooltip.effect_mag_attack,'atk')}{s('물방',invTooltip.effect_phys_defense,'def')}{s('마방',invTooltip.effect_mag_defense,'def')}{s('치명',invTooltip.effect_crit_rate,'atk')}{s('회피',invTooltip.effect_evasion,'def')}</>;
+                      })()}
                     </div>
                     <div className="tooltip-slot">{invTooltip.slotName}</div>
                     {invTooltip.required_level > 1 && <div className="tooltip-lvl">Lv.{invTooltip.required_level} 필요</div>}
@@ -446,14 +455,12 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                   </div>
                   <div className="item-detail-desc">{selectedItem.description}</div>
                   <div className="item-detail-stats">
-                    {selectedItem.effect_hp !== 0 && selectedItem.effect_hp != null && <div className="item-stat-row"><span className="stat-label">HP</span><span className="stat-val hp">+{selectedItem.effect_hp}</span></div>}
-                    {selectedItem.effect_mp !== 0 && selectedItem.effect_mp != null && <div className="item-stat-row"><span className="stat-label">MP</span><span className="stat-val mp">+{selectedItem.effect_mp}</span></div>}
-                    {!!selectedItem.effect_phys_attack && <div className="item-stat-row"><span className="stat-label">물리공격</span><span className="stat-val atk">+{selectedItem.effect_phys_attack}</span></div>}
-                    {!!selectedItem.effect_mag_attack && <div className="item-stat-row"><span className="stat-label">마법공격</span><span className="stat-val atk">+{selectedItem.effect_mag_attack}</span></div>}
-                    {!!selectedItem.effect_phys_defense && <div className="item-stat-row"><span className="stat-label">물리방어</span><span className="stat-val def">+{selectedItem.effect_phys_defense}</span></div>}
-                    {!!selectedItem.effect_mag_defense && <div className="item-stat-row"><span className="stat-label">마법방어</span><span className="stat-val def">+{selectedItem.effect_mag_defense}</span></div>}
-                    {!!selectedItem.effect_crit_rate && <div className="item-stat-row"><span className="stat-label">치명률</span><span className="stat-val atk">+{selectedItem.effect_crit_rate}%</span></div>}
-                    {!!selectedItem.effect_evasion && <div className="item-stat-row"><span className="stat-label">회피율</span><span className="stat-val def">+{selectedItem.effect_evasion}%</span></div>}
+                    {(() => {
+                      const el=selectedItem.enhance_level||0;const gm={'일반':1,'고급':1.2,'희귀':1.5,'영웅':1.8,'전설':2,'신화':2.5,'초월':3};
+                      const pct=el>0?el*0.06*(gm[selectedItem.grade]||1):0;const e=(base)=>base>0&&el>0?Math.floor(base*pct):0;
+                      const show=(label,base,cls,suf='')=>{const ev=e(base||0);if(!base&&!ev)return null;return <div className="item-stat-row" key={label}><span className="stat-label">{label}</span><span className={`stat-val ${cls}`}>+{(base||0)+ev}{suf}{ev>0&&<span style={{color:'#fbbf24',fontSize:'10px',marginLeft:'3px'}}>(+{ev})</span>}</span></div>;};
+                      return <>{show('HP',selectedItem.effect_hp,'hp')}{show('MP',selectedItem.effect_mp,'mp')}{show('물리공격',selectedItem.effect_phys_attack,'atk')}{show('마법공격',selectedItem.effect_mag_attack,'atk')}{show('물리방어',selectedItem.effect_phys_defense,'def')}{show('마법방어',selectedItem.effect_mag_defense,'def')}{show('치명률',selectedItem.effect_crit_rate,'atk','%')}{show('회피율',selectedItem.effect_evasion,'def','%')}</>;
+                    })()}
                   </div>
                   <div className="item-detail-actions">
                     {selectedItem.slot && SLOT_CONFIG.some(s => s.id === selectedItem.slot) && (
@@ -465,6 +472,31 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                 </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {levelLockPopup && (
+        <div className="equip-lock-overlay" onClick={() => setLevelLockPopup(null)}>
+          <div className="equip-lock-popup" onClick={e => e.stopPropagation()}>
+            <div className="equip-lock-icon">🔒</div>
+            <div className="equip-lock-title">장착 불가</div>
+            <div className="equip-lock-item-name" style={{ color: GRADE_COLORS[levelLockPopup.grade] || '#fbbf24' }}>
+              {levelLockPopup.itemName}
+            </div>
+            <div className="equip-lock-levels">
+              <div className="equip-lock-level-row">
+                <span className="equip-lock-level-label">{levelLockPopup.unitName} 레벨</span>
+                <span className="equip-lock-level-value">Lv.{levelLockPopup.unitLevel}</span>
+              </div>
+              <div className="equip-lock-level-row required">
+                <span className="equip-lock-level-label">필요 레벨</span>
+                <span className="equip-lock-level-value">Lv.{levelLockPopup.itemLevel}</span>
+              </div>
+            </div>
+            <div className="equip-lock-msg">
+              🗡️ {levelLockPopup.itemLevel - levelLockPopup.unitLevel}레벨 더 성장하면 장착할 수 있습니다
+            </div>
+            <button className="equip-lock-btn" onClick={() => setLevelLockPopup(null)}>확인</button>
           </div>
         </div>
       )}

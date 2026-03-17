@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
+import ThreeFirstPersonView from './ThreeFirstPersonView';
 import './DungeonCrawler.css';
 
 const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
+const CLASS_ELEMENT_MAP = { '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark' };
+const ELEMENT_AURA_MAP = { fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy', light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison' };
 
 // ========== 미로 생성 (Recursive Backtracking) ==========
 function generateMaze(width, height, monsterCount, stage, dbMonsters) {
@@ -129,6 +132,7 @@ function generateMaze(width, height, monsterCount, stage, dbMonsters) {
 
 // ========== 방향 상수 ==========
 const DIR = { N: 0, E: 1, S: 2, W: 3 };
+// eslint-disable-next-line no-unused-vars
 const DIR_NAMES = ['북', '동', '남', '서'];
 const DIR_DX = [0, 1, 0, -1];
 const DIR_DY = [-1, 0, 1, 0];
@@ -209,12 +213,12 @@ const DUNGEON_3D_THEMES = {
 // 기본 테마
 const DEFAULT_3D_THEME = DUNGEON_3D_THEMES.cave;
 
-// ========== 프로시저럴 텍스처 생성 (64x64, 캐시) ==========
+// ========== 프로시저럴 텍스처 생성 (128x128, HD 캐시) ==========
 const textureCache = {};
 function generateTexture(type, theme) {
-  const key = type + '_' + (theme?.name || 'default') + '_v2';
+  const key = type + '_' + (theme?.name || 'default') + '_v3';
   if (textureCache[key]) return textureCache[key];
-  const S = 64;
+  const S = 128;
   const data = new Uint8Array(S * S * 3);
   const set = (x, y, r, g, b) => { const i = (y * S + x) * 3; data[i] = r; data[i+1] = g; data[i+2] = b; };
   const hash = (x, y) => ((x * 374761393 + y * 668265263) ^ (x * 1274126177)) & 0x7FFFFFFF;
@@ -223,19 +227,19 @@ function generateTexture(type, theme) {
   if (type === 'wall_bark') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       // 석조 블록 구조 (나무 뿌리 사이 돌벽)
-      const blockH = 12, blockW = 20;
+      const blockH = 24, blockW = 40;
       const bRow = Math.floor(y / blockH);
       const bOff = (bRow % 2) * (blockW / 2);
       const bx = (x + bOff) % blockW;
       const by = y % blockH;
-      const isJoint = by < 1 || bx < 1;
+      const isJoint = by < 2 || bx < 2;
       const jointDark = isJoint ? -0.12 : 0;
       // 나무결
-      const grain = Math.sin(y * 0.4 + x * 0.12 + noise(x, y) * 3) * 0.18;
-      const ring = Math.sin(Math.sqrt((x-32)*(x-32)+(y-32)*(y-32)) * 0.3) * 0.08;
+      const grain = Math.sin(y * 0.2 + x * 0.06 + noise(x, y) * 3) * 0.18;
+      const ring = Math.sin(Math.sqrt((x-64)*(x-64)+(y-64)*(y-64)) * 0.15) * 0.08;
       const crack = (noise(x>>1, y>>1) > 0.88) ? -0.22 : 0;
       const v = 0.45 + grain + ring + crack + jointDark + noise(x, y) * 0.12;
-      const mossy = y > 44 ? (y - 44) / 20 * noise(x*3, y*2) : 0;
+      const mossy = y > 88 ? (y - 88) / 40 * noise(x*3, y*2) : 0;
       // 나뭇결에 거칠기
       const rough = (noise(x * 4, y * 4) - 0.5) * 0.06;
       const vf = v + rough;
@@ -243,7 +247,7 @@ function generateTexture(type, theme) {
     }
   } else if (type === 'wall_brick') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const brickH = 8, brickW = 16;
+      const brickH = 16, brickW = 32;
       const row = Math.floor(y / brickH);
       const off = (row % 2) * (brickW / 2);
       const bx = (x + off) % brickW;
@@ -285,7 +289,7 @@ function generateTexture(type, theme) {
   } else if (type === 'wall_slime') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       // 석조 블록 + 슬라임 침식
-      const bH = 10, bW = 18;
+      const bH = 20, bW = 36;
       const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 9;
       const bx = (x + bOff) % bW; const by = y % bH;
       const isJoint = by < 1 || bx < 1;
@@ -301,7 +305,7 @@ function generateTexture(type, theme) {
   } else if (type === 'wall_hellstone') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       // 용암석 블록 + 균열 발광
-      const bH = 10, bW = 14;
+      const bH = 20, bW = 28;
       const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 7;
       const bx = (x + bOff) % bW; const by = y % bH;
       const isJoint = by < 1 || bx < 1;
@@ -315,7 +319,7 @@ function generateTexture(type, theme) {
   } else if (type === 'wall_coral') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       // 산호 벽돌 + 해초 패턴
-      const bH = 10, bW = 16;
+      const bH = 20, bW = 32;
       const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 8;
       const bx = (x + bOff) % bW; const by = y % bH;
       const isJoint = by < 1 || bx < 1;
@@ -330,7 +334,7 @@ function generateTexture(type, theme) {
   } else if (type === 'wall_scale') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       // 비늘 패턴 (더 세밀하게)
-      const scaleH = 5, scaleW = 5;
+      const scaleH = 10, scaleW = 10;
       const r2 = Math.floor(y/scaleH); const off2 = (r2%2)*Math.floor(scaleW/2);
       const sx = (x+off2)%scaleW; const sy = y%scaleH;
       const edge = sy < 1 || sx < 1;
@@ -346,7 +350,7 @@ function generateTexture(type, theme) {
   } else if (type === 'wall_moss') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       // 이끼 낀 석조벽
-      const bH = 10, bW = 16;
+      const bH = 20, bW = 32;
       const bRow = Math.floor(y / bH); const bOff = (bRow % 2) * 8;
       const bx = (x + bOff) % bW; const by = y % bH;
       const isJoint = by < 1 || bx < 1;
@@ -376,8 +380,8 @@ function generateTexture(type, theme) {
     }
   } else if (type === 'floor_stone') {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const tile = (Math.floor(x/16)+Math.floor(y/16))%2;
-      const edge = (x%16<1)||(y%16<1);
+      const tile = (Math.floor(x/32)+Math.floor(y/32))%2;
+      const edge = (x%32<2)||(y%32<2);
       const v = edge ? 0.18 : tile ? 0.32+noise(x,y)*0.12 : 0.28+noise(x,y)*0.12;
       const fc = theme?.floorTop || [30,25,40];
       set(x, y, fc[0]*v|0, fc[1]*v|0, fc[2]*v|0);
@@ -425,7 +429,7 @@ const WALL_TEX_MAP = { bark: 'wall_bark', brick: 'wall_brick', slime: 'wall_slim
 const FLOOR_TEX_MAP = { leaves: 'floor_leaves', stone: 'floor_stone', mud: 'floor_mud', sand: 'floor_sand', lava: 'floor_lava', wet: 'floor_wet', bone: 'floor_bone' };
 
 // ========== 레이캐스팅 3D 뷰 (DOOM 스타일) ==========
-function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, monsterSpeech, dungeonKey }) {
+function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, monsterSpeech, dungeonKey, allies }) {
   const canvasRef = useRef(null);
   const spriteCache = useRef({});
   const animRef = useRef(null);
@@ -435,17 +439,17 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
   const imgDataRef = useRef(null);
 
   useEffect(() => {
-    propsRef.current = { px, py, facing, monsters, treasures, exitPos, monsterSpeech, dungeonKey };
+    propsRef.current = { px, py, facing, monsters, treasures, exitPos, monsterSpeech, dungeonKey, allies };
   });
 
   const getSprite = (src) => {
     if (spriteCache.current[src]) return spriteCache.current[src];
     const img = new Image();
-    img.src = src;
+    img.src = src + '?v=2';
     img.onerror = () => {
       if (src.includes('_nobg/')) {
         const fb = new Image();
-        fb.src = src.replace('_nobg/', '/');
+        fb.src = src.replace('_nobg/', '/') + '?v=2';
         spriteCache.current[src] = fb;
       }
     };
@@ -464,7 +468,7 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
     const mH = maze.height;
     const FOV = Math.PI / 3;
     const HALF_FOV = FOV / 2;
-    const MAX_DEPTH = 16;
+    const MAX_DEPTH = 20;
     const now = Date.now();
 
     const p = propsRef.current;
@@ -481,7 +485,6 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
     sp.angle += angleDiff * LERP;
 
     const posX = sp.x, posY = sp.y, angle = sp.angle;
-    const cosA0 = Math.cos(angle), sinA0 = Math.sin(angle);
 
     // 횃불 흔들림
     const tf = 0.88 + Math.sin(now * 0.005) * 0.06 + Math.sin(now * 0.013) * 0.04 + Math.sin(now * 0.0073) * 0.03;
@@ -490,10 +493,9 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
     const wallTexType = WALL_TEX_MAP[theme.wallPattern] || 'wall_brick';
     const floorTexType = FLOOR_TEX_MAP[theme.floorPattern] || 'floor_stone';
     const wallTex = generateTexture(wallTexType, theme);
-    const wallTex2 = generateTexture(wallTexType === 'wall_bark' ? 'wall_bark' : wallTexType, theme); // EW용 (같은 텍스처, 밝기만 다름)
     const floorTex = generateTexture(floorTexType, theme);
     const ceilTex = generateTexture('ceil', theme);
-    const TS = 64; // 텍스처 사이즈
+    const TS = 128; // 텍스처 사이즈 (HD)
 
     // ImageData 직접 조작 (fillRect보다 수배 빠름)
     if (!imgDataRef.current || imgDataRef.current.width !== W) {
@@ -526,7 +528,7 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
       else { stepY = 1; sideDistY = (mY + 1 - posY) * deltaDistY; }
 
       let hit = false, dist = MAX_DEPTH;
-      for (let s = 0; s < 64; s++) {
+      for (let s = 0; s < 128; s++) {
         if (sideDistX < sideDistY) { sideDistX += deltaDistX; mX += stepX; hitSide = 1; }
         else { sideDistY += deltaDistY; mY += stepY; hitSide = 0; }
         if (mX < 0 || mX >= mW || mY < 0 || mY >= mH || grid[mY][mX] === 1) { hit = true; break; }
@@ -797,17 +799,44 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
       }
     }
 
+    // ===== 바닥 반사 (젖은 바닥 느낌 — 벽 하단을 바닥에 희미하게 반사) =====
+    const reflectStrength = theme.floorPattern === 'wet' || theme.floorPattern === 'lava' ? 0.08 : 0.03;
+    const halfH = H >> 1;
+    for (let col = 0; col < W; col += 2) { // 2px씩 건너뛰어 성능 보존
+      for (let row = halfH + 20; row < Math.min(halfH + 80, H); row++) {
+        const mirrorRow = H - row; // 반사할 원본 위치
+        if (mirrorRow < 0 || mirrorRow >= H) continue;
+        const srcIdx = (mirrorRow * W + col) * 4;
+        const dstIdx = (row * W + col) * 4;
+        const fade = 1 - (row - halfH - 20) / 60;
+        const rStr = reflectStrength * fade * tf;
+        buf[dstIdx] = Math.min(255, buf[dstIdx] + buf[srcIdx] * rStr) | 0;
+        buf[dstIdx+1] = Math.min(255, buf[dstIdx+1] + buf[srcIdx+1] * rStr) | 0;
+        buf[dstIdx+2] = Math.min(255, buf[dstIdx+2] + buf[srcIdx+2] * rStr) | 0;
+        // 옆 픽셀도 같이 (2px 단위)
+        if (col + 1 < W) {
+          const d2 = dstIdx + 4;
+          buf[d2] = Math.min(255, buf[d2] + buf[srcIdx] * rStr) | 0;
+          buf[d2+1] = Math.min(255, buf[d2+1] + buf[srcIdx+1] * rStr) | 0;
+          buf[d2+2] = Math.min(255, buf[d2+2] + buf[srcIdx+2] * rStr) | 0;
+        }
+      }
+    }
+
     ctx.putImageData(imgData, 0, 0);
 
     // ===== 스프라이트 (Canvas API로 그리기) =====
     const sprites = [];
+    // 몬스터
     p.monsters.filter(m => !m.defeated).forEach(m => {
       sprites.push({ x: m.x + 0.5, y: m.y + 0.5, type: 'monster', img: m.monsterId ? getSprite(`/monsters_nobg/${m.monsterId}_full.png`) : null, id: m.id, name: m.monsterName });
     });
+    // 보물/출구
     p.treasures.filter(t => !t.collected).forEach(t => {
       sprites.push({ x: t.x + 0.5, y: t.y + 0.5, type: 'treasure', img: getSprite('/ui/dungeon/dc_treasure_nobg.png') });
     });
     sprites.push({ x: p.exitPos.x + 0.5, y: p.exitPos.y + 0.5, type: 'exit', img: getSprite('/ui/dungeon/dc_exit_nobg.png') });
+    // 아군 파티 스프라이트 (비활성화)
 
     sprites.forEach(s => { s.dist = Math.sqrt((s.x - posX) ** 2 + (s.y - posY) ** 2); });
     sprites.sort((a, b) => b.dist - a.dist);
@@ -820,13 +849,20 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
 
       const screenX = W / 2 + (nAngle / HALF_FOV) * (W / 2);
       const corrD = Math.max(0.3, s.dist * Math.cos(nAngle));
-      const sprH = Math.min(H * 1.5, H / corrD);
-      const sprW = sprH * (s.type === 'monster' ? 0.8 : 0.7);
-      const sprTop = (H - sprH) / 2 + (s.type === 'treasure' ? sprH * 0.25 : 0);
+      const baseH = Math.min(H * 1.5, H / corrD);
+      const sprScale = s.type === 'treasure' ? 0.45 : s.type === 'exit' ? 0.7 : s.type === 'ally' ? 0.32 : 1;
+      const sprH = baseH * sprScale;
+      const sprW = sprH * (s.type === 'monster' ? 0.8 : s.type === 'ally' ? 0.5 : 0.7);
+      const bobY = s.bobOffset || 0;
+      // ally: 바닥에 붙도록 위치 조정 (baseH 기준으로 하단 정렬)
+      const sprTop = s.type === 'ally'
+        ? (H + baseH) / 2 - sprH + bobY * H * 0.15
+        : (H - sprH) / 2 + (s.type === 'treasure' ? baseH * 0.28 : 0);
       const sprShade = Math.max(0.15, 1 - corrD / MAX_DEPTH) * tf;
 
       const stripIdx = Math.floor(screenX);
-      if (stripIdx >= 0 && stripIdx < W && zBuffer[stripIdx] < corrD * 0.9) return;
+      // 아군은 z-buffer 체크 스킵 (항상 플레이어 앞에 있으므로)
+      if (s.type !== 'ally' && stripIdx >= 0 && stripIdx < W && zBuffer[stripIdx] < corrD * 0.9) return;
 
       // 그림자
       if (corrD < 8) {
@@ -841,19 +877,28 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
 
       if (s.img && s.img.complete && s.img.naturalWidth > 0) {
         ctx.save();
-        ctx.globalAlpha = sprShade;
-        ctx.drawImage(s.img, screenX - sprW / 2, sprTop, sprW, sprH - (s.type === 'treasure' ? sprH * 0.25 : 0));
+        // 아군은 약간 투명 + 걷는 좌우 기울기
+        const allyAlpha = s.type === 'ally' ? 0.75 : 1;
+        ctx.globalAlpha = sprShade * allyAlpha;
+        if (s.type === 'ally') {
+          const sway = Math.sin(now * 0.003 + (s.id?.charCodeAt?.(0) || 0)) * 0.04;
+          ctx.translate(screenX, sprTop + sprH / 2);
+          ctx.rotate(sway);
+          ctx.drawImage(s.img, -sprW / 2, -sprH / 2, sprW, sprH);
+        } else {
+          ctx.drawImage(s.img, screenX - sprW / 2, sprTop, sprW, sprH);
+        }
         ctx.restore();
       } else {
         ctx.globalAlpha = sprShade * 0.6;
-        ctx.fillStyle = { monster: '#e94560', treasure: '#ffa502', exit: '#2ed573' }[s.type] || '#fff';
+        ctx.fillStyle = { monster: '#e94560', treasure: '#ffa502', exit: '#2ed573', ally: '#a78bfa' }[s.type] || '#fff';
         ctx.beginPath();
         ctx.ellipse(screenX, sprTop + sprH * 0.35, sprW * 0.3, sprH * 0.3, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.font = `${Math.max(14, sprH * 0.35) | 0}px serif`;
         ctx.textAlign = 'center';
-        ctx.fillText({ monster: '👹', treasure: '📦', exit: '🚪' }[s.type], screenX, sprTop + sprH * 0.45);
+        ctx.fillText({ monster: '👹', treasure: '📦', exit: '🚪', ally: '🧙' }[s.type], screenX, sprTop + sprH * 0.45);
       }
 
       if (s.type === 'monster' && p.monsterSpeech?.mobId === s.id && corrD < 4) {
@@ -872,7 +917,7 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
 
     // ===== 파티클 (Canvas API) =====
     const parts = particlesRef.current;
-    if (parts.length < 25) {
+    if (parts.length < 40) {
       const pt = theme.particleType || 'dust';
       if (pt === 'firefly') parts.push({ x: Math.random()*W, y: H*0.2+Math.random()*H*0.6, vx: (Math.random()-0.5)*0.5, vy: (Math.random()-0.5)*0.3, life: 200+Math.random()*300, maxLife: 500, size: 2.5+Math.random()*2, type: 'firefly' });
       else if (pt === 'ember') parts.push({ x: Math.random()*W, y: H, vx: (Math.random()-0.5)*0.8, vy: -0.5-Math.random()*1.5, life: 100+Math.random()*150, maxLife: 250, size: 2+Math.random()*2, type: 'ember' });
@@ -907,23 +952,149 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
     }
     ctx.restore();
 
-    // 나침반 UI
+    // ===== 횃불 화면 효과 (화면 가장자리 따뜻한 빛) =====
     ctx.save();
-    ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(W/2-20, 6, 40, 22);
-    ctx.strokeStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.35)`; ctx.lineWidth = 1; ctx.strokeRect(W/2-20, 6, 40, 22);
-    ctx.fillStyle = `rgb(${Math.min(255,tc[0]+80)},${Math.min(255,tc[1]+80)},${Math.min(255,tc[2]+80)})`;
-    ctx.fillText(['북','동','남','서'][p.facing], W/2, 23);
+    const torchGrd = ctx.createRadialGradient(W/2, H*0.55, H*0.15, W/2, H*0.55, H*0.85);
+    torchGrd.addColorStop(0, 'rgba(0,0,0,0)');
+    torchGrd.addColorStop(0.6, 'rgba(0,0,0,0)');
+    torchGrd.addColorStop(1, `rgba(${tc[0]*0.3|0},${tc[1]*0.15|0},0,${0.15*tf})`);
+    ctx.fillStyle = torchGrd;
+    ctx.fillRect(0, 0, W, H);
     ctx.restore();
 
-    // 방향 화살표
-    ctx.save(); ctx.font = '20px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.5)`;
+    // ===== 화면 하단 무기/손 오버레이 (1인칭 느낌) =====
+    ctx.save();
+    // 하단 그라디언트 (어둡게)
+    const bottomGrd = ctx.createLinearGradient(0, H*0.85, 0, H);
+    bottomGrd.addColorStop(0, 'rgba(0,0,0,0)');
+    bottomGrd.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = bottomGrd;
+    ctx.fillRect(0, H*0.85, W, H*0.15);
+    ctx.restore();
+
+    // ===== 상단 천장 그라디언트 (분위기) =====
+    ctx.save();
+    const topGrd = ctx.createLinearGradient(0, 0, 0, H*0.12);
+    topGrd.addColorStop(0, 'rgba(0,0,0,0.25)');
+    topGrd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = topGrd;
+    ctx.fillRect(0, 0, W, H*0.12);
+    ctx.restore();
+
+    // ===== 벽 가장자리 앰비언트 오클루전 (좌우 어둡게) =====
+    ctx.save();
+    const aoLeft = ctx.createLinearGradient(0, 0, W*0.08, 0);
+    aoLeft.addColorStop(0, 'rgba(0,0,0,0.2)');
+    aoLeft.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = aoLeft;
+    ctx.fillRect(0, 0, W*0.08, H);
+    const aoRight = ctx.createLinearGradient(W, 0, W*0.92, 0);
+    aoRight.addColorStop(0, 'rgba(0,0,0,0.2)');
+    aoRight.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = aoRight;
+    ctx.fillRect(W*0.92, 0, W*0.08, H);
+    ctx.restore();
+
+    // ===== 수평선 안개 (원거리 페이드) =====
+    ctx.save();
+    const horizonY = H / 2;
+    const hFog = ctx.createLinearGradient(0, horizonY - H*0.08, 0, horizonY + H*0.08);
+    hFog.addColorStop(0, 'rgba(0,0,0,0)');
+    hFog.addColorStop(0.4, `rgba(${theme.fogColor[0]},${theme.fogColor[1]},${theme.fogColor[2]},${0.06*tf})`);
+    hFog.addColorStop(0.6, `rgba(${theme.fogColor[0]},${theme.fogColor[1]},${theme.fogColor[2]},${0.06*tf})`);
+    hFog.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = hFog;
+    ctx.fillRect(0, horizonY - H*0.08, W, H*0.16);
+    ctx.restore();
+
+    // ===== 색수차 효과 (화면 가장자리 RGB 분리) =====
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.015;
+    // 좌측 빨강 쉬프트
+    ctx.drawImage(canvas, -2, 0);
+    ctx.globalAlpha = 0.01;
+    // 우측 파랑 쉬프트
+    ctx.drawImage(canvas, 2, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // ===== 횃불 벽 광원 (가까운 벽에 따뜻한 광원 원) =====
+    ctx.save();
+    const torchWallDist = 3;
+    for (let tw = 0; tw < 3; tw++) {
+      const twAngle = angle + (tw - 1) * 0.4;
+      const twX = posX + Math.cos(twAngle) * torchWallDist;
+      const twY = posY + Math.sin(twAngle) * torchWallDist;
+      const twGx = Math.floor(twX), twGy = Math.floor(twY);
+      if (twGx >= 0 && twGx < mW && twGy >= 0 && twGy < mH && grid[twGy][twGx] === 1) {
+        // 벽에 닿았으면 광원 효과
+        const twScreenAngle = Math.atan2(twY - posY, twX - posX) - angle;
+        if (Math.abs(twScreenAngle) < HALF_FOV) {
+          const twSx = W / 2 + (twScreenAngle / HALF_FOV) * (W / 2);
+          const twDist = Math.sqrt((twX-posX)**2 + (twY-posY)**2);
+          const twRadius = H / twDist * 0.3;
+          const twGlow = ctx.createRadialGradient(twSx, H/2, 0, twSx, H/2, twRadius);
+          twGlow.addColorStop(0, `rgba(${tc[0]},${tc[1]},${tc[2]},${0.04*tf})`);
+          twGlow.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = twGlow;
+          ctx.fillRect(twSx - twRadius, H/2 - twRadius, twRadius*2, twRadius*2);
+        }
+      }
+    }
+    ctx.restore();
+
+    // ===== 나침반 UI (업그레이드) =====
+    ctx.save();
+    const compassSize = 30;
+    const cx2 = W/2, cy2 = 22;
+    // 배경
+    ctx.beginPath(); ctx.arc(cx2, cy2, compassSize/2+4, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill();
+    ctx.strokeStyle = `rgba(${tc[0]},${tc[1]},${tc[2]},0.3)`; ctx.lineWidth = 1.5; ctx.stroke();
+    // 방향 문자
+    ctx.font = 'bold 15px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const dirs4 = ['N','E','S','W'];
+    const dirFull = ['북','동','남','서'];
+    ctx.fillStyle = `rgb(${Math.min(255,tc[0]+100)},${Math.min(255,tc[1]+100)},${Math.min(255,tc[2]+100)})`;
+    ctx.fillText(dirFull[p.facing], cx2, cy2+1);
+    // 작은 방향 표시
+    ctx.font = '8px monospace'; ctx.globalAlpha = 0.4;
+    ctx.fillText(dirs4[(p.facing+3)%4], cx2-16, cy2+1);
+    ctx.fillText(dirs4[(p.facing+1)%4], cx2+16, cy2+1);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // ===== 방향 화살표 (업그레이드) =====
+    ctx.save();
     const chk = (x2,y2) => x2>=0 && x2<mW && y2>=0 && y2<mH && grid[y2][x2]===0;
     const gx = Math.floor(posX), gy = Math.floor(posY);
-    if (chk(gx+DIR_DX[p.facing], gy+DIR_DY[p.facing])) ctx.fillText('▲', W/2, H-10);
-    if (chk(gx+DIR_DX[(p.facing+3)%4], gy+DIR_DY[(p.facing+3)%4])) ctx.fillText('◀', 14, H/2);
-    if (chk(gx+DIR_DX[(p.facing+1)%4], gy+DIR_DY[(p.facing+1)%4])) ctx.fillText('▶', W-14, H/2);
+    const arrowAlpha = 0.3 + Math.sin(now * 0.003) * 0.1;
+    ctx.globalAlpha = arrowAlpha;
+    ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = `rgb(${Math.min(255,tc[0]+60)},${Math.min(255,tc[1]+60)},${Math.min(255,tc[2]+60)})`;
+    if (chk(gx+DIR_DX[p.facing], gy+DIR_DY[p.facing])) {
+      ctx.fillText('▲', W/2, H-14);
+    }
+    if (chk(gx+DIR_DX[(p.facing+3)%4], gy+DIR_DY[(p.facing+3)%4])) ctx.fillText('◀', 18, H/2);
+    if (chk(gx+DIR_DX[(p.facing+1)%4], gy+DIR_DY[(p.facing+1)%4])) ctx.fillText('▶', W-18, H/2);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // ===== 화면 노이즈/그레인 (분위기) =====
+    ctx.save();
+    ctx.globalAlpha = 0.015;
+    ctx.globalCompositeOperation = 'overlay';
+    for (let gi = 0; gi < 60; gi++) {
+      const gx2 = Math.random() * W;
+      const gy2 = Math.random() * H;
+      const gs = 1 + Math.random() * 3;
+      ctx.fillStyle = Math.random() > 0.5 ? '#fff' : '#000';
+      ctx.fillRect(gx2, gy2, gs, gs);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
     ctx.restore();
   }, [maze]); // eslint-disable-line
 
@@ -941,7 +1112,7 @@ function FirstPersonView({ maze, px, py, facing, monsters, treasures, exitPos, m
 
   return (
     <div className="dc-fpv" style={{ position: 'relative', width: '100%', height: '100%', background: '#0a0a15' }}>
-      <canvas ref={canvasRef} width={800} height={500}
+      <canvas ref={canvasRef} width={1280} height={800}
         style={{ width: '100%', height: '100%', display: 'block', imageRendering: 'auto' }} />
     </div>
   );
@@ -1093,6 +1264,7 @@ export default function DungeonCrawler({
   const [filteredSummons, setFilteredSummons] = useState(activeSummons || []);
   const [filteredMercs, setFilteredMercs] = useState(activeMercenaries || []);
   const [playerInFormation, setPlayerInFormation] = useState(true);
+  const [cosmeticMap, setCosmeticMap] = useState({});
 
   const showMonsterSpeech = useCallback((mobId, text, duration = 5000) => {
     if (monsterSpeechTimer.current) clearTimeout(monsterSpeechTimer.current);
@@ -1115,9 +1287,11 @@ export default function DungeonCrawler({
   useEffect(() => {
     (async () => {
       try {
-        const [summonRes, mercRes, fRes] = await Promise.all([
+        const [summonRes, mercRes, fRes, cosRes] = await Promise.all([
           api.get('/summon/my'), api.get('/mercenary/my'), api.get('/formation/list'),
+          api.get('/shop/cosmetics/equipped').catch(() => ({ data: { cosmetics: {} } })),
         ]);
+        setCosmeticMap(cosRes.data.cosmetics || {});
         let fSummons = summonRes.data.summons || [];
         let fMercs = mercRes.data.mercenaries || [];
         let pInF = true;
@@ -1753,6 +1927,7 @@ export default function DungeonCrawler({
     '제발... 살려줘...', '왜 이런 데서 마주치는 거야!',
   ];
   // 전투 중 몬스터 대사
+  // eslint-disable-next-line no-unused-vars
   const MONSTER_BATTLE_CHATTER = [
     // 전투 시작 (15)
     '크아아아!! 덤벼라!', '잡아주마!', '이 힘을 보여주겠다!',
@@ -1776,10 +1951,10 @@ export default function DungeonCrawler({
     { type: 'ghost', text: '어디선가 속삭임이 들린다... "돌아가라..."', img: '/ui/dungeon/dc_ghost.png' },
     { type: 'npc', text: '떠돌이 상인의 유령이 나타났다가 사라졌다.', img: '/ui/dungeon/dc_ghost_merchant.png' },
     { type: 'npc', text: '쥐 한 마리가 후다닥 지나갔다!', img: '/ui/dungeon/dc_rat.png' },
-    { type: 'npc', text: '꺼진 줄 알았던 횃불이 갑자기 타올랐다!', img: '/ui/dungeon/dc_torch_img.png' },
+    { type: 'npc', text: '꺼진 줄 알았던 횃불이 갑자기 타올랐다!', img: '/ui/dungeon/dc_torch_img.png?v=2' },
     { type: 'ghost', text: '벽에 새겨진 경고문이 붉게 빛난다...', img: '/ui/dungeon/dc_wall_runes.png' },
     { type: 'npc', text: '박쥐 떼가 천장에서 날아올랐다!', img: '/ui/dungeon/dc_bats.png' },
-    { type: 'ghost', text: '갑자기 안개가 짙어졌다가 걷혔다.', img: '/ui/dungeon/dc_fog_overlay.png' },
+    { type: 'ghost', text: '갑자기 안개가 짙어졌다가 걷혔다.', img: '/ui/dungeon/dc_fog_overlay.png?v=2' },
     { type: 'npc', text: '이상한 버섯이 빛나고 있다... 건드리지 않는 게 좋겠다.', img: '/ui/dungeon/dc_mushroom.png' },
     { type: 'ghost', text: '누군가 지켜보고 있는 느낌이 든다...', img: '/ui/dungeon/dc_ghost.png' },
   ];
@@ -1791,7 +1966,8 @@ export default function DungeonCrawler({
     // 15% 확률로 말풍선
     if (Math.random() < 0.15) {
       const party = [];
-      if (character && playerInFormation) party.push({ id: 'player', name: character.name });
+      // 플레이어는 던전 탐험 중이므로 항상 대화 가능
+      if (character) party.push({ id: 'player', name: character.name });
       (filteredSummons || []).forEach(s => party.push({ id: `summon_${s.id}`, name: s.name }));
       (filteredMercs || []).forEach(m => party.push({ id: `merc_${m.id}`, name: m.name }));
 
@@ -1847,7 +2023,6 @@ export default function DungeonCrawler({
       const nearbyMobs = monsters.filter(m => !m.defeated && Math.abs(m.x - pos.x) + Math.abs(m.y - pos.y) <= 3);
       if (nearbyMobs.length > 0) {
         const mob = nearbyMobs[Math.floor(Math.random() * nearbyMobs.length)];
-        const dist = Math.abs(mob.x - pos.x) + Math.abs(mob.y - pos.y);
         const text = MONSTER_CHATTER[Math.floor(Math.random() * MONSTER_CHATTER.length)];
         showMonsterSpeech(mob.id, text);
         addLog(`👹 ${mob.monsterName || '몬스터'}: "${text}"`, 'system');
@@ -1864,7 +2039,6 @@ export default function DungeonCrawler({
   );
 
   const requiredMonsters = monsters.filter(m => !m.hidden);
-  const visibleMonsters = monsters.filter(m => !m.hidden);
   const allDefeated = requiredMonsters.every(m => m.defeated);
   const defeatedCount = requiredMonsters.filter(m => m.defeated).length;
 
@@ -1907,18 +2081,33 @@ export default function DungeonCrawler({
         </div>
 
         <div className="dc-upper-right">
-          <FirstPersonView
+          <ThreeFirstPersonView
             maze={maze} px={pos.x} py={pos.y} facing={facing}
             monsters={monsters.filter(m => !m.hidden)} treasures={treasures} exitPos={maze.exitPos}
-            monsterSpeech={monsterSpeech} moveAnim={moveAnim} dungeonKey={dungeonKey}
+            monsterSpeech={monsterSpeech} dungeonKey={dungeonKey}
+            allies={{ character, charState, filteredSummons, filteredMercs, playerInFormation }}
           />
+          {/* 3D 화면 오른쪽 상단 버튼 */}
+          <div className="dc-fpv-top-btns">
+            <button
+              className={`dc-fpv-btn auto ${autoPath ? 'active' : ''}`}
+              onClick={() => { setAutoPath(p => { autoPathRef.current = !p; if (!p) planAutoPath(); else autoMoveQueue.current = []; return !p; }); }}
+            >
+              {autoPath ? '⏸ 정지' : '🧭 자동'}
+            </button>
+            <button
+              className="dc-fpv-btn retreat"
+              onClick={() => { setAutoPath(false); autoPathRef.current = false; autoMoveQueue.current = []; setRetreatConfirm(true); }}
+            >
+              🏃 후퇴
+            </button>
+          </div>
         </div>
       </div>
 
       {/* 하단: 컨트롤 + 파티 */}
       <div className="dc-lower">
-        <div className="dc-controls" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/ui/dungeon/dc_controls_bg.png)` }}>
-          <div className="dc-controls-overlay" />
+        <div className="dc-controls">
           <div className="dc-controls-inner">
             <div className="dc-ctrl-row">
               <button className={`dc-ctrl-btn ${activeDir === 'forward' ? 'active' : ''}`} onClick={() => move('forward')}>
@@ -1940,28 +2129,30 @@ export default function DungeonCrawler({
                 <span className="dc-ctrl-label">우회전</span>
               </button>
             </div>
-            <button
-              className={`dc-autopath-btn ${autoPath ? 'active' : ''}`}
-              onClick={() => { setAutoPath(p => { autoPathRef.current = !p; if (!p) planAutoPath(); else autoMoveQueue.current = []; return !p; }); }}
-            >
-              {autoPath ? '⏸ 자동정지' : '🧭 자동길찾기'}
-            </button>
-            <button className="dc-retreat-btn" onClick={() => { setAutoPath(false); autoPathRef.current = false; autoMoveQueue.current = []; setRetreatConfirm(true); }}>🏃 귀환</button>
+            {/* 자동길찾기/후퇴 버튼은 3D 화면 오른쪽 상단으로 이동 */}
           </div>
         </div>
 
         {/* 파티 바 */}
-        <div className="dc-party-bar" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/ui/dungeon/dc_party_bg.png)` }}>
+        <div className="dc-party-bar">
           {(() => {
             const party = [];
             // 플레이어 (진형에 배치된 경우만)
+            // 코스메틱 오라 결정 헬퍼
+            const getAura = (unitId, element) => {
+              const cm = cosmeticMap[unitId];
+              if (cm?.effect) return cm.effect;
+              return ELEMENT_AURA_MAP[element] || 'aura_gold';
+            };
             if (character && playerInFormation) {
+              const el = character.element || CLASS_ELEMENT_MAP[character.class_type] || 'neutral';
               party.push({
                 id: 'player', name: character.name, level: charState?.level || character.level,
                 hp: charState?.currentHp ?? character.current_hp, maxHp: charState?.maxHp ?? character.hp,
                 mp: charState?.currentMp ?? character.current_mp, maxMp: charState?.maxMp ?? character.mp,
                 imageUrl: `/characters/${CLASS_IMAGE_MAP[character.class_type] || 'monk'}_icon.png`,
                 type: 'player', classType: character.class_type,
+                aura: getAura('player', el),
               });
             }
             // 소환수 (진형 필터링 적용)
@@ -1971,6 +2162,7 @@ export default function DungeonCrawler({
                 id: `summon_${s.id}`, name: s.name, level: s.level,
                 hp: s.current_hp ?? s.hp, maxHp: s.hp, mp: s.current_mp ?? s.mp ?? 0, maxMp: s.mp ?? 0,
                 imageUrl: `/summons_nobg/${tid}_icon.png`, type: 'summon',
+                aura: getAura(`summon_${s.id}`, s.element || 'neutral'),
               });
             });
             // 용병 (진형 필터링 적용)
@@ -1980,19 +2172,23 @@ export default function DungeonCrawler({
                 id: `merc_${m.id}`, name: m.name, level: m.level,
                 hp: m.current_hp ?? m.hp, maxHp: m.hp, mp: m.current_mp ?? m.mp ?? 0, maxMp: m.mp ?? 0,
                 imageUrl: `/mercenaries/${tid}_icon.png`, type: 'mercenary',
+                aura: getAura(`merc_${m.id}`, 'neutral'),
               });
             });
             return party.map(ally => {
               const hpPct = ally.maxHp > 0 ? Math.max(0, (ally.hp / ally.maxHp) * 100) : 0;
               const mpPct = ally.maxMp > 0 ? Math.max(0, (ally.mp / ally.maxMp) * 100) : 0;
               return (
-                <div key={ally.id} className={`dc-party-member ${hpPct < 30 ? 'low-hp' : ''}`} onClick={() => openInspect(ally)}>
+                <div key={ally.id} className={`dc-party-member ${hpPct < 30 ? 'low-hp' : ''}`}
+                  style={speechBubble?.allyId === ally.id ? { zIndex: 100 } : undefined}
+                  onClick={() => openInspect(ally)}>
                   {speechBubble && speechBubble.allyId === ally.id && (
                     <div className="dc-speech-bubble">
                       <span>{speechBubble.text}</span>
                     </div>
                   )}
                   <div className="dc-party-portrait">
+                    <div className={`cb-portrait-effect cb-effect-${ally.aura || 'aura_gold'}`} style={{ position: 'absolute', inset: 0, borderRadius: '8px', zIndex: 2, pointerEvents: 'none' }} />
                     <img src={ally.imageUrl} alt={ally.name} className="dc-party-img" onError={e => { e.target.style.display = 'none'; }} />
                   </div>
                   <div className="dc-party-info">
@@ -2041,6 +2237,7 @@ export default function DungeonCrawler({
             <div className="dc-equip-left">
               <div className="dc-equip-char-area">
                 <div className="dc-equip-portrait">
+                  <div className={`cb-portrait-effect cb-effect-${inspectAlly.aura || cosmeticMap[inspectAlly.id]?.effect || ELEMENT_AURA_MAP[character?.element] || 'aura_gold'}`} style={{ position: 'absolute', inset: 0, borderRadius: '12px', zIndex: 2, pointerEvents: 'none' }} />
                   <img src={inspectAlly.imageUrl?.replace('_icon', '_full')} alt="" className="dc-equip-portrait-img"
                     onError={e => { e.target.src = inspectAlly.imageUrl; e.target.onerror = null; }} />
                 </div>
@@ -2215,7 +2412,7 @@ export default function DungeonCrawler({
       {/* 기습 경고 */}
       {ambushWarning && (
         <div className="dc-ambush-warning">
-          <img src="/ui/dungeon/dc_ambush_bg.png" alt="" className="dc-ambush-bg-img" />
+          <img src="/ui/dungeon/dc_ambush_bg.png?v=2" alt="" className="dc-ambush-bg-img" />
           <div className="dc-ambush-flash" />
           <div className="dc-ambush-text">⚠️ 기척!</div>
         </div>
@@ -2228,7 +2425,7 @@ export default function DungeonCrawler({
             <div className="dc-treasure-rays" />
             <div className="dc-treasure-glow" />
             <div className="dc-treasure-chest-wrap">
-              <img src="/ui/dungeon/dc_treasure.png" alt="" className="dc-treasure-chest-img"
+              <img src="/ui/dungeon/dc_treasure.png?v=2" alt="" className="dc-treasure-chest-img"
                 onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'block'; }} />
               <div className="dc-treasure-chest-css" style={{ display: 'none' }}>
                 <div className="dc-css-chest-body" />
@@ -2342,20 +2539,62 @@ export default function DungeonCrawler({
         </div>
       )}
 
-      {/* 귀환 확인 팝업 */}
+      {/* 말풍선은 파티 멤버 카드 안에서 렌더링 */}
+
+      {/* 귀환 확인 팝업 (패널티 경고) */}
       {retreatConfirm && (
-        <div className="dc-retreat-confirm-overlay" onClick={() => setRetreatConfirm(false)}>
-          <div className="dc-retreat-confirm" onClick={e => e.stopPropagation()}>
-            <img src="/ui/dungeon/dc_retreat_bg.png" alt="" className="dc-retreat-confirm-bg"
-              onError={e => { e.target.style.display = 'none'; }} />
-            <div className="dc-retreat-confirm-content">
-              <div className="dc-retreat-confirm-icon">🏃</div>
-              <div className="dc-retreat-confirm-title">던전 귀환</div>
-              <div className="dc-retreat-confirm-desc">정말 던전에서 귀환하시겠습니까?<br/>진행 중인 탐험이 초기화됩니다.</div>
-              <div className="dc-retreat-confirm-btns">
-                <button className="dc-retreat-confirm-yes" onClick={() => { setRetreatConfirm(false); onRetreat(); }}>귀환하기</button>
-                <button className="dc-retreat-confirm-no" onClick={() => setRetreatConfirm(false)}>계속 탐험</button>
+        <div className="dc-retreat-overlay" onClick={() => setRetreatConfirm(false)}>
+          <div className="dc-retreat-popup" onClick={e => e.stopPropagation()}>
+            {/* 배경 */}
+            <div className="dc-retreat-bg">
+              <img src="/ui/dungeon/dc_retreat_bg.png" alt="" onError={e => { e.target.style.display = 'none'; }} />
+              <div className="dc-retreat-bg-overlay" />
+            </div>
+
+            {/* 경고 아이콘 */}
+            <div className="dc-retreat-icon-wrap">
+              <div className="dc-retreat-icon-glow" />
+              <div className="dc-retreat-icon">⚠️</div>
+            </div>
+
+            <div className="dc-retreat-title">던전 후퇴</div>
+            <div className="dc-retreat-subtitle">정말 던전에서 후퇴하시겠습니까?</div>
+
+            {/* 패널티 목록 */}
+            <div className="dc-retreat-penalties">
+              <div className="dc-retreat-penalty-header">귀환 시 패널티</div>
+              <div className="dc-retreat-penalty-item">
+                <span className="dc-retreat-penalty-icon">💔</span>
+                <span className="dc-retreat-penalty-text">현재 HP의 <b>30%</b> 감소</span>
               </div>
+              <div className="dc-retreat-penalty-item">
+                <span className="dc-retreat-penalty-icon">💰</span>
+                <span className="dc-retreat-penalty-text">보유 골드의 <b>10%</b> 소실</span>
+              </div>
+              <div className="dc-retreat-penalty-item">
+                <span className="dc-retreat-penalty-icon">🗺️</span>
+                <span className="dc-retreat-penalty-text">탐험 진행도 <b>초기화</b></span>
+              </div>
+              <div className="dc-retreat-penalty-item">
+                <span className="dc-retreat-penalty-icon">📦</span>
+                <span className="dc-retreat-penalty-text">미획득 보물 <b>소멸</b></span>
+              </div>
+            </div>
+
+            {/* 버튼 */}
+            <div className="dc-retreat-btns">
+              <button className="dc-retreat-btn-yes" onClick={() => {
+                setRetreatConfirm(false);
+                // 패널티 적용: HP 30% 감소, 골드 10% 감소
+                api.post('/battle/session/penalty', { penaltyType: 'retreat' }).catch(() => {});
+                onRetreat();
+              }}>
+                <span className="dc-retreat-btn-shimmer" />
+                그래도 후퇴하기
+              </button>
+              <button className="dc-retreat-btn-no" onClick={() => setRetreatConfirm(false)}>
+                계속 탐험하기
+              </button>
             </div>
           </div>
         </div>

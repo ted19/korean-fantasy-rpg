@@ -8,7 +8,7 @@ import {
   calcDamage, calcHeal, determineTurnOrder, aiDecide,
   checkBattleEnd, generateEnemies, getWeaponInfo, getTerrainEffect, getTileTurnEffect,
   getJointAttackAllies, calcJointDamage,
-  ELITE_TIERS, rollEliteTier, applyEliteStats,
+  ELITE_TIERS, applyEliteStats,
 } from './battleEngine';
 import api from '../api';
 import './SrpgBattle.css';

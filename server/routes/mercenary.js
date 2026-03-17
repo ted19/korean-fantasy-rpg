@@ -277,7 +277,7 @@ router.get('/:mercId/equipment', auth, async (req, res) => {
 
     // 용병 장착 장비
     const [equipped] = await pool.query(
-      `SELECT me.slot, me.item_id, it.*
+      `SELECT me.slot, me.item_id, me.enhance_level as equip_enhance_level, it.*
        FROM mercenary_equipment me
        JOIN items it ON me.item_id = it.id
        WHERE me.mercenary_id = ?`,
@@ -294,6 +294,8 @@ router.get('/:mercId/equipment', auth, async (req, res) => {
         effect_phys_attack: e.effect_phys_attack, effect_phys_defense: e.effect_phys_defense,
         effect_mag_attack: e.effect_mag_attack, effect_mag_defense: e.effect_mag_defense,
         effect_crit_rate: e.effect_crit_rate, effect_evasion: e.effect_evasion,
+        grade: e.grade, enhance_level: e.equip_enhance_level || 0, max_enhance: e.max_enhance,
+        required_level: e.required_level,
       };
     });
 
@@ -328,7 +330,7 @@ router.get('/:mercId/equipment', auth, async (req, res) => {
               it.effect_hp, it.effect_mp, it.effect_attack, it.effect_defense,
               it.effect_phys_attack, it.effect_phys_defense, it.effect_mag_attack, it.effect_mag_defense,
               it.effect_crit_rate, it.effect_evasion, it.required_level, it.class_restriction,
-              IFNULL(it.grade, '일반') as grade, it.cosmetic_effect
+              IFNULL(it.grade, '일반') as grade, it.max_enhance, it.cosmetic_effect
        FROM inventory i
        JOIN items it ON i.item_id = it.id
        WHERE i.character_id = ? AND it.type != 'potion'
@@ -467,8 +469,9 @@ router.post('/:mercId/equip', auth, async (req, res) => {
       );
     }
 
-    // 새 장비 장착
-    await conn.query('INSERT INTO mercenary_equipment (mercenary_id, slot, item_id) VALUES (?, ?, ?)', [mercId, slot, itemId]);
+    // 새 장비 장착 (강화 레벨 포함)
+    const invEnhLevel = invRows[0]?.enhance_level || 0;
+    await conn.query('INSERT INTO mercenary_equipment (mercenary_id, slot, item_id, enhance_level) VALUES (?, ?, ?, ?)', [mercId, slot, itemId, invEnhLevel]);
     await conn.query(
       `UPDATE character_mercenaries SET hp = hp + ?, mp = mp + ?,
         phys_attack = phys_attack + ?, phys_defense = phys_defense + ?,

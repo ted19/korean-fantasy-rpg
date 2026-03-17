@@ -707,6 +707,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
               setCrawlerSavedState(null);
               setFighting(false);
               api.delete('/battle/crawler/clear').catch(() => {});
+              refreshCharState();
               setVillageTarget('inn');
               setCurrentLocation('village');
               clearBattleSession();
@@ -1183,6 +1184,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v7', '1'); }}>
           <div className="patch-notes-popup" onClick={e => e.stopPropagation()}>
             <div className="patch-notes-header">
+              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v7', '1'); }}>&times;</button>
               <div className="patch-notes-badge">NEW</div>
               <h2 className="patch-notes-title">패치 노트 v7</h2>
               <div className="patch-notes-date">2026.03.17</div>

@@ -6,7 +6,7 @@ import {
   executeAttack, executeSkill, executeGuard,
   onTurnStart, decideAIAction, checkBattleEnd, calculateRewards, isStunned, isCharmed,
 } from './cardBattleEngine';
-import { rollEliteTier, applyEliteStats, ELITE_TIERS } from './battleEngine';
+import { rollEliteTier, applyEliteStats } from './battleEngine';
 import api from '../api';
 import './CrawlerBattle.css';
 
@@ -87,7 +87,7 @@ export default function CrawlerBattle({
 }) {
   const [units, setUnits] = useState([]);
   const [turnOrder, setTurnOrder] = useState([]);
-  const [currentTurnIdx, setCurrentTurnIdx] = useState(0);
+  const [, setCurrentTurnIdx] = useState(0);
   const [round, setRound] = useState(1);
   const [phase, setPhase] = useState('init');
   const [turnTick, setTurnTick] = useState(0);
@@ -108,7 +108,7 @@ export default function CrawlerBattle({
   const [autoAll, setAutoAll] = useState(!!autoPath);
   const [autoCompanion, setAutoCompanion] = useState(false);
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false);
-  const [retreatFailed, setRetreatFailed] = useState(false);
+  const [, setRetreatFailed] = useState(false);
   const [retreatDisabled, setRetreatDisabled] = useState(false);
   const [retreatResult, setRetreatResult] = useState(null);
   const [retreatDisplayPct, setRetreatDisplayPct] = useState(50);
@@ -175,12 +175,15 @@ export default function CrawlerBattle({
       let battleSummons = activeSummons || [];
       let battleMercs = (activeMercenaries || []).filter(m => m.fatigue === undefined || m.fatigue > 0);
       let playerInFormation = true;
+      let cosmeticMap = {};
       try {
-        const [summonRes, mercRes, fRes] = await Promise.all([
+        const [summonRes, mercRes, fRes, cosRes] = await Promise.all([
           api.get('/summon/my'),
           api.get('/mercenary/my'),
           api.get('/formation/list'),
+          api.get('/shop/cosmetics/equipped').catch(() => ({ data: { cosmetics: {} } })),
         ]);
+        cosmeticMap = cosRes.data.cosmetics || {};
         const freshSummons = summonRes.data.summons || [];
         const freshMercs = mercRes.data.mercenaries || [];
         const mainFormation = fRes.data.formations?.find(f => f.slotIndex === 0);
@@ -209,6 +212,18 @@ export default function CrawlerBattle({
       const mercs = battleMercs.map(m => createCardMercenaryUnit(m));
       battleMercIdsRef.current = mercs.map(m => m.mercId);
       playerTeam.push(...mercs);
+
+      // 코스메틱 효과 주입
+      const ELEM_AURA = { fire:'flame', water:'ice', earth:'aura_gold', wind:'wind', neutral:'holy', light:'holy', dark:'shadow' };
+      for (const unit of playerTeam) {
+        const cm = cosmeticMap?.[unit.id];
+        if (cm?.effect) {
+          unit.portraitEffect = cm.effect;
+        } else {
+          const el = unit.element || (unit.id === 'player' ? CLASS_ELEMENT_MAP[unit.classType] : null) || 'neutral';
+          unit.portraitEffect = ELEM_AURA[el] || 'aura_gold';
+        }
+      }
 
       // 적
       const monsterPool = dbMonsters || [];
@@ -780,9 +795,7 @@ export default function CrawlerBattle({
   }, [logs]);
 
   const currentUnit = getCurrentUnit();
-  const playerTeam = units.filter(u => u.team === 'player' && u.hp > 0);
   const enemyTeam = units.filter(u => u.team === 'enemy');
-  const aliveEnemies = enemyTeam.filter(u => u.hp > 0);
 
   // 선택 가능한 타겟
   const validTargets = phase === 'select_target' && currentUnit
@@ -838,39 +851,50 @@ export default function CrawlerBattle({
               {!isVictory && <div className="cwb-defeat-icon-drip">{[...Array(4)].map((_, i) => <span key={i} style={{ '--di': i }} />)}</div>}
             </div>
             <div className={`cwb-result-title ${battleResult}`}>
-              {isVictory ? '승리!' : '패배...'}
+              {isVictory ? 'VICTORY' : 'DEFEAT'}
             </div>
-            {isVictory && <div className="cwb-result-subtitle">전투를 훌륭히 마쳤습니다</div>}
+            {isVictory && <div className="cwb-result-subtitle">전투에서 승리했습니다!</div>}
             {!isVictory && <div className="cwb-defeat-subtitle">어둠이 당신을 삼켰습니다</div>}
             <div className="cwb-result-divider"><span /></div>
             {isVictory && resultData && (
               <div className="cwb-result-rewards">
-                <div className="cwb-reward-row">
-                  <span className="cwb-reward-label">⭐ 경험치</span>
-                  <span className="cwb-reward-val exp">+{totalExpGained}</span>
+                {/* 보상 그리드 */}
+                <div className="cwb-result-section-title">
+                  <span>⚔️ 전투 보상</span>
                 </div>
-                <div className="cwb-reward-row">
-                  <span className="cwb-reward-label">💰 골드</span>
-                  <span className="cwb-reward-val gold">+{totalGoldGained}</span>
-                </div>
-                {playerUnit && (
-                  <div className="cwb-reward-row hp-row">
-                    <span className="cwb-reward-label">❤️ 잔여 HP</span>
-                    <span className={`cwb-reward-val hp ${playerUnit.hp / playerUnit.maxHp < 0.3 ? 'low' : ''}`}>
-                      {Math.max(1, playerUnit.hp)}/{playerUnit.maxHp}
-                    </span>
+                <div className="cwb-reward-grid">
+                  <div className="cwb-reward-card exp">
+                    <span className="cwb-reward-card-icon">⭐</span>
+                    <span className="cwb-reward-card-label">경험치</span>
+                    <span className="cwb-reward-card-value">+{totalExpGained}</span>
                   </div>
-                )}
+                  <div className="cwb-reward-card gold">
+                    <span className="cwb-reward-card-icon">💰</span>
+                    <span className="cwb-reward-card-label">골드</span>
+                    <span className="cwb-reward-card-value">+{totalGoldGained}</span>
+                  </div>
+                </div>
+
+                {/* 드랍 아이템 */}
                 {resultData.drops?.length > 0 && (
-                  <div className="cwb-reward-drops">
-                    {resultData.drops.map((drop, i) => (
-                      <div key={i} className="cwb-reward-drop">{drop.icon || '📦'} {drop.name} x{drop.quantity}</div>
-                    ))}
+                  <div className="cwb-result-drops">
+                    <div className="cwb-result-drops-label">📦 획득 아이템</div>
+                    <div className="cwb-result-drops-list">
+                      {resultData.drops.map((drop, i) => (
+                        <div key={i} className="cwb-result-drop-chip">
+                          <span className="cwb-result-drop-icon">{drop.icon || '📦'}</span>
+                          <span>{drop.name}</span>
+                          <span className="cwb-result-drop-qty">x{drop.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+
+                {/* 기여도 */}
                 {contributions.length > 0 && (
                   <div className="cwb-contrib-section">
-                    <div className="cwb-contrib-title">기여도 (EXP 분배)</div>
+                    <div className="cwb-result-section-title"><span>📊 기여도 (EXP 분배)</span></div>
                     <div className="cwb-contrib-list">
                       {contributions.filter(c => c.pct > 0).sort((a, b) => b.pct - a.pct).map(c => (
                         <div key={c.id} className={`cwb-contrib-row ${c.id === 'player' ? 'player' : ''}`}>
@@ -879,14 +903,41 @@ export default function CrawlerBattle({
                             <span className="cwb-contrib-name">{c.name}</span>
                           </div>
                           <div className="cwb-contrib-stats">
+                            <span className="cwb-contrib-dmg">{(c.damage || 0).toLocaleString()} DMG</span>
+                            {c.kills > 0 && <span className="cwb-contrib-kills">{c.kills} Kill</span>}
+                          </div>
+                          <div className="cwb-contrib-bar-outer">
                             <div className="cwb-contrib-bar-wrap">
                               <div className="cwb-contrib-bar" style={{ width: `${c.pct}%` }} />
                             </div>
                             <span className="cwb-contrib-pct">{c.pct}%</span>
-                            <span className="cwb-contrib-exp">+{c.exp}</span>
                           </div>
+                          <span className="cwb-contrib-exp">+{c.exp} EXP</span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 전투 후 상태 */}
+                {playerUnit && (
+                  <div className="cwb-result-status">
+                    <div className="cwb-result-section-title"><span>❤️ 전투 후 상태</span></div>
+                    <div className="cwb-result-status-bars">
+                      <div className="cwb-status-row">
+                        <span className="cwb-status-label hp">HP</span>
+                        <div className="cwb-status-track">
+                          <div className="cwb-status-fill hp" style={{ width: `${Math.min(100, (Math.max(1, playerUnit.hp) / playerUnit.maxHp) * 100)}%` }} />
+                        </div>
+                        <span className="cwb-status-text">{Math.max(1, playerUnit.hp)}/{playerUnit.maxHp}</span>
+                      </div>
+                      <div className="cwb-status-row">
+                        <span className="cwb-status-label mp">MP</span>
+                        <div className="cwb-status-track">
+                          <div className="cwb-status-fill mp" style={{ width: `${playerUnit.maxMp > 0 ? Math.min(100, (playerUnit.mp / playerUnit.maxMp) * 100) : 0}%` }} />
+                        </div>
+                        <span className="cwb-status-text">{Math.max(0, playerUnit.mp)}/{playerUnit.maxMp}</span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1099,7 +1150,7 @@ export default function CrawlerBattle({
       </div>
 
       {/* ===== 중간: 액션 영역 ===== */}
-      <div className="cwb-action-area" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/ui/battle/cwb_action_bar.png)` }}>
+      <div className="cwb-action-area">
         {phase === 'player_action' && currentUnit && !showSkillList && !showItemList && (
           <div className="cwb-actions">
             <div className="cwb-action-label">{currentUnit.icon} {currentUnit.name}의 행동</div>
@@ -1198,7 +1249,8 @@ export default function CrawlerBattle({
                 onClick={() => { if (isAllyTarget) handleSelectTarget(ally); else setInspectAlly(ally); }}
               >
                 <div className="cwb-ally-portrait">
-                  <img src={ally.imageUrl} alt={ally.name} className="cwb-ally-img" onError={e => { e.target.style.display = 'none'; }} />
+                  {ally.portraitEffect && <div className={`cb-portrait-effect cb-effect-${ally.portraitEffect}`} style={{ position: 'absolute', inset: 0, borderRadius: '8px', zIndex: 0, pointerEvents: 'none' }} />}
+                  <img src={ally.imageUrl} alt={ally.name} className="cwb-ally-img" style={{ position: 'relative', zIndex: 1 }} onError={e => { e.target.style.display = 'none'; }} />
                   {isDead && <div className="cwb-ally-dead">💀</div>}
                   {ally.isGuarding && <div className="cwb-guard-badge">🛡️</div>}
                   {/* 데미지 팝업 */}

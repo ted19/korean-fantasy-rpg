@@ -20,10 +20,10 @@ const COSMETIC_EFFECT_COLORS = {
 };
 const GRADE_COLORS = { '일반': '#aaa', '고급': '#4ade80', '희귀': '#60a5fa', '영웅': '#c084fc', '전설': '#fbbf24', '신화': '#ff6b6b' };
 
-function ShopImg({ itemId, type, className }) {
+function ShopImg({ itemId, type, className, style }) {
   const [err, setErr] = useState(false);
-  if (err || !itemId) return <span className={className}>{TYPE_ICONS[type] || '📦'}</span>;
-  return <img src={`/equipment/${itemId}_icon.png`} alt="" className={className} onError={() => setErr(true)} />;
+  if (err || !itemId) return <span className={className} style={style}>{TYPE_ICONS[type] || '📦'}</span>;
+  return <img src={`/equipment/${itemId}_icon.png`} alt="" className={className} style={style} onError={() => setErr(true)} />;
 }
 
 function NpcImg({ src, className }) {
@@ -245,7 +245,8 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
             return (
               <div key={item.id} className="facility-item-card">
                 <div className="fitem-top">
-                  <ShopImg itemId={item.id} type={item.type} className="fitem-icon" />
+                  <ShopImg itemId={item.id} type={item.type} className="fitem-icon"
+                    style={item.grade && GRADE_COLORS[item.grade] ? { border: `2px solid ${GRADE_COLORS[item.grade]}80`, borderRadius: '6px' } : undefined} />
                   <div className="fitem-info">
                     <div className="fitem-name">
                       <span style={{ color: GRADE_COLORS[item.grade] || '#aaa' }}>{item.name}</span>
@@ -302,7 +303,8 @@ function Shop({ character, charState, onCharStateUpdate, onLog }) {
                 >
                   {item && (
                     <>
-                      <ShopImg itemId={item.item_id} type={item.type} className="shop-inv-cell-img" />
+                      <ShopImg itemId={item.item_id} type={item.type} className="shop-inv-cell-img"
+                        style={item.grade && GRADE_COLORS[item.grade] ? { border: `2px solid ${GRADE_COLORS[item.grade]}`, borderRadius: '4px' } : undefined} />
                       {item.enhance_level > 0 && <span className="shop-inv-enhance">+{item.enhance_level}</span>}
                       {item.available_qty > 1 && <span className="shop-inv-qty">x{item.available_qty}</span>}
                       <span className="shop-inv-cell-name" style={{ color: GRADE_COLORS[item.grade] || '#aaa' }}>

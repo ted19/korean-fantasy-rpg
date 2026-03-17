@@ -19,9 +19,13 @@ const specialDungeonRoutes = require('./routes/special-dungeon');
 const gachaRoutes = require('./routes/gacha');
 const db = require('./db');
 
+const http = require('http');
 const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// 헤더 크기 제한 확장 (431 오류 방지)
+http.maxHeaderSize = 64 * 1024; // 64KB
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:4000';
 
