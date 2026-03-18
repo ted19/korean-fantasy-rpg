@@ -5,6 +5,9 @@ const { pool, getSelectedChar } = require('../db');
 const router = express.Router();
 const JWT_SECRET = 'game-secret-key-change-in-production';
 
+// 하이로우 서버 세션 (치팅 방지)
+const hlSessions = new Map();
+
 function auth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ message: '인증 토큰이 필요합니다.' });
@@ -31,7 +34,7 @@ router.post('/play', async (req, res) => {
 
     const { game, bet, result } = req.body;
     if (!game) { conn.release(); return res.status(400).json({ message: '잘못된 요청입니다.' }); }
-    if (game !== 'highlow_cashout') {
+    if (game !== 'highlow_cashout' && game !== 'highlow') {
       if (!bet || bet <= 0) { conn.release(); return res.status(400).json({ message: '잘못된 요청입니다.' }); }
       if (bet > 10000) { conn.release(); return res.status(400).json({ message: '최대 베팅은 10,000G입니다.' }); }
       if (char.gold < bet) { conn.release(); return res.status(400).json({ message: '골드가 부족합니다.' }); }
@@ -57,21 +60,56 @@ router.post('/play', async (req, res) => {
       winAmount = correct ? bet : -bet;
       serverResult = { flip, choice, win: winAmount };
 
+    } else if (game === 'highlow_start') {
+      // 게임 시작: 베팅금 차감, 첫 카드 공개, 세션 생성
+      const card = Math.floor(Math.random() * 10) + 1;
+      const session = { bet, card, pot: bet, streak: 0 };
+      hlSessions.set(char.id, session);
+      winAmount = -bet;
+      serverResult = { card, pot: bet, streak: 0 };
+
     } else if (game === 'highlow') {
-      const prev = result?.prev || 5;
-      const next = Math.floor(Math.random() * 10) + 1;
+      // 하이로우 추측: 서버 세션에서 검증
+      const session = hlSessions.get(char.id);
+      if (!session) { conn.release(); return res.status(400).json({ message: '게임이 진행중이지 않습니다.' }); }
+
       const guess = result?.guess || 'high';
-      const correct = (guess === 'high' && next > prev) || (guess === 'low' && next < prev) || next === prev;
-      const streak = correct ? (result?.streak || 0) + 1 : 0;
-      // 맞추면 골드 변동 없음 (연승 중 누적), 틀리면 베팅금 차감
-      winAmount = correct ? 0 : -bet;
-      serverResult = { prev, next, guess, correct, win: winAmount, streak };
+      const prev = session.card;
+      const next = Math.floor(Math.random() * 10) + 1;
+
+      if (next === prev) {
+        // 같은 숫자 = 무조건 패배 (하우스 엣지)
+        hlSessions.delete(char.id);
+        winAmount = 0; // 베팅금은 시작 시 이미 차감됨
+        serverResult = { prev, next, guess, correct: false, same: true, pot: 0, streak: 0, lostPot: session.pot };
+      } else {
+        const correct = (guess === 'high' && next > prev) || (guess === 'low' && next < prev);
+        if (correct) {
+          // 리스크 기반 배율: 어려운 선택 = 높은 배율, 쉬운 선택 = 낮은 배율
+          // 5% 하우스 엣지: 어떤 카드/선택이든 기대값 -5%
+          const favorable = guess === 'high' ? (10 - prev) : (prev - 1);
+          const multiplier = (10 / favorable) * 0.95;
+          session.streak++;
+          session.pot = Math.floor(session.pot * multiplier);
+          session.card = next;
+          winAmount = 0;
+          serverResult = { prev, next, guess, correct: true, pot: session.pot, streak: session.streak, multiplier: parseFloat(multiplier.toFixed(2)) };
+        } else {
+          // 오답 = 베팅금 + 누적 팟 모두 잃음
+          const lostPot = session.pot;
+          hlSessions.delete(char.id);
+          winAmount = 0;
+          serverResult = { prev, next, guess, correct: false, pot: 0, streak: 0, lostPot };
+        }
+      }
 
     } else if (game === 'highlow_cashout') {
-      // 연승 보상 정산
-      const cashout = Math.max(0, Math.floor(result?.cashout || 0));
-      winAmount = cashout;
-      serverResult = { cashout, win: winAmount };
+      // 연승 보상 정산 (서버 세션에서 검증)
+      const session = hlSessions.get(char.id);
+      if (!session || session.pot <= 0) { conn.release(); return res.status(400).json({ message: '정산할 보상이 없습니다.' }); }
+      winAmount = session.pot;
+      hlSessions.delete(char.id);
+      serverResult = { cashout: winAmount };
 
     } else {
       conn.release();

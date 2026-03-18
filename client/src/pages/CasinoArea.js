@@ -141,24 +141,44 @@ function CasinoArea({ charState, onCharStateUpdate, onLog }) {
     }, 3500);
   };
 
-  // ── 하이로우: 현재 숫자보다 높을지 낮을지 맞추기 ──
-  const [hlPendingWin, setHlPendingWin] = useState(0); // 연승 중 누적 보상
+  // ── 하이로우: 리스크 기반 배율 시스템 ──
+  const [hlPot, setHlPot] = useState(0); // 서버에서 관리하는 누적 팟
 
-  const startHighLow = () => {
-    setHlCurrent(Math.floor(Math.random() * 10) + 1);
+  // 배율 계산 (UI 표시용)
+  const getMultiplier = (card, guess) => {
+    if (!card) return 0;
+    const favorable = guess === 'high' ? (10 - card) : (card - 1);
+    if (favorable <= 0) return 0;
+    return parseFloat(((10 / favorable) * 0.95).toFixed(2));
+  };
+
+  const startHighLow = async () => {
+    if (loading || charState.gold < hlBet) return;
+    setLoading(true);
     setHlResult(null);
     setHlStreak(0);
-    setHlPendingWin(0);
+    setHlPot(0);
+    try {
+      const res = await api.post('/casino/play', { game: 'highlow_start', bet: hlBet, result: {} });
+      const { card, pot } = res.data.result;
+      setHlCurrent(card);
+      setHlPot(pot);
+      onCharStateUpdate({ gold: res.data.gold });
+      onLog(`📊 하이로우 시작! ${hlBet.toLocaleString()}G 베팅, 첫 카드: ${card}`, 'info');
+    } catch (err) {
+      onLog(err.response?.data?.message || '게임 오류', 'damage');
+    }
+    setLoading(false);
   };
 
   const playHighLow = async (guess) => {
-    if (loading || hlFlipping || !hlCurrent || charState.gold < hlBet) return;
+    if (loading || hlFlipping || !hlCurrent) return;
     setLoading(true);
     setHlResult(null);
 
     let serverResult = null;
     try {
-      const res = await api.post('/casino/play', { game: 'highlow', bet: hlBet, result: { prev: hlCurrent, guess, streak: hlStreak } });
+      const res = await api.post('/casino/play', { game: 'highlow', bet: hlBet, result: { guess } });
       serverResult = res.data;
     } catch (err) {
       onLog(err.response?.data?.message || '게임 오류', 'damage');
@@ -166,9 +186,8 @@ function CasinoArea({ charState, onCharStateUpdate, onLog }) {
       return;
     }
 
-    const { next, correct, win: winAmount, streak: newStreak } = serverResult.result;
+    const { next, correct, same, pot, streak: newStreak, multiplier, lostPot } = serverResult.result;
 
-    // 카드 뒤집기 애니메이션
     setHlCardNumber(next);
     setHlFlipping(true);
 
@@ -176,40 +195,39 @@ function CasinoArea({ charState, onCharStateUpdate, onLog }) {
       setHlFlipping(false);
 
       if (correct) {
-        const totalWin = Math.floor(hlBet * Math.pow(1.5, newStreak));
-        setHlPendingWin(totalWin);
-        const msg = `📊 ${hlCurrent} → ${next}! 정답! ${newStreak}연승! (누적 ${totalWin.toLocaleString()}G)`;
+        setHlPot(pot);
+        const msg = `📊 ${hlCurrent} → ${next}! 정답! ×${multiplier} → 팟 ${pot.toLocaleString()}G (${newStreak}연승)`;
         onLog(msg, 'heal');
+        setHlCurrent(next);
+        setHlStreak(newStreak);
       } else {
-        setHlPendingWin(0);
-        const msg = `📊 ${hlCurrent} → ${next}! 오답... -${hlBet.toLocaleString()}G`;
-        onCharStateUpdate({ gold: serverResult.gold });
+        setHlPot(0);
+        const reason = same ? `같은 숫자!` : `오답!`;
+        const msg = `📊 ${hlCurrent} → ${next}! ${reason} -${(lostPot || hlBet).toLocaleString()}G 잃음`;
         onLog(msg, 'damage');
+        setHlCurrent(null);
+        setHlStreak(0);
       }
 
-      setHlResult({ prev: hlCurrent, next, correct, amount: winAmount, streak: newStreak });
-      setHlCurrent(correct ? next : null);
-      setHlStreak(correct ? newStreak : 0);
-      if (!correct) setHlPendingWin(0);
+      setHlResult({ prev: hlCurrent, next, correct, same, streak: newStreak || 0 });
       setLoading(false);
     }, 1500);
   };
 
-  // 연승 중 멈추고 보상 확정
   const cashOutHighLow = async () => {
-    if (loading || hlPendingWin <= 0) return;
+    if (loading || hlPot <= 0) return;
     setLoading(true);
     try {
-      // 보상 확정 (bet=0으로 보내서 보상만 처리)
-      const res = await api.post('/casino/play', { game: 'highlow_cashout', bet: 0, result: { cashout: hlPendingWin } });
+      const res = await api.post('/casino/play', { game: 'highlow_cashout', bet: 0, result: {} });
       onCharStateUpdate({ gold: res.data.gold });
-      onLog(`📊 ${hlStreak}연승 정산! +${hlPendingWin.toLocaleString()}G 획득!`, 'heal');
+      const profit = hlPot - hlBet;
+      onLog(`📊 ${hlStreak}연승 정산! +${hlPot.toLocaleString()}G 회수! (순이익 ${profit >= 0 ? '+' : ''}${profit.toLocaleString()}G)`, 'heal');
     } catch (err) {
       onLog(err.response?.data?.message || '정산 오류', 'damage');
     }
     setHlCurrent(null);
     setHlStreak(0);
-    setHlPendingWin(0);
+    setHlPot(0);
     setHlResult(null);
     setLoading(false);
   };
@@ -384,28 +402,33 @@ function CasinoArea({ charState, onCharStateUpdate, onLog }) {
         <div style={{ padding: '16px 0' }}>
           <div style={{ background: '#181c2e', borderRadius: 12, padding: 20, textAlign: 'center' }}>
             <h4 style={{ color: '#4ade80', marginBottom: 8 }}>📊 하이로우</h4>
-            <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>다음 숫자(1~10)가 높을까 낮을까? 연승하면 보상 ×1.5배!</p>
+            <p style={{ color: '#888', fontSize: 13, marginBottom: 4 }}>다음 카드(1~10)가 높을까 낮을까? 맞추면 배율만큼 팟 증가!</p>
+            <p style={{ color: '#666', fontSize: 12, marginBottom: 16 }}>⚠ 같은 숫자 = 무조건 패배 | 쉬운 선택 = 낮은 배율, 어려운 선택 = 높은 배율 | 틀리면 팟 전액 잃음</p>
 
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-              {BET_OPTIONS.map(b => (
-                <button key={b} onClick={() => setHlBet(b)}
-                  style={{ padding: '6px 14px', borderRadius: 8, border: hlBet === b ? '2px solid #4ade80' : '1px solid #333',
-                    background: hlBet === b ? '#4ade8020' : '#0f1320', color: hlBet === b ? '#4ade80' : '#888',
-                    cursor: 'pointer', fontSize: 13, fontWeight: hlBet === b ? 700 : 400 }}>
-                  {b.toLocaleString()}G
-                </button>
-              ))}
-            </div>
+            {!hlCurrent && (
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+                {BET_OPTIONS.map(b => (
+                  <button key={b} onClick={() => setHlBet(b)}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: hlBet === b ? '2px solid #4ade80' : '1px solid #333',
+                      background: hlBet === b ? '#4ade8020' : '#0f1320', color: hlBet === b ? '#4ade80' : '#888',
+                      cursor: 'pointer', fontSize: 13, fontWeight: hlBet === b ? 700 : 400 }}>
+                    {b.toLocaleString()}G
+                  </button>
+                ))}
+              </div>
+            )}
 
             {!hlCurrent ? (
               <>
                 <div style={{ marginBottom: 16 }}>
                   <Card3D flipping={false} number={0} width={160} height={220} />
                 </div>
-                <button onClick={startHighLow}
-                  style={{ padding: '12px 36px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                    color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
-                  게임 시작!
+                <button onClick={startHighLow} disabled={loading || charState.gold < hlBet}
+                  style={{ padding: '12px 36px', borderRadius: 12, border: 'none',
+                    background: charState.gold >= hlBet ? 'linear-gradient(135deg, #22c55e, #16a34a)' : '#333',
+                    color: charState.gold >= hlBet ? '#fff' : '#666', fontWeight: 700, fontSize: 16,
+                    cursor: charState.gold >= hlBet ? 'pointer' : 'default' }}>
+                  {charState.gold < hlBet ? '골드 부족' : `${hlBet.toLocaleString()}G 걸고 시작!`}
                 </button>
               </>
             ) : (
@@ -420,36 +443,63 @@ function CasinoArea({ charState, onCharStateUpdate, onLog }) {
                   />
                 </div>
 
-                {hlStreak > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ color: '#4ade80', fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🔥 {hlStreak}연승! (×{Math.pow(1.5, hlStreak).toFixed(1)})</div>
-                    <div style={{ color: '#fbbf24', fontSize: 13 }}>누적 보상: <b>{hlPendingWin.toLocaleString()}G</b></div>
+                {/* 팟 & 연승 정보 */}
+                <div style={{ marginBottom: 12, padding: '10px 16px', background: '#0f1320', borderRadius: 10, display: 'inline-block' }}>
+                  <div style={{ color: '#fbbf24', fontSize: 15, fontWeight: 700 }}>
+                    💰 팟: {hlPot.toLocaleString()}G
+                    {hlPot > hlBet && <span style={{ color: '#4ade80', fontSize: 12, marginLeft: 6 }}>(+{(hlPot - hlBet).toLocaleString()}G)</span>}
                   </div>
-                )}
+                  {hlStreak > 0 && (
+                    <div style={{ color: '#4ade80', fontSize: 13, marginTop: 2 }}>🔥 {hlStreak}연승 중</div>
+                  )}
+                </div>
 
                 {hlResult && (
                   <div style={{ fontSize: 14, color: hlResult.correct ? '#4ade80' : '#ef4444', marginBottom: 12, padding: '8px 14px', background: hlResult.correct ? '#4ade8015' : '#ef444415', borderRadius: 8 }}>
-                    {hlResult.prev} → {hlResult.next}: {hlResult.correct ? `정답!` : `오답... -${hlBet.toLocaleString()}G`}
+                    {hlResult.prev} → {hlResult.next}: {hlResult.correct ? `정답!` : hlResult.same ? `같은 숫자! 패배...` : `오답...`}
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button onClick={() => playHighLow('high')} disabled={loading || hlFlipping || charState.gold < hlBet}
-                    style={{ padding: '12px 30px', borderRadius: 12, border: 'none', background: (!loading && !hlFlipping) ? '#ef4444' : '#555', color: '#fff', fontWeight: 700, fontSize: 15, cursor: (!loading && !hlFlipping) ? 'pointer' : 'default' }}>
-                    🔺 높다!
-                  </button>
-                  <button onClick={() => playHighLow('low')} disabled={loading || hlFlipping || charState.gold < hlBet}
-                    style={{ padding: '12px 30px', borderRadius: 12, border: 'none', background: (!loading && !hlFlipping) ? '#3b82f6' : '#555', color: '#fff', fontWeight: 700, fontSize: 15, cursor: (!loading && !hlFlipping) ? 'pointer' : 'default' }}>
-                    🔻 낮다!
-                  </button>
+                {/* 배율 표시 + 버튼 */}
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                  {(() => {
+                    const highMul = getMultiplier(hlCurrent, 'high');
+                    const highFav = 10 - hlCurrent;
+                    return (
+                      <button onClick={() => playHighLow('high')} disabled={loading || hlFlipping || highFav <= 0}
+                        style={{ padding: '12px 24px', borderRadius: 12, border: 'none',
+                          background: (!loading && !hlFlipping && highFav > 0) ? '#ef4444' : '#555',
+                          color: '#fff', fontWeight: 700, fontSize: 15, cursor: (!loading && !hlFlipping && highFav > 0) ? 'pointer' : 'default',
+                          opacity: highFav <= 0 ? 0.3 : 1, minWidth: 130 }}>
+                        🔺 높다!
+                        {highFav > 0 && <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>×{highMul} ({highFav}0%)</div>}
+                      </button>
+                    );
+                  })()}
+                  {(() => {
+                    const lowMul = getMultiplier(hlCurrent, 'low');
+                    const lowFav = hlCurrent - 1;
+                    return (
+                      <button onClick={() => playHighLow('low')} disabled={loading || hlFlipping || lowFav <= 0}
+                        style={{ padding: '12px 24px', borderRadius: 12, border: 'none',
+                          background: (!loading && !hlFlipping && lowFav > 0) ? '#3b82f6' : '#555',
+                          color: '#fff', fontWeight: 700, fontSize: 15, cursor: (!loading && !hlFlipping && lowFav > 0) ? 'pointer' : 'default',
+                          opacity: lowFav <= 0 ? 0.3 : 1, minWidth: 130 }}>
+                        🔻 낮다!
+                        {lowFav > 0 && <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>×{lowMul} ({lowFav}0%)</div>}
+                      </button>
+                    );
+                  })()}
                 </div>
 
-                {/* 멈추고 보상 받기 버튼 */}
-                {hlStreak > 0 && hlPendingWin > 0 && (
+                <div style={{ color: '#555', fontSize: 11, marginBottom: 8 }}>같은 숫자 나올 확률: 10% (패배)</div>
+
+                {/* 정산 버튼 (1연승 이상부터) */}
+                {hlStreak > 0 && hlPot > 0 && (
                   <button onClick={cashOutHighLow} disabled={loading}
-                    style={{ marginTop: 14, padding: '10px 30px', borderRadius: 12, border: '2px solid #fbbf24',
+                    style={{ marginTop: 8, padding: '10px 30px', borderRadius: 12, border: '2px solid #fbbf24',
                       background: '#fbbf2420', color: '#fbbf24', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                    💰 {hlPendingWin.toLocaleString()}G 받고 멈추기
+                    💰 {hlPot.toLocaleString()}G 받고 멈추기
                   </button>
                 )}
               </>
