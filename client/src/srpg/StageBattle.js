@@ -60,6 +60,13 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   const [battleEntering, setBattleEntering] = useState(true); // 입장 연출
   const [contributions, setContributions] = useState([]); // {id, name, icon, imageUrl, damage, kills, pct, exp}
   const [eliteAlert, setEliteAlert] = useState(null); // { name, icon, monsterId, tier }
+
+  // 자동전투 중 정예 팝업 2초 후 자동 닫기
+  useEffect(() => {
+    if (!eliteAlert || !autoAll) return;
+    const timer = setTimeout(() => setEliteAlert(null), 2000);
+    return () => clearTimeout(timer);
+  }, [eliteAlert, autoAll]);
   const battleSummonIdsRef = useRef([]);
   const battleMercIdsRef = useRef([]);
   const playerInBattleRef = useRef(true);
