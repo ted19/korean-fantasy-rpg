@@ -41,10 +41,24 @@ async function recoverFatigue(conn, characterId) {
   }
 }
 
+// 전체 용병 목록 (도감용)
+router.get('/templates-all', auth, async (req, res) => {
+  try {
+    const [templates] = await pool.query('SELECT * FROM mercenary_templates ORDER BY FIELD(grade,"일반","고급","희귀","영웅","전설","신화","초월"), required_level');
+    res.json({ templates });
+  } catch (err) {
+    console.error('Mercenary templates-all error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 용병 템플릿 목록 (여관에서 고용 가능한 용병)
 router.get('/templates', auth, async (req, res) => {
   try {
-    const [templates] = await pool.query('SELECT * FROM mercenary_templates ORDER BY required_level, price');
+    // 상점에서는 일반/고급 + shop 타입만 표시 (희귀 이상은 가챠/퀘스트/보스로 획득)
+    const [templates] = await pool.query(
+      "SELECT * FROM mercenary_templates WHERE acquisition_type = 'shop' AND grade IN ('일반','고급') ORDER BY required_level, price"
+    );
     res.json({ templates });
   } catch (err) {
     console.error('Mercenary templates error:', err);
@@ -74,7 +88,7 @@ router.get('/my', auth, async (req, res) => {
     const [mercenaries] = await pool.query(
       `SELECT cm.*, mt.class_type, mt.description, mt.icon, mt.range_type, mt.element, mt.weapon_type,
               mt.sell_price, mt.growth_hp, mt.growth_mp, mt.growth_phys_attack, mt.growth_phys_defense,
-              mt.growth_mag_attack, mt.growth_mag_defense
+              mt.growth_mag_attack, mt.growth_mag_defense, mt.grade, mt.growth_mult
        FROM character_mercenaries cm
        JOIN mercenary_templates mt ON cm.template_id = mt.id
        WHERE cm.character_id = ?
@@ -131,6 +145,11 @@ router.post('/hire', auth, async (req, res) => {
     const [templates] = await conn.query('SELECT * FROM mercenary_templates WHERE id = ?', [templateId]);
     if (templates.length === 0) return res.status(404).json({ message: '용병을 찾을 수 없습니다.' });
     const tpl = templates[0];
+
+    // 상점 구매는 일반/고급 + shop 타입만 허용
+    if (tpl.acquisition_type !== 'shop' || !['일반', '고급'].includes(tpl.grade)) {
+      return res.status(400).json({ message: '이 용병은 상점에서 고용할 수 없습니다. (가챠/퀘스트/보스 클리어로 획득)' });
+    }
 
     if (char.level < tpl.required_level) {
       return res.status(400).json({ message: `레벨 ${tpl.required_level} 이상이어야 고용할 수 있습니다.` });
@@ -789,6 +808,156 @@ router.put('/:id/skill-priority', auth, async (req, res) => {
   } catch (err) {
     console.error('Merc skill priority error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// ── 용병 성급 강화 ──
+const STAR_LEVEL_REQUIREMENTS = {
+  1: 1,   // 0→1성: 레벨 제한 없음
+  2: 10,  // 1→2성: Lv.10
+  3: 20,  // 2→3성: Lv.20
+  4: 35,  // 3→4성: Lv.35
+  5: 50,  // 4→5성: Lv.50
+  6: 70,  // 5→6성: Lv.70
+};
+
+const GRADE_ENHANCE_TICKET = {
+  '일반': '일반용병강화권', '고급': '고급용병강화권', '희귀': '희귀용병강화권',
+  '영웅': '영웅용병강화권', '전설': '전설용병강화권', '신화': '신화용병강화권', '초월': '초월용병강화권',
+};
+
+// 강화 정보 조회
+router.get('/enhance-info/:mercenaryId', auth, async (req, res) => {
+  try {
+    const char = await require('../db').getSelectedChar(req, pool);
+    if (!char) return res.status(400).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    const [mercs] = await pool.query(
+      `SELECT cm.*, mt.grade FROM character_mercenaries cm
+       JOIN mercenary_templates mt ON cm.template_id = mt.id
+       WHERE cm.id = ? AND cm.character_id = ?`,
+      [req.params.mercenaryId, char.id]
+    );
+    if (mercs.length === 0) return res.status(404).json({ message: '용병을 찾을 수 없습니다.' });
+    const merc = mercs[0];
+
+    if (merc.star_level >= 6) return res.json({ maxed: true, starLevel: 6, grade: merc.grade });
+
+    const nextStar = (merc.star_level || 0) + 1;
+    const requiredLevel = STAR_LEVEL_REQUIREMENTS[nextStar] || 1;
+    const [rates] = await pool.query('SELECT success_rate FROM unit_enhance_rates WHERE grade = ? AND star_level = ?', [merc.grade, nextStar]);
+    const successRate = rates.length > 0 ? rates[0].success_rate : 0.5;
+
+    const ticketName = GRADE_ENHANCE_TICKET[merc.grade];
+    const [ticketItem] = await pool.query('SELECT id, name FROM items WHERE name = ?', [ticketName]);
+    let ticketOwned = 0;
+    if (ticketItem.length > 0) {
+      const [inv] = await pool.query('SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?', [char.id, ticketItem[0].id]);
+      ticketOwned = inv.length > 0 ? inv[0].quantity : 0;
+    }
+
+    res.json({
+      starLevel: merc.star_level || 0,
+      nextStar,
+      grade: merc.grade,
+      successRate,
+      requiredLevel,
+      unitLevel: merc.level || 1,
+      ticketName,
+      ticketItemId: ticketItem[0]?.id,
+      ticketOwned,
+      maxed: false,
+    });
+  } catch (err) {
+    console.error('Merc enhance info error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 강화 실행
+router.post('/enhance', auth, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const char = await require('../db').getSelectedChar(req, conn);
+    if (!char) { conn.release(); return res.status(400).json({ message: '캐릭터를 찾을 수 없습니다.' }); }
+
+    const { mercenaryId } = req.body;
+    const [mercs] = await conn.query(
+      `SELECT cm.*, mt.grade, mt.base_hp, mt.base_mp, mt.base_phys_attack, mt.base_phys_defense, mt.base_mag_attack, mt.base_mag_defense
+       FROM character_mercenaries cm JOIN mercenary_templates mt ON cm.template_id = mt.id
+       WHERE cm.id = ? AND cm.character_id = ?`, [mercenaryId, char.id]
+    );
+    if (mercs.length === 0) { conn.release(); return res.status(404).json({ message: '용병을 찾을 수 없습니다.' }); }
+    const merc = mercs[0];
+
+    const currentStar = merc.star_level || 0;
+    if (currentStar >= 6) { conn.release(); return res.status(400).json({ message: '이미 최대 성급(6성)입니다.' }); }
+
+    const nextStar = currentStar + 1;
+    const requiredLevel = STAR_LEVEL_REQUIREMENTS[nextStar] || 1;
+    if (merc.level < requiredLevel) {
+      conn.release();
+      return res.status(400).json({ message: `${nextStar}성 강화는 용병 Lv.${requiredLevel} 이상이어야 합니다. (현재 Lv.${merc.level})` });
+    }
+
+    const ticketName = GRADE_ENHANCE_TICKET[merc.grade];
+    const [ticketItem] = await conn.query('SELECT id FROM items WHERE name = ?', [ticketName]);
+    if (ticketItem.length === 0) { conn.release(); return res.status(500).json({ message: '강화권 아이템 오류' }); }
+
+    const [inv] = await conn.query('SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?', [char.id, ticketItem[0].id]);
+    if (!inv.length || inv[0].quantity <= 0) {
+      conn.release();
+      return res.status(400).json({ message: `${ticketName}이(가) 부족합니다.` });
+    }
+
+    const [rates] = await conn.query('SELECT success_rate FROM unit_enhance_rates WHERE grade = ? AND star_level = ?', [merc.grade, nextStar]);
+    const successRate = rates.length > 0 ? rates[0].success_rate : 0.5;
+
+    await conn.beginTransaction();
+
+    // 강화권 1개 소모
+    await conn.query('UPDATE inventory SET quantity = quantity - 1 WHERE character_id = ? AND item_id = ?', [char.id, ticketItem[0].id]);
+
+    const roll = Math.random();
+    const success = roll < successRate;
+
+    if (success) {
+      // 성급별 스탯 보너스 (성급이 높을수록 더 큰 보너스)
+      // 1성:3%, 2성:4%, 3성:5%, 4성:6%, 5성:8%, 6성:10%
+      const STAR_BONUS = { 1: 0.03, 2: 0.04, 3: 0.05, 4: 0.06, 5: 0.08, 6: 0.10 };
+      const bonus = STAR_BONUS[nextStar] || 0.05;
+      await conn.query(
+        `UPDATE character_mercenaries SET star_level = ?,
+          hp = hp + FLOOR(? * ?), mp = mp + FLOOR(? * ?),
+          phys_attack = phys_attack + GREATEST(1, FLOOR(? * ?)),
+          phys_defense = phys_defense + GREATEST(1, FLOOR(? * ?)),
+          mag_attack = mag_attack + GREATEST(1, FLOOR(? * ?)),
+          mag_defense = mag_defense + GREATEST(1, FLOOR(? * ?))
+        WHERE id = ?`,
+        [nextStar,
+         merc.base_hp, bonus, merc.base_mp, bonus,
+         merc.base_phys_attack, bonus, merc.base_phys_defense, bonus,
+         merc.base_mag_attack, bonus, merc.base_mag_defense, bonus,
+         mercenaryId]
+      );
+    }
+
+    await conn.commit();
+
+    res.json({
+      success,
+      starLevel: success ? nextStar : currentStar,
+      successRate: Math.round(successRate * 100),
+      message: success
+        ? `강화 성공! ${merc.name} → ${nextStar}성 ⭐`
+        : `강화 실패... (${Math.round(successRate * 100)}% 확률)`,
+    });
+  } catch (err) {
+    await conn.rollback().catch(() => {});
+    console.error('Merc enhance error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  } finally {
+    conn.release();
   }
 });
 

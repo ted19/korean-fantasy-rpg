@@ -31,6 +31,14 @@ const STAGE_GROUP_NAMES = {
 function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSelect }) {
   const [prologueCleared, setPrologueCleared] = useState(character.prologue_cleared === 1);
   const [currentLocation, setCurrentLocation] = useState(character.prologue_cleared === 1 ? 'home' : 'prologue');
+
+  // character props 변경 시 프롤로그 상태 동기화
+  useEffect(() => {
+    if (character.prologue_cleared === 1 && !prologueCleared) {
+      setPrologueCleared(true);
+      setCurrentLocation('home');
+    }
+  }, [character.prologue_cleared]); // eslint-disable-line
   const [logs, setLogs] = useState([{ text: `${character.name}님이 접속했습니다.`, type: 'system' }]);
   const [charState, setCharState] = useState({
     currentHp: character.current_hp ?? character.hp,
@@ -69,7 +77,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [battleBlockMsg, setBattleBlockMsg] = useState(null);
   const [battleLoading, setBattleLoading] = useState(null); // { type: 'dungeon'|'stage'|'tower'|'boss_raid'|'elemental', name: string }
   const [showPatchNotes, setShowPatchNotes] = useState(() => {
-    const key = 'patchNotes_v8';
+    const key = 'patchNotes_v10';
     if (localStorage.getItem(key)) return false;
     return true;
   });
@@ -187,17 +195,28 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     }
   }, [currentLocation, fighting, srpgBattle]);
 
+  // 스킬 로드: 레벨 변경 시에만 (값 비교)
+  const prevLevelRef = React.useRef(charState.level);
   useEffect(() => {
+    const shouldLoad = prevLevelRef.current !== charState.level || !learnedSkills.length;
+    prevLevelRef.current = charState.level;
+    if (!shouldLoad && learnedSkills.length > 0) return;
     api.get('/skill/active-skills').then(res => {
       setLearnedSkills(res.data.skills || []);
       setPassiveBonuses(res.data.passiveBonuses || {});
     }).catch(() => {
-      // fallback to legacy list
       api.get('/skill/list').then(res => {
         setLearnedSkills(res.data.skills.filter(s => s.learned));
       }).catch(() => {});
     });
-  }, [charState.level]);
+  }, [charState.level]); // eslint-disable-line
+
+  const handleSkillsUpdate = React.useCallback((skills) => {
+    setLearnedSkills(skills);
+    api.get('/skill/active-skills').then(res => {
+      setPassiveBonuses(res.data.passiveBonuses || {});
+    }).catch(() => {});
+  }, []);
 
   const addLog = (text, type = 'normal') => {
     setLogs((prev) => [...prev.slice(-50), { text, type, time: new Date().toLocaleTimeString() }]);
@@ -915,13 +934,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
             charState={charState}
             onCharStateUpdate={handleCharStateUpdate}
             onLog={addLog}
-            onSkillsUpdate={(skills) => {
-              setLearnedSkills(skills);
-              // Refresh passive bonuses too
-              api.get('/skill/active-skills').then(res => {
-                setPassiveBonuses(res.data.passiveBonuses || {});
-              }).catch(() => {});
-            }}
+            onSkillsUpdate={handleSkillsUpdate}
             onSummonsChanged={loadMySummons}
             onMercenariesChanged={loadMyMercenaries}
             myMercenaries={myMercenaries}
@@ -1181,96 +1194,79 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
 
       {/* 패치노트 팝업 */}
       {showPatchNotes && (
-        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v8', '1'); }}>
+        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v10', '1'); }}>
           <div className="patch-notes-popup" onClick={e => e.stopPropagation()}>
             <div className="patch-notes-header">
-              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v8', '1'); }}>&times;</button>
+              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v10', '1'); }}>&times;</button>
               <div className="patch-notes-badge">NEW</div>
-              <h2 className="patch-notes-title">패치 노트 v8 — 종합 밸런스 대개편</h2>
-              <div className="patch-notes-date">2026.03.18</div>
+              <h2 className="patch-notes-title">패치 노트 v10 — 강화 & 가챠 대개편</h2>
+              <div className="patch-notes-date">2026.03.19</div>
             </div>
             <div className="patch-notes-body">
               <div className="patch-section">
-                <h3>스테이지 대개편</h3>
+                <h3>용병/소환수 성급 강화 시스템</h3>
                 <ul>
-                  <li><span className="patch-tag improve">개선</span> 스테이지 레벨 범위 <b>전면 확장</b> (기존 1~28 → 1~100)</li>
-                  <li><span className="patch-tag improve">개선</span> <b>한국</b> 스테이지: 초~중반 (Lv 1~40)</li>
-                  <li><span className="patch-tag improve">개선</span> <b>일본</b> 스테이지: 중~후반 (Lv 12~70)</li>
-                  <li><span className="patch-tag improve">개선</span> <b>중국</b> 스테이지: 후반~엔드게임 (Lv 35~100)</li>
-                  <li><span className="patch-tag improve">개선</span> 전 스테이지 EXP/골드 보상 레벨 비례 재조정</li>
+                  <li><span className="patch-tag new">신규</span> <b>0성 → 6성</b> 강화 시스템 (강화권 사용)</li>
+                  <li><span className="patch-tag new">신규</span> 등급별 × 성급별 <b>차등 성공 확률</b> (일반 95%~25% / 초월 65%~5%)</li>
+                  <li><span className="patch-tag new">신규</span> 성급별 <b>레벨 제한</b>: 2성(Lv10), 3성(Lv20), 4성(Lv35), 5성(Lv50), 6성(Lv70)</li>
+                  <li><span className="patch-tag new">신규</span> 성급별 <b>스탯 보너스</b> 차등: 1성(+3%) ~ 6성(+10%), 총 36%</li>
+                  <li><span className="patch-tag new">신규</span> <b>강화 팝업</b> 연출: AI 배경 이미지 + 마법진/대장간 이펙트 + 성공/실패 결과 화면</li>
+                  <li><span className="patch-tag improve">개선</span> 용병/소환수별 다른 강화 배경 (용병: 대장간, 소환수: 크리스탈)</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>몬스터 밸런스</h3>
+                <h3>강화권 시스템</h3>
                 <ul>
-                  <li><span className="patch-tag improve">개선</span> 티어 1~10 몬스터 <b>EXP/골드 보상</b> 전면 재조정</li>
-                  <li><span className="patch-tag improve">개선</span> 고티어(6~10) 몬스터 HP +10%, 공격력 +8% 강화</li>
-                  <li><span className="patch-tag improve">개선</span> 몬스터 스킬 데미지 배율 재조정 (기본 1.2x~궁극 2.2x)</li>
-                  <li><span className="patch-tag improve">개선</span> 힐/버프/디버프 스킬 수치 재조정</li>
+                  <li><span className="patch-tag new">신규</span> <b>14종 강화권</b>: 일반~초월 × 용병/소환수 (가챠 중복 시 획득)</li>
+                  <li><span className="patch-tag new">신규</span> 가챠 중복 소환 시 골드 대신 <b>해당 등급 강화권</b> 지급</li>
+                  <li><span className="patch-tag improve">개선</span> 강화권은 소모품 탭에 ⭐ 아이콘으로 표시</li>
+                  <li><span className="patch-tag improve">개선</span> 주인공 인벤토리에서는 "용병/소환수용" 비활성 표시</li>
+                  <li><span className="patch-tag improve">개선</span> 용병 장비에서 소환수강화권은 "소환수용", 반대도 동일</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>용병 시스템</h3>
+                <h3>가챠 연출 대개편</h3>
                 <ul>
-                  <li><span className="patch-tag improve">개선</span> 용병 가격 & 레벨 요구 전면 재조정</li>
-                  <li><span className="patch-tag improve">개선</span> 검사 2,000골드(Lv1) ~ 마법사 100,000골드(Lv60)</li>
-                  <li><span className="patch-tag improve">개선</span> 후반 용병(무사/치유사/자객/마법사) 기본 스탯 상향</li>
-                  <li><span className="patch-tag improve">개선</span> 슬롯 해금: Lv 1/8/18/30/45 (기존 1/10/20/30/40)</li>
+                  <li><span className="patch-tag new">신규</span> <b>AI 고품질 배경</b> 16장 (ComfyUI + Flux.1-dev)</li>
+                  <li><span className="patch-tag new">신규</span> 용병: <b>전장 봉화</b> 테마 (불꽃/검/충격파)</li>
+                  <li><span className="patch-tag new">신규</span> 소환수: <b>마법진 소환</b> 테마 (마법진/빛기둥/룬문자)</li>
+                  <li><span className="patch-tag new">신규</span> 고급 소환권: 일반 대비 <b>2배 긴 연출</b> + 프리미엄 배경 + 금색 이펙트</li>
+                  <li><span className="patch-tag new">신규</span> 소환 결과 시 유닛별 <b>고유 소개 멘트</b> (타이핑 효과)</li>
+                  <li><span className="patch-tag new">신규</span> 중복 소환 시 <b>강화권 획득 안내</b> 팝업</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>소환수 시스템</h3>
+                <h3>성급 표시 UI</h3>
                 <ul>
-                  <li><span className="patch-tag improve">개선</span> 소환수 가격 & 레벨 요구 전면 재조정</li>
-                  <li><span className="patch-tag improve">개선</span> 들쥐 150골드(Lv1) ~ 리치 8,000골드(Lv35)</li>
-                  <li><span className="patch-tag improve">개선</span> 소환 재료 비용 레벨 비례 정규화</li>
-                  <li><span className="patch-tag improve">개선</span> 슬롯 해금: Lv 1/8/18/30/45/60 (기존 1/10/20/30/40/50)</li>
-                  <li><span className="patch-tag improve">개선</span> 소환수 성장률 상향 (몬스터형 HP↑, 귀신형 마공↑, 정령형 마방↑)</li>
+                  <li><span className="patch-tag new">신규</span> 모든 화면에 <b>성급 표시</b>: 0성(☆) ~ 6성(★★★★★★)</li>
+                  <li><span className="patch-tag new">신규</span> 홈/여관/소환술사/도감/전투 카드 모두 등급 뱃지 + 성급 표시</li>
+                  <li><span className="patch-tag new">신규</span> 스테이지 전투/크롤러 전투/SRPG 전투 아군 카드에 등급+성급</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>특수 던전</h3>
+                <h3>스킬 대폭 보강</h3>
                 <ul>
-                  <li><span className="patch-tag improve">개선</span> <b>무한의 탑</b>: 입장 Lv15, 층당 난이도 커브 강화 (HP×1.08/층, 레벨보너스 ×2/층)</li>
-                  <li><span className="patch-tag improve">개선</span> <b>정령의 시련</b>: 5단계 (Lv 20/30/42/55/70), HP·공격 배율 대폭 상향</li>
-                  <li><span className="patch-tag improve">개선</span> <b>보스 토벌전</b>: 6보스 (Lv 25/35/45/55/68/80), 엔드게임 콘텐츠화</li>
-                  <li><span className="patch-tag improve">개선</span> 보스 토벌전 보상 대폭 증가 (최대 EXP 4,500 / 골드 3,000)</li>
+                  <li><span className="patch-tag new">신규</span> 용병 스킬 <b>38 → 86개</b> (+48): 클래스당 10개 (Lv1~Lv80)</li>
+                  <li><span className="patch-tag new">신규</span> 소환수 스킬 <b>50 → 51개</b>: 신수/용/마수 타입 22종 추가</li>
+                  <li><span className="patch-tag new">신규</span> 몬스터 스킬 <b>33 → 40개</b> (+7): 고티어 전용 상위 스킬</li>
+                  <li><span className="patch-tag new">신규</span> 스킬 아이콘 <b>78장</b> Pillow 자동 생성 (기존 스타일 유지)</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>장비 & 강화</h3>
+                <h3>기타 개선</h3>
                 <ul>
-                  <li><span className="patch-tag improve">개선</span> 강화 비용 재조정: 초반 더 저렴 (+1: 50골드), 후반 관대하게</li>
-                  <li><span className="patch-tag improve">개선</span> 강화 성공률 소폭 상향 (+6: 74%, +10: 34%, +15: 6%)</li>
-                  <li><span className="patch-tag improve">개선</span> 장비 가격 레벨 기반 스케일링 적용</li>
-                  <li><span className="patch-tag improve">개선</span> 물약 가격 재조정 (소형 10골드~선단 2,000골드)</li>
-                  <li><span className="patch-tag improve">개선</span> 제작 비용 & 재료량 레벨 비례 조정</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>스킬 트리</h3>
-                <ul>
-                  <li><span className="patch-tag improve">개선</span> 티어별 레벨 요구 재조정: T1(Lv1) → T2(Lv5) → T3(Lv12) → T4(Lv22) → T5(Lv35) → T6(Lv55) → T7(Lv80)</li>
-                  <li><span className="patch-tag improve">개선</span> 티어별 포인트 비용: 1 → 1 → 2 → 3 → 5 → 7 → 10</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>클래스 밸런스</h3>
-                <ul>
-                  <li><span className="patch-tag improve">개선</span> <b>풍수사</b>: HP 성장 8→9, 마법 특화 유지</li>
-                  <li><span className="patch-tag improve">개선</span> <b>무당</b>: 크리/회피 성장 소폭 상향</li>
-                  <li><span className="patch-tag improve">개선</span> <b>승려</b>: 방어 성장 소폭 하향 (2.5→2.2, 밸런스 조정)</li>
-                  <li><span className="patch-tag improve">개선</span> <b>저승사자</b>: 크리 성장 소폭 하향 (0.3→0.25, 밸런스 조정)</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>행동력</h3>
-                <ul>
-                  <li><span className="patch-tag improve">개선</span> 콘텐츠별 행동력 소모 정규화: 일반 1, 보스 2, 던전 2, 타워 2, 정령/토벌 3</li>
+                  <li><span className="patch-tag improve">개선</span> 캐릭터 닉네임 <b>금지어 시스템</b>: 비속어/사칭/몬스터명 등 350+ 차단</li>
+                  <li><span className="patch-tag improve">개선</span> 닉네임 규칙: 2~12자, 한글/영문만, 특수문자/숫자 불가, 연속 문자 제한</li>
+                  <li><span className="patch-tag improve">개선</span> 속성 미선택 시 <b>빨간 테두리 깜박</b> + 자동 스크롤</li>
+                  <li><span className="patch-tag improve">개선</span> 무한의 탑: 몬스터/소환수/용병 이미지를 <b>배경 제거 버전</b>으로 교체</li>
+                  <li><span className="patch-tag improve">개선</span> 모든 유닛에 <b>속성 오라</b> 적용 (neutral 포함 holy 오라)</li>
+                  <li><span className="patch-tag fix">수정</span> 상점에서 강화권/소환권 판매 차단</li>
+                  <li><span className="patch-tag fix">수정</span> 스킬 반복 호출 무한루프 수정</li>
+                  <li><span className="patch-tag fix">수정</span> 세션 체크 로그 과다 출력 제거</li>
                 </ul>
               </div>
             </div>
-            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v8', '1'); }}>
+            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v10', '1'); }}>
               확인
             </button>
           </div>

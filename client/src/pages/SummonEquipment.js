@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Badge } from 'react-bootstrap';
 import api from '../api';
+import EnhancePopup from './EnhancePopup';
 import '../srpg/StageBattle.css';
 
 const COSMETIC_EFFECT_LABELS = {
@@ -67,6 +68,31 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
   const [summonStats, setSummonStats] = useState(summon);
   const [selectedItem, setSelectedItem] = useState(null);
   const [levelLockPopup, setLevelLockPopup] = useState(null);
+  const [enhanceInfo, setEnhanceInfo] = useState(null);
+  const [enhancing, setEnhancing] = useState(false);
+
+  const STAR_LEVEL_REQ = { 1: 1, 2: 10, 3: 20, 4: 35, 5: 50, 6: 70 };
+  const GRADE_ENHANCE_MAP = { '일반': '일반소환수강화권', '고급': '고급소환수강화권', '희귀': '희귀소환수강화권', '영웅': '영웅소환수강화권', '전설': '전설소환수강화권', '신화': '신화소환수강화권', '초월': '초월소환수강화권' };
+
+  const loadEnhanceInfo = useCallback(async () => {
+    try {
+      const res = await api.get(`/summon/enhance-info/${summon.id}`);
+      setEnhanceInfo(res.data);
+    } catch { setEnhanceInfo(null); }
+  }, [summon.id]);
+
+  useEffect(() => { loadEnhanceInfo(); }, [loadEnhanceInfo]);
+
+  const [showEnhancePopup, setShowEnhancePopup] = useState(false);
+
+  const handleEnhanceApi = async () => {
+    const res = await api.post('/summon/enhance', { summonId: summon.id });
+    onLog(res.data.message, res.data.success ? 'heal' : 'damage');
+    await loadData();
+    await loadEnhanceInfo();
+    if (onSummonUpdate) onSummonUpdate();
+    return res.data;
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -370,7 +396,7 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                     {potions.map(pot => (
                       <div key={pot.inv_id} className="inv-mat-item">
                         <div className="inv-mat-icon">
-                          <EquipImg itemId={pot.item_id} fallback={pot.type === 'talisman' ? '📜' : '🧪'} className="inv-cell-img" />
+                          <EquipImg itemId={pot.item_id} fallback={pot.name?.includes('강화권') ? '⭐' : pot.type === 'talisman' ? '📜' : '🧪'} className="inv-cell-img" />
                         </div>
                         <div className="inv-mat-info">
                           <div className="inv-mat-name">{pot.name}</div>
@@ -386,7 +412,35 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
                           </div>
                         </div>
                         <div className="inv-mat-qty">x{pot.quantity}</div>
-                        {pot.type !== 'talisman' && (
+                        {pot.name?.includes('용병강화권') ? (
+                          <button className="inv-potion-use-btn disabled" disabled title="용병 장비 화면에서 사용하세요">용병용</button>
+                        ) : pot.name?.includes('소환수강화권') ? (() => {
+                          const grade = summonStats?.grade || '일반';
+                          const requiredTicket = GRADE_ENHANCE_MAP[grade];
+                          const isMatchGrade = pot.name === requiredTicket;
+                          const starLevel = summonStats?.star_level || 0;
+                          const isMaxStar = starLevel >= 6;
+                          const nextStar = starLevel + 1;
+                          const reqLv = STAR_LEVEL_REQ[nextStar] || 1;
+                          const unitLv = enhanceInfo?.unitLevel || summonStats?.level || 1;
+                          const levelOk = unitLv >= reqLv;
+                          const canUse = isMatchGrade && !isMaxStar && levelOk && pot.quantity > 0;
+                          return (
+                            <button
+                              className={`inv-potion-use-btn${canUse ? '' : ' disabled'}`}
+                              disabled={!canUse || enhancing}
+                              onClick={() => canUse && setShowEnhancePopup(true)}
+                              title={
+                                isMaxStar ? '이미 6성입니다' :
+                                !isMatchGrade ? `이 소환수는 ${requiredTicket}이(가) 필요합니다` :
+                                !levelOk ? `${nextStar}성 강화는 소환수 Lv.${reqLv} 필요 (현재 Lv.${unitLv})` :
+                                `${nextStar}성으로 강화 (성공률: ${enhanceInfo?.successRate ? Math.round(enhanceInfo.successRate * 100) : '?'}%)`
+                              }
+                            >
+                              {enhancing ? '...' : canUse ? `강화 (${nextStar}성)` : isMaxStar ? 'MAX' : !isMatchGrade ? '등급불일치' : `Lv.${reqLv}필요`}
+                            </button>
+                          );
+                        })() : pot.type !== 'talisman' && (
                           <button className="inv-potion-use-btn" onClick={() => handleUsePotion(pot)}>사용</button>
                         )}
                       </div>
@@ -499,6 +553,15 @@ function SummonEquipment({ summon, onLog, onSummonUpdate }) {
             <button className="equip-lock-btn" onClick={() => setLevelLockPopup(null)}>확인</button>
           </div>
         </div>
+      )}
+      {showEnhancePopup && enhanceInfo && !enhanceInfo.maxed && (
+        <EnhancePopup
+          unitType="summon"
+          unit={{ ...summonStats, template_id: summon.template_id }}
+          enhanceInfo={enhanceInfo}
+          onEnhance={handleEnhanceApi}
+          onClose={() => setShowEnhancePopup(false)}
+        />
       )}
     </Row>
   );

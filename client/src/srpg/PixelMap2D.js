@@ -25,15 +25,14 @@ function getUnitImage(unit) {
     return { src: key ? `/tower_sprites/${key}.png` : null, fallbackSrc: key ? `/characters/${key}_icon.png` : null };
   }
   if (unit.id.startsWith('summon_')) {
-    const tid = unit.templateId || unit.summonId;
-    return { src: tid ? `/tower_sprites/summon_${tid}.png` : null, fallbackSrc: unit.imageUrl || (tid ? `/summons_nobg/${tid}_full.png` : null) };
+    // imageUrl은 battleEngine에서 template_id 기반으로 설정됨
+    return { src: unit.imageUrl || null, fallbackSrc: unit.imageUrl?.replace('_full', '_icon') || null };
   }
   if (unit.id.startsWith('merc_')) {
-    const tid = unit.templateId || unit.mercId;
-    return { src: tid ? `/tower_sprites/merc_${tid}.png` : null, fallbackSrc: unit.imageUrl || (tid ? `/mercenaries/${tid}_full.png` : null) };
+    return { src: unit.imageUrl || null, fallbackSrc: unit.imageUrl?.replace('_full', '_icon') || null };
   }
   if (unit.monsterId) {
-    return { src: `/tower_sprites/monster_${unit.monsterId}.png`, fallbackSrc: `/monsters_nobg/${unit.monsterId}_icon.png` };
+    return { src: `/monsters_nobg/${unit.monsterId}_full.png`, fallbackSrc: `/monsters_nobg/${unit.monsterId}_icon.png` };
   }
   return { src: null, fallbackSrc: null };
 }

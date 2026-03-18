@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api';
+import GachaPopup from './GachaPopup';
 import './InnArea.css';
 
 const WEAPON_ICONS = {
@@ -15,6 +16,13 @@ const ELEMENT_INFO = {
 };
 
 const RANGE_LABELS = { melee: '근거리', ranged: '원거리', magic: '마법' };
+
+const starDisplay = (sl) => { const s = sl || 0; return s === 0 ? '☆' : '★'.repeat(s); };
+const GRADE_COLORS = {
+  '일반': '#9ca3af', '고급': '#4ade80', '희귀': '#60a5fa',
+  '영웅': '#c084fc', '전설': '#fbbf24', '신화': '#ff6b6b', '초월': '#ff44cc',
+};
+const GRADE_STARS = { '일반': '★', '고급': '★★', '희귀': '★★★', '영웅': '★★★★', '전설': '★★★★★', '신화': '★★★★★★', '초월': '★★★★★★★' };
 
 const ELEMENT_AURA = {
   fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy',
@@ -87,7 +95,47 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
     } catch {}
   }, []);
 
-  useEffect(() => { loadTemplates(); loadMyMercs(); loadAuras(); }, [loadTemplates, loadMyMercs, loadAuras]);
+  // 조각 교환 데이터
+  const [shardInfo, setShardInfo] = useState({ shards: {}, recipes: [], tickets: {} });
+  const [exchangeLoading, setExchangeLoading] = useState(false);
+  const [gachaPopup, setGachaPopup] = useState(null); // { ticketType, ticketName }
+
+  const loadShardInfo = useCallback(async () => {
+    try {
+      const res = await api.get('/gacha/tickets');
+      setShardInfo({
+        shards: res.data.shards || {},
+        recipes: (res.data.recipes || []).filter(r => r.ticket_type === 'mercenary'),
+        tickets: res.data.tickets || {},
+      });
+    } catch {}
+  }, []);
+
+  const handleExchange = async (recipeId) => {
+    setExchangeLoading(true);
+    try {
+      const res = await api.post('/gacha/exchange', { recipeId });
+      onLog(res.data.message, 'heal');
+      await loadShardInfo();
+    } catch (err) {
+      onLog(err.response?.data?.message || '교환 실패', 'damage');
+    }
+    setExchangeLoading(false);
+  };
+
+  const handleGachaPull = async (ticketType) => {
+    const res = await api.post('/gacha/mercenary', { ticketType });
+    onLog(res.data.message, res.data.result?.resultType === 'new' ? 'heal' : 'normal');
+    return res.data.result; // GachaPopup에서 사용
+  };
+
+  const handleGachaComplete = async () => {
+    await loadShardInfo();
+    await loadMyMercs();
+    if (onMercenariesChanged) onMercenariesChanged();
+  };
+
+  useEffect(() => { loadTemplates(); loadMyMercs(); loadAuras(); loadShardInfo(); }, [loadTemplates, loadMyMercs, loadAuras, loadShardInfo]);
 
   const handleHire = async (templateId) => {
     setLoading(true);
@@ -227,18 +275,24 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
 
       {/* 탭 */}
       <div className="facility-tabs">
-        {[
-          { id: 'templates', label: '용병 고용' },
-          { id: 'my', label: `내 용병 (${mercSlots.current}/${mercSlots.max})` },
-        ].map(t => (
+        {(() => {
+          const hasShards = (shardInfo.shards['용병소환 조각'] || 0) >= 30;
+          const hasTickets = (shardInfo.tickets['mercenary'] || 0) > 0 || (shardInfo.tickets['mercenary_premium'] || 0) > 0;
+          const gachaGlow = hasShards || hasTickets;
+          return [
+            { id: 'templates', label: '용병 고용' },
+            { id: 'my', label: `내 용병 (${mercSlots.current}/${mercSlots.max})` },
+            { id: 'gacha', label: `조각 교환 🗡️`, glow: gachaGlow },
+          ].map(t => (
           <button
             key={t.id}
-            className={`facility-tab${tab === t.id ? ' active' : ''}`}
+            className={`facility-tab${tab === t.id ? ' active' : ''}${t.glow && tab !== t.id ? ' tab-glow' : ''}`}
             onClick={() => handleTabChange(t.id)}
           >
             {t.label}
           </button>
-        ))}
+        ));
+        })()}
       </div>
 
       {/* 용병 고용 탭 */}
@@ -256,12 +310,14 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
                 >
                   <div className="inn-merc-icon">
                     <div className={`cb-portrait-effect cb-effect-${ELEMENT_AURA[t.element] || 'aura_gold'}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', zIndex: 0, opacity: 0.6 }} />
-                    <MercImg src={`/mercenaries/${t.id}_icon.png`} fallback={WEAPON_ICONS[t.weapon_type] || '⚔️'} className="inn-merc-img" />
+                    <MercImg src={`/mercenaries_nobg/${t.id}_icon.png`} fallback={WEAPON_ICONS[t.weapon_type] || '⚔️'} className="inn-merc-img" />
                   </div>
                   <div className="inn-merc-info">
                     <div className="inn-merc-name">
+                      <span className="inn-grade-badge" style={{ background: GRADE_COLORS[t.grade] || '#9ca3af' }}>{t.grade || '일반'}</span>
                       {t.name}
                       <span className="inn-merc-class">{t.class_type}</span>
+                      <span style={{ fontSize: 10, color: '#666', marginLeft: 4 }}>☆</span>
                     </div>
                     <div className="inn-merc-meta">
                       <span style={{ color: el.color }}>{el.icon}{el.name}</span>
@@ -284,10 +340,15 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
               <div className="inn-detail-header">
                 <div className="inn-detail-portrait-wrap">
                   <div className={`cb-portrait-effect cb-effect-${ELEMENT_AURA[selectedTemplate.element] || 'aura_gold'}`} style={{ position: 'absolute', inset: 0, borderRadius: '10px', zIndex: 0, opacity: 0.6 }} />
-                  <MercImg src={`/mercenaries/${selectedTemplate.id}_full.png`} fallback={WEAPON_ICONS[selectedTemplate.weapon_type]} className="inn-detail-portrait" />
+                  <MercImg src={`/mercenaries_nobg/${selectedTemplate.id}_full.png`} fallback={WEAPON_ICONS[selectedTemplate.weapon_type]} className="inn-detail-portrait" />
                 </div>
                 <div>
-                  <h3>{selectedTemplate.name}</h3>
+                  <h3 style={{ color: GRADE_COLORS[selectedTemplate.grade] || '#eee' }}>
+                    {selectedTemplate.grade && selectedTemplate.grade !== '일반' && (
+                      <span className="inn-grade-badge" style={{ background: GRADE_COLORS[selectedTemplate.grade], marginRight: 6, verticalAlign: 'middle' }}>{selectedTemplate.grade}</span>
+                    )}
+                    {selectedTemplate.name}
+                  </h3>
                   <div className="inn-detail-sub">
                     {selectedTemplate.class_type} ·
                     <span style={{ color: (ELEMENT_INFO[selectedTemplate.element] || ELEMENT_INFO.neutral).color }}>
@@ -360,13 +421,15 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
                 >
                   <div className="inn-merc-icon">
                     <div className={`cb-portrait-effect cb-effect-${mercAuras[`merc_${m.id}`]?.effect || ELEMENT_AURA[m.element] || 'aura_gold'}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', zIndex: 0 }} />
-                    <MercImg src={`/mercenaries/${m.template_id}_icon.png`} fallback={WEAPON_ICONS[m.weapon_type] || '⚔️'} className="inn-merc-img" />
+                    <MercImg src={`/mercenaries_nobg/${m.template_id}_icon.png`} fallback={WEAPON_ICONS[m.weapon_type] || '⚔️'} className="inn-merc-img" />
                     <span className="inn-merc-level-badge">Lv.{m.level}</span>
                   </div>
                   <div className="inn-merc-info">
                     <div className="inn-merc-name">
+                      <span className="inn-grade-badge" style={{ background: GRADE_COLORS[m.grade] || '#9ca3af' }}>{m.grade || '일반'}</span>
                       {m.name}
                       <span className="inn-merc-class">{m.class_type}</span>
+                      <span style={{ fontSize: 10, color: GRADE_COLORS[m.grade] || '#fbbf24', marginLeft: 4 }}>{starDisplay(m.star_level)}</span>
                     </div>
                     <div className="inn-merc-meta">
                       <span style={{ color: el.color }}>{el.icon}{el.name}</span>
@@ -395,10 +458,14 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
               <div className="inn-detail-header">
                 <div className="inn-detail-portrait-wrap">
                   <div className={`cb-portrait-effect cb-effect-${mercAuras[`merc_${selectedMerc.id}`]?.effect || ELEMENT_AURA[selectedMerc.element] || 'aura_gold'}`} style={{ position: 'absolute', inset: 0, borderRadius: '10px', zIndex: 0 }} />
-                  <MercImg src={`/mercenaries/${selectedMerc.template_id}_full.png`} fallback={WEAPON_ICONS[selectedMerc.weapon_type]} className="inn-detail-portrait" />
+                  <MercImg src={`/mercenaries_nobg/${selectedMerc.template_id}_full.png`} fallback={WEAPON_ICONS[selectedMerc.weapon_type]} className="inn-detail-portrait" />
                 </div>
                 <div>
-                  <h3>{selectedMerc.name} <span className="inn-detail-level">Lv.{selectedMerc.level}</span></h3>
+                  <h3 style={{ color: GRADE_COLORS[selectedMerc.grade] || '#eee' }}>
+                    <span className="inn-grade-badge" style={{ background: GRADE_COLORS[selectedMerc.grade] || '#9ca3af', marginRight: 6, verticalAlign: 'middle' }}>{selectedMerc.grade || '일반'}</span>
+                    {selectedMerc.name} <span className="inn-detail-level">Lv.{selectedMerc.level}</span>
+                    <span style={{ fontSize: 12, color: GRADE_COLORS[selectedMerc.grade] || '#fbbf24', marginLeft: 6 }}>{starDisplay(selectedMerc.star_level)}</span>
+                  </h3>
                   <div className="inn-detail-sub">
                     {selectedMerc.class_type} ·
                     <span style={{ color: (ELEMENT_INFO[selectedMerc.element] || ELEMENT_INFO.neutral).color }}>
@@ -468,6 +535,107 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
         </div>
       )}
 
+      {/* 용병 소환 (조각 교환 + 가챠) 탭 */}
+      {tab === 'gacha' && (
+        <div className="inn-content" style={{ flexDirection: 'column', gap: 12 }}>
+          {/* 조각 보유량 */}
+          <div style={{ background: '#181c2e', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 22 }}>🗡️</span>
+              <div>
+                <div style={{ fontSize: 11, color: '#888' }}>용병소환 조각</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: '#fbbf24' }}>{shardInfo.shards['용병소환 조각'] || 0}개</div>
+              </div>
+            </div>
+            <div style={{ height: 30, width: 1, background: '#333' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>📜</span>
+              <div>
+                <div style={{ fontSize: 11, color: '#888' }}>용병소환권</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#c084fc' }}>{shardInfo.tickets['mercenary'] || 0}장</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>🌟</span>
+              <div>
+                <div style={{ fontSize: 11, color: '#888' }}>고급용병소환권</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24' }}>{shardInfo.tickets['mercenary_premium'] || 0}장</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 조각 → 소환권 교환 */}
+          <div style={{ background: '#181c2e', borderRadius: 10, padding: 16 }}>
+            <h4 style={{ color: '#fbbf24', fontSize: 14, marginBottom: 10, borderBottom: '1px solid #2a2f45', paddingBottom: 6 }}>🔄 조각 교환</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {shardInfo.recipes.length === 0 ? (
+                <div style={{ color: '#666', fontSize: 13, textAlign: 'center', padding: 16 }}>교환 레시피 로딩중...</div>
+              ) : shardInfo.recipes.map(r => {
+                const shardCount = shardInfo.shards['용병소환 조각'] || 0;
+                const canExchange = shardCount >= r.shard_cost;
+                return (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#0f1320', borderRadius: 8, border: `1px solid ${canExchange ? '#4ade8040' : '#333'}` }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#eee' }}>{r.ticket_name}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>
+                        🗡️ {r.shard_cost}개 필요 (보유: <span style={{ color: canExchange ? '#4ade80' : '#ef4444' }}>{shardCount}</span>)
+                      </div>
+                    </div>
+                    <button
+                      style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: canExchange ? '#4ade80' : '#333', color: canExchange ? '#000' : '#666', fontWeight: 700, fontSize: 12, cursor: canExchange ? 'pointer' : 'default' }}
+                      disabled={!canExchange || exchangeLoading}
+                      onClick={() => handleExchange(r.id)}
+                    >
+                      {exchangeLoading ? '...' : '교환'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 소환권 사용 (가챠) */}
+          <div style={{ background: '#181c2e', borderRadius: 10, padding: 16 }}>
+            <h4 style={{ color: '#c084fc', fontSize: 14, marginBottom: 10, borderBottom: '1px solid #2a2f45', paddingBottom: 6 }}>⚔️ 용병 소환</h4>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {[
+                { type: 'mercenary', name: '용병소환권', icon: '📜', color: '#c084fc', desc: '조각 30개로 교환한 소환권' },
+                { type: 'mercenary_premium', name: '고급용병소환권', icon: '🌟', color: '#fbbf24', desc: '조각 80개로 교환한 고급 소환권' },
+              ].map(ticket => {
+                const count = shardInfo.tickets[ticket.type] || 0;
+                return (
+                  <div key={ticket.type} style={{ flex: '1 1 200px', padding: 14, background: '#0f1320', borderRadius: 10, border: `1px solid ${count > 0 ? ticket.color + '40' : '#333'}`, textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, marginBottom: 6 }}>{ticket.icon}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: ticket.color }}>{ticket.name}</div>
+                    <div style={{ fontSize: 11, color: '#888', margin: '4px 0' }}>{ticket.desc}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: count > 0 ? '#eee' : '#555', margin: '6px 0' }}>{count}장</div>
+                    <button
+                      style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: count > 0 ? ticket.color : '#333', color: count > 0 ? '#000' : '#666', fontWeight: 700, fontSize: 13, cursor: count > 0 ? 'pointer' : 'default', width: '100%' }}
+                      disabled={count <= 0 || exchangeLoading}
+                      onClick={() => setGachaPopup({ ticketType: ticket.type, ticketName: ticket.name })}
+                    >
+                      {exchangeLoading ? '소환 중...' : count > 0 ? '소환하기' : '소환권 없음'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 가챠 연출 팝업 */}
+      {gachaPopup && (
+        <GachaPopup
+          unitType="mercenary"
+          ticketType={gachaPopup.ticketType}
+          ticketName={gachaPopup.ticketName}
+          onPull={handleGachaPull}
+          onClose={() => setGachaPopup(null)}
+          onComplete={handleGachaComplete}
+        />
+      )}
+
       {/* 용병 휴식 팝업 */}
       {restPopup && !restPopup.fireConfirm && (
         <div className="aura-popup-overlay" onClick={() => setRestPopup(null)}>
@@ -518,7 +686,7 @@ function InnArea({ charState, onCharStateUpdate, onLog, onMercenariesChanged, in
             <div className="dismiss-content">
               <div className="dismiss-top-deco" />
               <div className="dismiss-icon-wrap">
-                <MercImg src={`/mercenaries/${restPopup.merc.template_id}_icon.png`} fallback="⚔️" className="dismiss-icon-img" />
+                <MercImg src={`/mercenaries_nobg/${restPopup.merc.template_id}_icon.png`} fallback="⚔️" className="dismiss-icon-img" />
                 <div className="dismiss-icon-glow" />
               </div>
               <div className="dismiss-title">용병 해고</div>

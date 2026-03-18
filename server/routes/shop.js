@@ -60,7 +60,9 @@ async function refreshShopStock(conn, characterId, classType) {
   const [candidates] = await conn.query(
     `SELECT id FROM items
      WHERE (class_restriction IS NULL OR class_restriction = ?)
-       AND type != 'cosmetic'
+       AND type NOT IN ('cosmetic', 'talisman')
+       AND name NOT LIKE '%소환권%'
+       AND name NOT LIKE '%강화권%'
        AND IFNULL(grade, '일반') IN ('일반', '고급')
      ORDER BY RAND()
      LIMIT ?`,

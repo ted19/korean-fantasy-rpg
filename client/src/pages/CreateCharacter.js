@@ -45,8 +45,10 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
   const [name, setName] = useState('');
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
+  const [elementShake, setElementShake] = useState(false);
 
   const bottomRef = useRef(null);
+  const elementRef = useRef(null);
 
   const handleClassSelect = (className) => {
     setSelectedClass(className);
@@ -73,7 +75,13 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
     setError('');
     if (!name.trim()) { setError('캐릭터 이름을 입력해주세요.'); return; }
     if (!selectedClass) { setError('직업을 선택해주세요.'); return; }
-    if (!selectedElement) { setError('속성을 선택해주세요.'); return; }
+    if (!selectedElement) {
+      setError('속성을 선택해주세요.');
+      setElementShake(true);
+      setTimeout(() => setElementShake(false), 1500);
+      elementRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
 
     setCreating(true);
     try {
@@ -169,11 +177,11 @@ function CreateCharacter({ onCharacterCreated, onBack }) {
         </div>
 
         {/* 속성 선택 */}
-        <div className="create-section-label">
+        <div className="create-section-label" ref={elementRef}>
           속성 선택
           {isElementLocked && <span style={{ fontSize: 12, color: '#ef4444', marginLeft: 8 }}>(저승사자는 중립 속성 고정)</span>}
         </div>
-        <div className="create-element-grid">
+        <div className={`create-element-grid${elementShake ? ' element-shake' : ''}`}>
           {Object.entries(ELEMENT_INFO).map(([key, el]) => (
             <div
               key={key}

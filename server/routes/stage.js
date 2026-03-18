@@ -725,6 +725,27 @@ router.post('/battle-result', auth, async (req, res) => {
       }
     }
 
+    // 소환 조각 드랍 (스테이지 승리 시)
+    let droppedShards = [];
+    if (victory) {
+      const isBoss = req.body.isBoss || false;
+      const contentType = isBoss ? 'boss_stage' : 'normal_stage';
+      const [shardConfigs] = await conn.query(
+        'SELECT sdc.*, m.id as material_id, m.name, m.icon FROM shard_drop_config sdc JOIN materials m ON m.name = sdc.shard_type WHERE sdc.content_type = ?',
+        [contentType]
+      ).catch(() => [[]]);
+      for (const cfg of shardConfigs) {
+        if (Math.random() < cfg.drop_rate) {
+          const qty = cfg.min_quantity + Math.floor(Math.random() * (cfg.max_quantity - cfg.min_quantity + 1));
+          await conn.query(
+            'INSERT INTO material_inventory (character_id, material_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity = quantity + ?',
+            [char.id, cfg.material_id, qty, qty]
+          );
+          droppedShards.push({ name: cfg.name, icon: cfg.icon, quantity: qty });
+        }
+      }
+    }
+
     // 던전 티켓 드랍 (스테이지 승리 시)
     let droppedTickets = [];
     if (victory && req.body.groupKey) {
@@ -874,6 +895,7 @@ router.post('/battle-result', auth, async (req, res) => {
     await conn.commit();
     res.json({
       droppedMaterials,
+      droppedShards,
       droppedTickets,
       leveledUp: newLevel > levelBefore,
       levelBefore,

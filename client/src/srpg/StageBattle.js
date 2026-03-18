@@ -1845,7 +1845,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                           const mPct = m.expNeeded > 0 ? Math.min(100, (m.exp / m.expNeeded) * 100) : 0;
                           return (
                             <div key={m.id} className="srpg-result-summon-row">
-                              <img src={`/mercenaries/${m.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
+                              <img src={`/mercenaries_nobg/${m.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
                               <div className="srpg-result-summon-info">
                                 <div className="srpg-result-summon-name">
                                   {m.name} <span className="srpg-result-summon-lv">Lv.{m.level}</span>
@@ -2169,7 +2169,12 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
 
       {/* 카드 하단: 정보 */}
       <div className="cb-card-info">
-        <div className="cb-card-name" style={unit.eliteTier ? { color: unit.eliteTier.color } : undefined}>{unit.eliteTier ? `${unit.eliteTier.label} ` : ''}{unit.name}</div>
+        <div className="cb-card-name" style={unit.eliteTier ? { color: unit.eliteTier.color } : undefined}>
+          {unit.grade && unit.team === 'player' && <span style={{ fontSize: 8, fontWeight: 700, color: '#fff', background: {'일반':'#9ca3af','고급':'#4ade80','희귀':'#60a5fa','영웅':'#c084fc','전설':'#fbbf24','신화':'#ff6b6b','초월':'#ff44cc'}[unit.grade] || '#9ca3af', padding: '0 3px', borderRadius: 2, marginRight: 3 }}>{unit.grade}</span>}
+          {unit.eliteTier ? `${unit.eliteTier.label} ` : ''}{unit.name}
+          {unit.starLevel > 0 && unit.team === 'player' && <span style={{ fontSize: 9, color: '#fbbf24', marginLeft: 2 }}>{'★'.repeat(unit.starLevel)}</span>}
+          {unit.starLevel === 0 && unit.team === 'player' && unit.grade && <span style={{ fontSize: 9, color: '#555', marginLeft: 2 }}>☆</span>}
+        </div>
 
         {/* HP 바 */}
         <div className="cb-card-bar hp">

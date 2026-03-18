@@ -850,6 +850,17 @@ body {
   max-width: 700px;
   margin-left: auto;
   margin-right: auto;
+  border: 2px solid transparent;
+  border-radius: 16px;
+  padding: 8px;
+  transition: border-color 0.3s;
+}
+.create-element-grid.element-shake {
+  animation: element-blink 0.5s ease-in-out 3;
+}
+@keyframes element-blink {
+  0%, 100% { border-color: transparent; box-shadow: none; }
+  50% { border-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); }
 }
 .create-element-card {
   width: 120px;
@@ -2222,6 +2233,16 @@ body {
   box-shadow: 0 2px 8px rgba(34,197,94,0.2);
 }
 .inv-potion-use-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34,197,94,0.35); }
+.inv-potion-use-btn.disabled {
+  background: #2a2f45 !important;
+  color: #666 !important;
+  box-shadow: none !important;
+  cursor: default !important;
+  border: 1px solid #3a3f55 !important;
+  font-size: 10px !important;
+  padding: 4px 10px !important;
+}
+.inv-potion-use-btn.disabled:hover { transform: none !important; }
 
 /* ========== Summon System ========== */
 .summon-container { width: 100%; }

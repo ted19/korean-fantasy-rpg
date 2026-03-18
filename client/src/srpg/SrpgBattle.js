@@ -38,7 +38,7 @@ function getUnitPortrait(unit) {
   }
   if (unit.id.startsWith('merc_')) {
     const tid = unit.templateId || unit.mercId;
-    return tid ? `/mercenaries/${tid}_full.png` : null;
+    return tid ? `/mercenaries_nobg/${tid}_full.png` : null;
   }
   if (unit.monsterId) return `/monsters_nobg/${unit.monsterId}_icon.png`;
   return null;
@@ -1619,7 +1619,10 @@ export default function SrpgBattle({
             <div className="srpg-unit-name" style={activeUnit.eliteTier ? { color: activeUnit.eliteTier.color } : undefined}>
               {(() => { const p = getUnitPortrait(activeUnit); return p ? <img src={p} alt="" className="srpg-detail-portrait" onError={e => { e.target.replaceWith(document.createTextNode(activeUnit.icon + ' ')); }} /> : <span>{activeUnit.icon} </span>; })()}
               {activeUnit.eliteTier && <span className="srpg-elite-name-badge" style={{ background: activeUnit.eliteTier.color }}>{activeUnit.eliteTier.icon} {activeUnit.eliteTier.label}</span>}
+              {activeUnit.grade && activeUnit.team === 'player' && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: {'일반':'#9ca3af','고급':'#4ade80','희귀':'#60a5fa','영웅':'#c084fc','전설':'#fbbf24','신화':'#ff6b6b','초월':'#ff44cc'}[activeUnit.grade] || '#9ca3af', padding: '0 4px', borderRadius: 3, marginRight: 4 }}>{activeUnit.grade}</span>}
               {activeUnit.name} Lv.{activeUnit.level}
+              {activeUnit.team === 'player' && activeUnit.starLevel > 0 && <span style={{ fontSize: 10, color: '#fbbf24', marginLeft: 3 }}>{'★'.repeat(activeUnit.starLevel)}</span>}
+              {activeUnit.team === 'player' && (activeUnit.starLevel || 0) === 0 && activeUnit.grade && <span style={{ fontSize: 10, color: '#555', marginLeft: 3 }}>☆</span>}
             </div>
             <div className="srpg-unit-bars">
               <div className="srpg-bar">
@@ -1981,7 +1984,7 @@ export default function SrpgBattle({
                           const mPct = m.expNeeded > 0 ? Math.min(100, (m.exp / m.expNeeded) * 100) : 0;
                           return (
                             <div key={m.id} className="srpg-result-summon-row">
-                              <img src={`/mercenaries/${m.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
+                              <img src={`/mercenaries_nobg/${m.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
                               <div className="srpg-result-summon-info">
                                 <div className="srpg-result-summon-name">
                                   {m.name} <span className="srpg-result-summon-lv">Lv.{m.level}</span>

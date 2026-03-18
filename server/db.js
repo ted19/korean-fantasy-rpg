@@ -7164,7 +7164,823 @@ async function initialize() {
     console.log('Comprehensive balance patch v7 applied');
   }
 
-  console.log('Database initialized (balance v7 applied)');
+  // ========== 수집형 용병/소환수 대확장 (balance_v8) ==========
+  const [balV8Flag] = await pool.query("SELECT * FROM db_flags WHERE flag_name = 'balance_v8'");
+  if (balV8Flag.length === 0) {
+    console.log('Applying collection system expansion (balance_v8)...');
+
+    // 1. 등급 컬럼 추가
+    await pool.query("ALTER TABLE mercenary_templates ADD COLUMN grade ENUM('일반','고급','희귀','영웅','전설','신화','초월') DEFAULT '일반'").catch(() => {});
+    await pool.query("ALTER TABLE summon_templates ADD COLUMN grade ENUM('일반','고급','희귀','영웅','전설','신화','초월') DEFAULT '일반'").catch(() => {});
+    await pool.query("ALTER TABLE summon_templates ADD COLUMN growth_mult FLOAT DEFAULT 1.0").catch(() => {});
+    await pool.query("ALTER TABLE mercenary_templates ADD COLUMN growth_mult FLOAT DEFAULT 1.0").catch(() => {});
+
+    // 2. 등급별 배율 정의
+    const GRADE_STAT_MULT  = { '일반':1.0, '고급':1.3, '희귀':1.7, '영웅':2.2, '전설':2.8, '신화':3.5, '초월':4.5 };
+    const GRADE_GROWTH_MULT = { '일반':1.0, '고급':1.1, '희귀':1.2, '영웅':1.35, '전설':1.5, '신화':1.7, '초월':2.0 };
+
+    // 3. 기존 용병에 등급 부여
+    const existingMercGrades = {
+      '검사 이준': '고급', '창병 박무': '고급', '궁수 한소이': '고급',
+      '도사 최현': '희귀', '무사 강철': '희귀', '치유사 윤하나': '희귀',
+      '자객 서영': '영웅', '마법사 정은비': '영웅',
+    };
+    for (const [name, grade] of Object.entries(existingMercGrades)) {
+      await pool.query("UPDATE mercenary_templates SET grade = ?, growth_mult = ? WHERE name = ?",
+        [grade, GRADE_GROWTH_MULT[grade], name]).catch(() => {});
+    }
+
+    // 4. 기존 소환수에 등급 부여
+    const existingSummonGrades = {
+      '들쥐 소환수': '일반', '떠도는 원혼': '일반',
+      '야생 늑대': '고급', '해골 전사': '고급', '묘지 귀신': '고급', '물의 정령': '고급',
+      '불의 정령': '희귀', '골렘 파편': '희귀', '바람의 정령': '희귀',
+      '구미호 영혼': '영웅', '독거미 여왕': '영웅', '리치': '영웅',
+    };
+    for (const [name, grade] of Object.entries(existingSummonGrades)) {
+      await pool.query("UPDATE summon_templates SET grade = ?, growth_mult = ? WHERE name = ?",
+        [grade, GRADE_GROWTH_MULT[grade], name]).catch(() => {});
+    }
+
+    // 5. 신규 소환수 타입 성장률 추가
+    await pool.query(`INSERT IGNORE INTO summon_growth_rates
+      (summon_type, hp_per_level, mp_per_level, attack_per_level, defense_per_level,
+       phys_attack_per_level, phys_defense_per_level, mag_attack_per_level, mag_defense_per_level,
+       crit_rate_per_10level, evasion_per_10level) VALUES
+      ('신수', 8, 6, 1.8, 1.5, 2.0, 1.5, 2.0, 1.5, 2, 2),
+      ('용',   10, 8, 2.0, 1.8, 2.2, 1.8, 2.2, 1.8, 2, 1),
+      ('마수', 9, 4, 1.8, 1.2, 2.5, 1.0, 1.5, 1.0, 3, 3)
+    `).catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 6. 신규 용병 27종 생성 (기존 8종 + 신규 27종 = 총 35종)
+    // ──────────────────────────────────────────────
+    // 클래스별 기본 스탯 템플릿 (일반 기준)
+    const MERC_CLASS_BASE = {
+      '검사':   { hp:70,  mp:20, pa:9,  pd:5,  ma:2,  md:3,  cr:7,  ev:5,  ghp:10, gmp:2,   gpa:2.0, gpd:1.2, gma:0.3, gmd:0.4, range:'melee',  wep:'sword' },
+      '창병':   { hp:80,  mp:15, pa:8,  pd:7,  ma:1,  md:4,  cr:5,  ev:3,  ghp:12, gmp:1.5, gpa:1.8, gpd:1.8, gma:0.2, gmd:0.5, range:'melee',  wep:'spear' },
+      '궁수':   { hp:55,  mp:25, pa:10, pd:3,  ma:3,  md:3,  cr:10, ev:7,  ghp:8,  gmp:3,   gpa:2.2, gpd:0.7, gma:0.6, gmd:0.4, range:'ranged', wep:'bow' },
+      '도사':   { hp:50,  mp:50, pa:3,  pd:3,  ma:10, md:5,  cr:5,  ev:4,  ghp:7,  gmp:7,   gpa:0.4, gpd:0.4, gma:2.2, gmd:1.2, range:'magic',  wep:'talisman' },
+      '무사':   { hp:95,  mp:12, pa:10, pd:9,  ma:1,  md:4,  cr:5,  ev:2,  ghp:15, gmp:1.5, gpa:2.5, gpd:2.2, gma:0.2, gmd:0.5, range:'melee',  wep:'sword' },
+      '치유사': { hp:60,  mp:65, pa:2,  pd:3,  ma:7,  md:7,  cr:3,  ev:4,  ghp:8,  gmp:8,   gpa:0.3, gpd:0.8, gma:1.8, gmd:1.6, range:'magic',  wep:'staff' },
+      '자객':   { hp:50,  mp:28, pa:11, pd:2,  ma:4,  md:2,  cr:15, ev:12, ghp:7,  gmp:2.5, gpa:2.8, gpd:0.4, gma:0.8, gmd:0.3, range:'melee',  wep:'dagger' },
+      '마법사': { hp:45,  mp:70, pa:2,  pd:2,  ma:12, md:6,  cr:5,  ev:3,  ghp:5,  gmp:10,  gpa:0.3, gpd:0.3, gma:2.8, gmd:1.3, range:'magic',  wep:'staff' },
+    };
+
+    const GRADE_PRICE = { '일반':[800,1500], '고급':[3000,8000], '희귀':[15000,30000], '영웅':[50000,80000], '전설':[150000,250000], '신화':[400000,600000], '초월':[1000000,1500000] };
+    const GRADE_LEVEL = { '일반':[1,5], '고급':[5,15], '희귀':[15,30], '영웅':[30,50], '전설':[50,70], '신화':[70,85], '초월':[85,95] };
+    const GRADE_FATIGUE = { '일반':5, '고급':6, '희귀':7, '영웅':8, '전설':9, '신화':10, '초월':12 };
+
+    const newMercs = [
+      // 일반 (8종)
+      { name:'민병 김돌',     cls:'검사',   grade:'일반', icon:'⚔️', elem:'neutral', desc:'마을을 지키는 평범한 민병.', lv:1 },
+      { name:'보초병 만복',   cls:'창병',   grade:'일반', icon:'🔱', elem:'earth',   desc:'성문 앞을 지키는 보초.', lv:1 },
+      { name:'사냥꾼 산이',   cls:'궁수',   grade:'일반', icon:'🏹', elem:'wind',    desc:'산에서 사냥하며 살아가는 궁수.', lv:1 },
+      { name:'점술사 복길',   cls:'도사',   grade:'일반', icon:'🔮', elem:'neutral', desc:'길거리에서 점을 치는 술사.', lv:2 },
+      { name:'장정 쇠돌',     cls:'무사',   grade:'일반', icon:'💪', elem:'neutral', desc:'힘이 장사인 마을 장정.', lv:1 },
+      { name:'약초꾼 춘향',   cls:'치유사', grade:'일반', icon:'🌿', elem:'water',   desc:'산에서 약초를 캐는 아낙.', lv:2 },
+      { name:'소매치기 막동', cls:'자객',   grade:'일반', icon:'🌙', elem:'wind',    desc:'시장에서 손이 빠르기로 유명한 소년.', lv:1 },
+      { name:'서당훈장 학수', cls:'마법사', grade:'일반', icon:'📚', elem:'neutral', desc:'마을 서당에서 아이들을 가르치는 훈장.', lv:3 },
+      // 고급 (4종 신규, 기존 3종 = 7)
+      { name:'호위무사 태산', cls:'무사',   grade:'고급', icon:'🛡️', elem:'earth',   desc:'상단을 호위하는 든든한 무사.', lv:8 },
+      { name:'무녀 소연',     cls:'치유사', grade:'고급', icon:'🌸', elem:'water',   desc:'신전에서 기도하는 젊은 무녀.', lv:6 },
+      { name:'야도적 칠성',   cls:'자객',   grade:'고급', icon:'🗡️', elem:'neutral', desc:'밤에만 나타나는 의적.', lv:10 },
+      { name:'풍수견습 도현', cls:'도사',   grade:'고급', icon:'📜', elem:'wind',    desc:'풍수를 배우는 재능 있는 견습생.', lv:7 },
+      // 희귀 (3종 신규, 기존 3종 = 6)
+      { name:'퇴마사 혜진',   cls:'도사',   grade:'희귀', icon:'🔥', elem:'fire',    desc:'귀신을 퇴치하는 강력한 퇴마사.', lv:18 },
+      { name:'표창술사 은월', cls:'자객',   grade:'희귀', icon:'🌟', elem:'wind',    desc:'표창을 날리는 신비한 암살자.', lv:20 },
+      { name:'화랑 선우',     cls:'검사',   grade:'희귀', icon:'⚔️', elem:'fire',    desc:'신라 화랑도의 정신을 잇는 검사.', lv:22 },
+      // 영웅 (3종 신규, 기존 2종 = 5)
+      { name:'관군대장 태현', cls:'창병',   grade:'영웅', icon:'🔱', elem:'earth',   desc:'수백 명을 이끄는 관군의 대장.', lv:35 },
+      { name:'천기술사 소율', cls:'마법사', grade:'영웅', icon:'✨', elem:'water',   desc:'천체의 기운을 읽는 천재 술사.', lv:38 },
+      { name:'선인 학담',     cls:'치유사', grade:'영웅', icon:'☁️', elem:'neutral', desc:'산속에서 수행한 신비한 선인.', lv:40 },
+      // 전설 (4종)
+      { name:'검성 백무현',   cls:'검사',   grade:'전설', icon:'⚔️', elem:'wind',    desc:'천하 제일의 검으로 이름을 떨친 검성.', lv:55 },
+      { name:'신궁 홍의',     cls:'궁수',   grade:'전설', icon:'🏹', elem:'fire',    desc:'백발백중의 전설적인 신궁.', lv:58 },
+      { name:'천하장군 대호', cls:'무사',   grade:'전설', icon:'🗡️', elem:'earth',   desc:'천하무적의 이름을 가진 대장군.', lv:60 },
+      { name:'선녀 채운',     cls:'치유사', grade:'전설', icon:'🌈', elem:'water',   desc:'하늘에서 내려온 선녀의 축복.', lv:55 },
+      // 신화 (3종)
+      { name:'환웅의 후예',   cls:'무사',   grade:'신화', icon:'⚡', elem:'neutral', desc:'환웅의 피를 이어받은 전설의 전사.', lv:75 },
+      { name:'천년화호 월선', cls:'마법사', grade:'신화', icon:'🦊', elem:'fire',    desc:'천 년을 수련한 구미호 술사.', lv:78 },
+      { name:'사명대사',       cls:'도사',   grade:'신화', icon:'📿', elem:'neutral', desc:'나라를 구한 전설적인 고승.', lv:72 },
+      // 초월 (2종)
+      { name:'치우천왕',       cls:'무사',   grade:'초월', icon:'👑', elem:'fire',    desc:'전쟁의 신, 동방의 제왕.', lv:90 },
+      { name:'마고선녀',       cls:'마법사', grade:'초월', icon:'🌺', elem:'water',   desc:'천지를 창조한 태초의 여신.', lv:92 },
+    ];
+
+    // 프로그래매틱 용병 생성
+    for (const m of newMercs) {
+      const base = MERC_CLASS_BASE[m.cls];
+      const sm = GRADE_STAT_MULT[m.grade];
+      const gm = GRADE_GROWTH_MULT[m.grade];
+      const [pMin, pMax] = GRADE_PRICE[m.grade];
+      const price = Math.floor(pMin + (pMax - pMin) * Math.random());
+
+      // 개성 추가: 각 용병에 ±10% 랜덤 편차
+      const v = () => 0.9 + Math.random() * 0.2;
+
+      await pool.query(`INSERT IGNORE INTO mercenary_templates
+        (name, class_type, description, icon, price, sell_price,
+         base_hp, base_mp, base_phys_attack, base_phys_defense, base_mag_attack, base_mag_defense,
+         base_crit_rate, base_evasion, growth_hp, growth_mp, growth_phys_attack, growth_phys_defense,
+         growth_mag_attack, growth_mag_defense, required_level, range_type, element, weapon_type,
+         max_fatigue, grade, growth_mult) VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)`,
+        [
+          m.name, m.cls, m.desc, m.icon, price, Math.floor(price * 0.1),
+          Math.floor(base.hp * sm * v()), Math.floor(base.mp * sm * v()),
+          Math.floor(base.pa * sm * v()), Math.floor(base.pd * sm * v()),
+          Math.floor(base.ma * sm * v()), Math.floor(base.md * sm * v()),
+          Math.min(40, Math.floor(base.cr * sm * 0.6 * v())), Math.min(30, Math.floor(base.ev * sm * 0.5 * v())),
+          +(base.ghp * gm * v()).toFixed(1), +(base.gmp * gm * v()).toFixed(1),
+          +(base.gpa * gm * v()).toFixed(2), +(base.gpd * gm * v()).toFixed(2),
+          +(base.gma * gm * v()).toFixed(2), +(base.gmd * gm * v()).toFixed(2),
+          m.lv, base.range, m.elem, base.wep,
+          GRADE_FATIGUE[m.grade], m.grade, gm,
+        ]
+      ).catch(e => console.error('Merc insert error:', m.name, e.message));
+    }
+
+    // ──────────────────────────────────────────────
+    // 7. 신규 소환수 23종 생성 (기존 12종 + 신규 23종 = 총 35종)
+    // ──────────────────────────────────────────────
+    const SUMMON_TYPE_BASE = {
+      '몬스터': { hp:30,  mp:5,  atk:5,  def:3 },
+      '귀신':   { hp:25,  mp:20, atk:6,  def:2 },
+      '정령':   { hp:25,  mp:30, atk:5,  def:3 },
+      '언데드': { hp:35,  mp:8,  atk:5,  def:4 },
+      '신수':   { hp:50,  mp:40, atk:10, def:8 },
+      '용':     { hp:60,  mp:50, atk:12, def:10 },
+      '마수':   { hp:45,  mp:25, atk:14, def:5 },
+    };
+
+    const newSummons = [
+      // 일반 (6종 신규, 기존 2종 = 8)
+      { name:'들고양이',       type:'몬스터', grade:'일반', icon:'🐱', elem:'neutral', range:'melee',  lv:1 },
+      { name:'도깨비불',       type:'귀신',   grade:'일반', icon:'🔥', elem:'fire',    range:'magic',  lv:1 },
+      { name:'흙 인형',         type:'정령',   grade:'일반', icon:'🧱', elem:'earth',   range:'melee',  lv:2 },
+      { name:'해골병사',       type:'언데드', grade:'일반', icon:'💀', elem:'neutral', range:'melee',  lv:1 },
+      { name:'산토끼',         type:'몬스터', grade:'일반', icon:'🐇', elem:'wind',    range:'melee',  lv:1 },
+      { name:'반딧불 정령',   type:'정령',   grade:'일반', icon:'✨', elem:'wind',    range:'magic',  lv:2 },
+      // 고급 (3종 신규, 기존 4종 = 7)
+      { name:'독사',           type:'몬스터', grade:'고급', icon:'🐍', elem:'earth',   range:'ranged', lv:6 },
+      { name:'나무 정령',     type:'정령',   grade:'고급', icon:'🌳', elem:'earth',   range:'magic',  lv:8 },
+      { name:'부유령',         type:'귀신',   grade:'고급', icon:'👻', elem:'neutral', range:'magic',  lv:7 },
+      // 희귀 (3종 신규, 기존 3종 = 6)
+      { name:'도깨비',         type:'몬스터', grade:'희귀', icon:'👺', elem:'neutral', range:'melee',  lv:18 },
+      { name:'어린 구미호',   type:'귀신',   grade:'희귀', icon:'🦊', elem:'fire',    range:'magic',  lv:20 },
+      { name:'강시',           type:'언데드', grade:'희귀', icon:'🧟', elem:'neutral', range:'melee',  lv:16 },
+      // 영웅 (2종 신규, 기존 3종 = 5)
+      { name:'뇌전 정령',     type:'정령',   grade:'영웅', icon:'⚡', elem:'wind',    range:'magic',  lv:32 },
+      { name:'야차',           type:'귀신',   grade:'영웅', icon:'👹', elem:'fire',    range:'melee',  lv:35 },
+      // 전설 (4종)
+      { name:'청룡',           type:'신수',   grade:'전설', icon:'🐲', elem:'water',   range:'magic',  lv:55 },
+      { name:'백호',           type:'신수',   grade:'전설', icon:'🐯', elem:'wind',    range:'melee',  lv:55 },
+      { name:'주작',           type:'신수',   grade:'전설', icon:'🐦', elem:'fire',    range:'magic',  lv:58 },
+      { name:'현무',           type:'신수',   grade:'전설', icon:'🐢', elem:'earth',   range:'melee',  lv:58 },
+      // 신화 (3종)
+      { name:'봉황',           type:'신수',   grade:'신화', icon:'🔥', elem:'fire',    range:'magic',  lv:75 },
+      { name:'해태',           type:'신수',   grade:'신화', icon:'🦁', elem:'neutral', range:'melee',  lv:72 },
+      { name:'삼족오',         type:'신수',   grade:'신화', icon:'☀️', elem:'fire',    range:'magic',  lv:78 },
+      // 초월 (2종)
+      { name:'용왕',           type:'용',     grade:'초월', icon:'🐉', elem:'water',   range:'magic',  lv:90 },
+      { name:'천마',           type:'마수',   grade:'초월', icon:'🦄', elem:'wind',    range:'melee',  lv:92 },
+    ];
+
+    for (const s of newSummons) {
+      const base = SUMMON_TYPE_BASE[s.type];
+      const sm = GRADE_STAT_MULT[s.grade];
+      const gm = GRADE_GROWTH_MULT[s.grade];
+      const [pMin, pMax] = GRADE_PRICE[s.grade];
+      const price = Math.floor(pMin + (pMax - pMin) * Math.random());
+      const v = () => 0.9 + Math.random() * 0.2;
+
+      await pool.query(`INSERT IGNORE INTO summon_templates
+        (name, type, icon, price, sell_price, base_hp, base_mp, base_attack, base_defense,
+         required_level, range_type, element, grade, growth_mult) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          s.name, s.type, s.icon, price, Math.floor(price * 0.1),
+          Math.floor(base.hp * sm * v()), Math.floor(base.mp * sm * v()),
+          Math.floor(base.atk * sm * v()), Math.floor(base.def * sm * v()),
+          s.lv, s.range, s.elem, s.grade, gm,
+        ]
+      ).catch(e => console.error('Summon insert error:', s.name, e.message));
+    }
+
+    // ──────────────────────────────────────────────
+    // 8. 신규 소환수 재료 비용 자동 생성
+    // ──────────────────────────────────────────────
+    {
+      const [matRows] = await pool.query('SELECT id, name, grade FROM materials');
+      const matByGrade = { '일반': [], '고급': [], '희귀': [] };
+      for (const m of matRows) {
+        if (matByGrade[m.grade]) matByGrade[m.grade].push(m.id);
+      }
+
+      const GRADE_MAT_CONFIG = {
+        '일반': { grades: ['일반'], count: 2, baseQty: 5 },
+        '고급': { grades: ['일반','고급'], count: 2, baseQty: 8 },
+        '희귀': { grades: ['고급','희귀'], count: 3, baseQty: 12 },
+        '영웅': { grades: ['고급','희귀'], count: 3, baseQty: 20 },
+        '전설': { grades: ['희귀'], count: 3, baseQty: 35 },
+        '신화': { grades: ['희귀'], count: 4, baseQty: 50 },
+        '초월': { grades: ['희귀'], count: 4, baseQty: 80 },
+      };
+
+      const [allSummons] = await pool.query('SELECT id, name, grade FROM summon_templates');
+      const [existingCosts] = await pool.query('SELECT DISTINCT template_id FROM summon_material_costs');
+      const existingIds = new Set(existingCosts.map(r => r.template_id));
+
+      for (const s of allSummons) {
+        if (existingIds.has(s.id)) continue; // 이미 재료가 있으면 스킵
+        const cfg = GRADE_MAT_CONFIG[s.grade || '일반'];
+        if (!cfg) continue;
+
+        // 해당 등급의 재료에서 랜덤으로 선택
+        const availableMats = [];
+        for (const g of cfg.grades) {
+          if (matByGrade[g]) availableMats.push(...matByGrade[g]);
+        }
+        if (availableMats.length === 0) continue;
+
+        const usedMats = new Set();
+        for (let i = 0; i < cfg.count && i < availableMats.length; i++) {
+          let mid;
+          let attempts = 0;
+          do { mid = availableMats[Math.floor(Math.random() * availableMats.length)]; attempts++; }
+          while (usedMats.has(mid) && attempts < 20);
+          if (usedMats.has(mid)) continue;
+          usedMats.add(mid);
+          const qty = Math.floor(cfg.baseQty * (0.8 + Math.random() * 0.4));
+          await pool.query('INSERT IGNORE INTO summon_material_costs (template_id, material_id, quantity) VALUES (?,?,?)',
+            [s.id, mid, qty]).catch(() => {});
+        }
+      }
+    }
+
+    // ──────────────────────────────────────────────
+    // 9. 기존 용병 가격/스탯을 등급에 맞게 재조정
+    // ──────────────────────────────────────────────
+    // 고급 용병 (기존 3종)
+    await pool.query("UPDATE mercenary_templates SET price = 5000, sell_price = 500, growth_mult = 1.1 WHERE name = '검사 이준'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 5500, sell_price = 550, growth_mult = 1.1 WHERE name = '창병 박무'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 6000, sell_price = 600, growth_mult = 1.1 WHERE name = '궁수 한소이'").catch(() => {});
+    // 희귀 용병 (기존 3종)
+    await pool.query("UPDATE mercenary_templates SET price = 20000, sell_price = 2000, growth_mult = 1.2 WHERE name = '도사 최현'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 25000, sell_price = 2500, growth_mult = 1.2 WHERE name = '무사 강철'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 22000, sell_price = 2200, growth_mult = 1.2 WHERE name = '치유사 윤하나'").catch(() => {});
+    // 영웅 용병 (기존 2종)
+    await pool.query("UPDATE mercenary_templates SET price = 55000, sell_price = 5500, growth_mult = 1.35 WHERE name = '자객 서영'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 60000, sell_price = 6000, growth_mult = 1.35 WHERE name = '마법사 정은비'").catch(() => {});
+
+    // 기존 소환수 가격도 등급에 맞게 재조정
+    await pool.query("UPDATE summon_templates SET price = 200, sell_price = 20, growth_mult = 1.0 WHERE grade = '일반'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 1500, sell_price = 150, growth_mult = 1.1 WHERE grade = '고급' AND price < 1500").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 8000, sell_price = 800, growth_mult = 1.2 WHERE grade = '희귀' AND price < 8000").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 25000, sell_price = 2500, growth_mult = 1.35 WHERE grade = '영웅' AND price < 25000").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // balance_v8 플래그 등록
+    // ──────────────────────────────────────────────
+    await pool.query("INSERT INTO db_flags (flag_name) VALUES ('balance_v8')").catch(() => {});
+    console.log('Collection system expansion (balance_v8) applied — 35 mercenaries, 35 summons');
+  }
+
+  // ========== 획득 시스템 (balance_v9) ==========
+  const [balV9Flag] = await pool.query("SELECT * FROM db_flags WHERE flag_name = 'balance_v9'");
+  if (balV9Flag.length === 0) {
+    console.log('Applying acquisition system (balance_v9)...');
+
+    // 1. 획득 타입 컬럼 추가
+    await pool.query("ALTER TABLE mercenary_templates ADD COLUMN acquisition_type ENUM('shop','boss','quest','gacha') DEFAULT 'shop'").catch(() => {});
+    await pool.query("ALTER TABLE mercenary_templates ADD COLUMN acquisition_ref VARCHAR(100) DEFAULT NULL").catch(() => {});
+    await pool.query("ALTER TABLE summon_templates ADD COLUMN acquisition_type ENUM('shop','boss','quest','gacha') DEFAULT 'shop'").catch(() => {});
+    await pool.query("ALTER TABLE summon_templates ADD COLUMN acquisition_ref VARCHAR(100) DEFAULT NULL").catch(() => {});
+
+    // 2. 소환 조각 재료 추가
+    await pool.query(`INSERT IGNORE INTO materials (name, icon, grade, description, sell_price) VALUES
+      ('용병소환 조각', '🗡️', '희귀', '용병을 소환할 수 있는 신비한 조각. 모아서 소환권으로 교환하세요.', 30),
+      ('소환수소환 조각', '🔮', '희귀', '소환수를 소환할 수 있는 신비한 조각. 모아서 소환권으로 교환하세요.', 30)
+    `).catch(() => {});
+
+    // 3. 등급별 획득 타입 설정
+    // 일반: shop (여관/소환술사 직접 구매)
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'shop' WHERE grade = '일반'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'shop' WHERE grade = '일반'").catch(() => {});
+
+    // 고급 기존(이준/박무/한소이): shop 유지, 신규 고급: boss (스테이지 보스 클리어로 해금)
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'shop' WHERE grade = '고급' AND name IN ('검사 이준','창병 박무','궁수 한소이')").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'boss', acquisition_ref = 'gojoseon:10' WHERE name = '호위무사 태산'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'boss', acquisition_ref = 'samhan:10' WHERE name = '무녀 소연'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'boss', acquisition_ref = 'goguryeo:12' WHERE name = '야도적 칠성'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'boss', acquisition_ref = 'baekje:10' WHERE name = '풍수견습 도현'").catch(() => {});
+
+    // 고급 소환수
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'shop' WHERE grade = '고급' AND name IN ('야생 늑대','해골 전사','묘지 귀신','물의 정령')").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'boss', acquisition_ref = 'samhan:10' WHERE name = '독사'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'boss', acquisition_ref = 'baekje:10' WHERE name = '나무 정령'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'boss', acquisition_ref = 'goguryeo:12' WHERE name = '부유령'").catch(() => {});
+
+    // 희귀: quest (특정 퀘스트 완료로 해금)
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'quest', acquisition_ref = '퇴마사의 시련' WHERE name = '퇴마사 혜진'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'quest', acquisition_ref = '표창의 달인' WHERE name = '표창술사 은월'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'quest', acquisition_ref = '화랑의 맹세' WHERE name = '화랑 선우'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'quest', acquisition_ref = '도사의 길' WHERE name = '도사 최현'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'quest', acquisition_ref = '강철의 의지' WHERE name = '무사 강철'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'quest', acquisition_ref = '치유의 빛' WHERE name = '치유사 윤하나'").catch(() => {});
+
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'quest', acquisition_ref = '도깨비 소동' WHERE name = '도깨비'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'quest', acquisition_ref = '구미호의 인연' WHERE name = '어린 구미호'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'quest', acquisition_ref = '강시 퇴치' WHERE name = '강시'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'quest', acquisition_ref = '불의 시련' WHERE name = '불의 정령'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'quest', acquisition_ref = '골렘의 심장' WHERE name = '골렘 파편'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'quest', acquisition_ref = '바람의 속삭임' WHERE name = '바람의 정령'").catch(() => {});
+
+    // 영웅 이상: gacha (조각 모아서 소환권으로 교환)
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'gacha' WHERE grade IN ('영웅','전설','신화','초월')").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'gacha' WHERE grade IN ('영웅','전설','신화','초월')").catch(() => {});
+
+    // 4. 해금 추적 테이블
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS unit_unlocks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        character_id INT NOT NULL,
+        unit_type ENUM('mercenary','summon') NOT NULL,
+        template_id INT NOT NULL,
+        unlock_method VARCHAR(30) NOT NULL,
+        unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_char_unit (character_id, unit_type, template_id)
+      )
+    `);
+
+    // 5. 소환 조각 드랍 테이블 (콘텐츠별 드랍률)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS shard_drop_config (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        content_type VARCHAR(30) NOT NULL,
+        shard_type VARCHAR(30) NOT NULL,
+        drop_rate FLOAT NOT NULL DEFAULT 0.1,
+        min_quantity INT NOT NULL DEFAULT 1,
+        max_quantity INT NOT NULL DEFAULT 2,
+        UNIQUE KEY unique_config (content_type, shard_type)
+      )
+    `);
+
+    // 콘텐츠별 조각 드랍 설정
+    const shardDrops = [
+      // 용병 조각
+      ['normal_stage',  '용병소환 조각', 0.08, 1, 1],
+      ['boss_stage',    '용병소환 조각', 0.20, 1, 3],
+      ['dungeon',       '용병소환 조각', 0.25, 2, 4],
+      ['tower',         '용병소환 조각', 0.30, 2, 5],
+      ['elemental',     '용병소환 조각', 0.35, 3, 6],
+      ['boss_raid',     '용병소환 조각', 0.50, 5, 10],
+      // 소환수 조각
+      ['normal_stage',  '소환수소환 조각', 0.08, 1, 1],
+      ['boss_stage',    '소환수소환 조각', 0.20, 1, 3],
+      ['dungeon',       '소환수소환 조각', 0.25, 2, 4],
+      ['tower',         '소환수소환 조각', 0.30, 2, 5],
+      ['elemental',     '소환수소환 조각', 0.35, 3, 6],
+      ['boss_raid',     '소환수소환 조각', 0.50, 5, 10],
+    ];
+    for (const [ct, st, rate, mn, mx] of shardDrops) {
+      await pool.query('INSERT IGNORE INTO shard_drop_config (content_type, shard_type, drop_rate, min_quantity, max_quantity) VALUES (?,?,?,?,?)',
+        [ct, st, rate, mn, mx]).catch(() => {});
+    }
+
+    // 6. 소환권 교환 레시피 테이블
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS shard_exchange_recipes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ticket_type VARCHAR(30) NOT NULL,
+        ticket_name VARCHAR(50) NOT NULL,
+        shard_name VARCHAR(50) NOT NULL,
+        shard_cost INT NOT NULL,
+        target_grades TEXT NOT NULL,
+        UNIQUE KEY unique_recipe (ticket_type, ticket_name)
+      )
+    `);
+
+    const exchangeRecipes = [
+      // 용병 소환권
+      ['mercenary', '용병소환권',     '용병소환 조각',   30, '영웅:70,전설:24,신화:5,초월:1'],
+      ['mercenary', '고급용병소환권', '용병소환 조각',   80, '전설:60,신화:32,초월:8'],
+      // 소환수 소환권
+      ['summon',    '소환수소환권',     '소환수소환 조각', 30, '영웅:70,전설:24,신화:5,초월:1'],
+      ['summon',    '고급소환수소환권', '소환수소환 조각', 80, '전설:60,신화:32,초월:8'],
+    ];
+    for (const [type, tname, sname, cost, grades] of exchangeRecipes) {
+      await pool.query('INSERT IGNORE INTO shard_exchange_recipes (ticket_type, ticket_name, shard_name, shard_cost, target_grades) VALUES (?,?,?,?,?)',
+        [type, tname, sname, cost, grades]).catch(() => {});
+    }
+
+    // 7. 가챠 천장(pity) 카운터 테이블
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gacha_pity (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        character_id INT NOT NULL,
+        gacha_type VARCHAR(30) NOT NULL,
+        pull_count INT DEFAULT 0,
+        last_high_grade VARCHAR(20) DEFAULT NULL,
+        FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_pity (character_id, gacha_type)
+      )
+    `);
+
+    // 8. 희귀 해금 퀘스트 추가
+    const unlockQuests = [
+      // 용병 해금 퀘스트 (bounty 카테고리)
+      ['퇴마사의 시련', '불의 도깨비 5마리를 처치하여 퇴마사의 자격을 증명하라.', 'bounty', 'hunt', 5, 15, 500, 200, null, 0],
+      ['표창의 달인', '스테이지를 20회 클리어하여 표창술의 달인을 만나라.', 'bounty', 'clear_stage', 20, 18, 800, 300, null, 0],
+      ['화랑의 맹세', '신라 스테이지를 모두 클리어하여 화랑의 인정을 받아라.', 'bounty', 'clear_stage', 12, 20, 1000, 500, null, 0],
+      ['도사의 길', '몬스터 30마리를 처치하여 도사의 길을 깨달아라.', 'bounty', 'hunt', 30, 18, 600, 250, null, 0],
+      ['강철의 의지', '보스를 5회 처치하여 강철같은 의지를 보여라.', 'bounty', 'hunt', 5, 25, 1200, 400, null, 0],
+      ['치유의 빛', '던전을 10회 클리어하여 치유의 힘을 얻어라.', 'bounty', 'clear_stage', 10, 20, 1000, 350, null, 0],
+      // 소환수 해금 퀘스트
+      ['도깨비 소동', '고려 스테이지에서 몬스터 15마리를 처치하라.', 'bounty', 'hunt', 15, 16, 600, 250, null, 0],
+      ['구미호의 인연', '귀신 타입 몬스터 20마리를 처치하라.', 'bounty', 'hunt', 20, 18, 800, 300, null, 0],
+      ['강시 퇴치', '언데드 몬스터 15마리를 처치하라.', 'bounty', 'hunt', 15, 15, 500, 200, null, 0],
+      ['불의 시련', '몬스터 25마리를 처치하여 불의 정령의 인정을 받아라.', 'bounty', 'hunt', 25, 12, 400, 180, null, 0],
+      ['골렘의 심장', '보스를 3회 처치하여 골렘의 핵을 얻어라.', 'bounty', 'hunt', 3, 14, 500, 200, null, 0],
+      ['바람의 속삭임', '스테이지 15회 클리어하여 바람의 소리를 들어라.', 'bounty', 'clear_stage', 15, 16, 600, 250, null, 0],
+    ];
+
+    for (const [name, desc, cat, type, target, lvReq, rExp, rGold] of unlockQuests) {
+      await pool.query(
+        `INSERT IGNORE INTO quests (name, description, category, quest_type, target_count, required_level, reward_exp, reward_gold, is_repeatable)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        [name, desc, cat, type, target, lvReq, rExp, rGold]
+      ).catch(() => {});
+    }
+
+    // 9. 복권에 조각 드랍 추가 (기존 재료 보상을 조각으로 변경)
+    // gacha.js에서 처리하므로 여기서는 스킵
+
+    // 10. 기존 일반/고급 소환수도 shop에서 구매 가능하도록 보장
+    await pool.query("UPDATE mercenary_templates SET acquisition_type = 'shop' WHERE grade = '일반'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET acquisition_type = 'shop' WHERE grade = '일반'").catch(() => {});
+
+    await pool.query("INSERT INTO db_flags (flag_name) VALUES ('balance_v9')").catch(() => {});
+    console.log('Acquisition system (balance_v9) applied');
+  }
+
+  // ========== 신수/용/마수 소환수 스킬 추가 ==========
+  {
+    const newTypeSkills = [
+      // ── 신수 (전설~신화급, 강력한 공격+버프+힐) ──
+      // 공용 (신수 전체)
+      ['신수의 위엄',     '신수', null, '신수의 위엄으로 아군 전체의 공격력을 높인다.', 'buff',   20, 0,   0, 'attack',  12, 4, 1, 3, 0],
+      ['천상의 빛',       '신수', null, '천상의 빛으로 아군의 체력을 크게 회복한다.', 'heal',   25, 0,  80, null,      0, 0, 3, 3, 0],
+      ['신수의 포효',     '신수', null, '강력한 포효로 적의 방어력을 크게 꺾는다.', 'debuff', 18, 0,   0, 'defense', -12, 3, 2, 2, 0],
+      ['신성한 일격',     '신수', null, '신성한 힘을 담은 강력한 일격.', 'attack', 15, 3.5, 0, null,      0, 0, 1, 1, 0],
+      ['수호신의 방벽',   '신수', null, '신수의 힘으로 아군 전체의 방어력을 높인다.', 'buff',   22, 0,   0, 'defense', 15, 4, 4, 3, 0],
+      // 개별 소환수 전용
+      ['청룡의 물결',     null, null, '청룡이 물의 파도를 일으켜 적 전체를 공격한다.', 'aoe',    30, 4.0, 0, null,      0, 0, 3, 3, 0],
+      ['백호의 질풍',     null, null, '백호의 바람 발톱으로 적을 갈기갈기 찢는다.', 'attack', 25, 5.0, 0, null,      0, 0, 3, 2, 0],
+      ['주작의 불꽃',     null, null, '주작의 불사조 불꽃으로 적 전체를 태운다.', 'aoe',    35, 4.5, 0, null,      0, 0, 4, 3, 0],
+      ['현무의 대지',     null, null, '현무의 대지 방벽으로 아군 전체를 보호한다.', 'buff',   28, 0,   0, 'defense', 20, 5, 4, 4, 0],
+      ['봉황의 부활',     null, null, '봉황의 불꽃으로 쓰러진 아군을 부활시키고 치유한다.', 'heal', 40, 0, 150, null, 0, 0, 5, 5, 0],
+      ['해태의 심판',     null, null, '선악을 심판하여 적에게 막대한 피해를 입힌다.', 'attack', 35, 6.0, 0, null,      0, 0, 5, 4, 0],
+      ['삼족오의 태양',   null, null, '태양의 불꽃으로 적 전체를 불살라버린다.', 'aoe',    45, 5.5, 0, null,      0, 0, 5, 4, 0],
+
+      // ── 용 (초월급, 최강 스킬) ──
+      ['용의 숨결',       '용', null, '용의 강력한 브레스로 적 전체를 공격한다.', 'aoe',    35, 5.0, 0, null,      0, 0, 1, 3, 0],
+      ['용왕의 해일',     '용', null, '바다의 해일을 불러 적 전체에 막대한 피해를 입힌다.', 'aoe', 50, 7.0, 0, null, 0, 0, 5, 5, 0],
+      ['용의 위압',       '용', null, '용의 위압으로 적의 모든 능력을 약화시킨다.', 'debuff', 25, 0, 0, 'attack', -15, 4, 3, 3, 0],
+      ['용린 방어',       '용', null, '용의 비늘로 아군 전체의 방어력을 대폭 높인다.', 'buff', 30, 0, 0, 'defense', 25, 5, 4, 4, 0],
+      ['생명의 비',       '용', null, '용왕의 비로 아군 전체의 체력을 대폭 회복한다.', 'heal', 35, 0, 120, null, 0, 0, 3, 4, 0],
+
+      // ── 마수 (초월급, 공격 특화) ──
+      ['마수의 돌진',     '마수', null, '마수의 강력한 돌진으로 적을 짓밟는다.', 'attack', 20, 4.5, 0, null, 0, 0, 1, 2, 0],
+      ['천마의 질주',     '마수', null, '하늘을 가르며 질주하여 적 전체를 공격한다.', 'aoe', 40, 5.5, 0, null, 0, 0, 4, 4, 0],
+      ['광기의 포효',     '마수', null, '광기어린 포효로 자신의 공격력을 극대화한다.', 'buff', 15, 0, 0, 'attack', 20, 3, 2, 3, 0],
+      ['마수의 흡혈',     '마수', null, '적의 생명력을 빨아들여 자신을 회복한다.', 'attack', 25, 3.0, 50, null, 0, 0, 3, 2, 0],
+      ['파멸의 일격',     '마수', null, '모든 힘을 담은 파멸적 일격.', 'attack', 50, 8.0, 0, null, 0, 0, 5, 5, 0],
+    ];
+
+    // 개별 소환수 전용 스킬 → template_id 매핑
+    const specificSkillMap = {
+      '청룡의 물결': '청룡', '백호의 질풍': '백호', '주작의 불꽃': '주작', '현무의 대지': '현무',
+      '봉황의 부활': '봉황', '해태의 심판': '해태', '삼족오의 태양': '삼족오',
+    };
+
+    // template_id 조회
+    const [stRows] = await pool.query('SELECT id, name FROM summon_templates');
+    const stMap = {};
+    for (const r of stRows) stMap[r.name] = r.id;
+
+    for (const [name, summonType, _tid, desc, type, mpCost, dmgMul, healAmt, buffStat, buffVal, buffDur, reqLv, cd, isCommon] of newTypeSkills) {
+      // 이미 존재하면 스킵
+      const [exist] = await pool.query('SELECT id FROM summon_skills WHERE name = ?', [name]);
+      if (exist.length > 0) continue;
+
+      let templateId = _tid;
+      if (specificSkillMap[name]) {
+        templateId = stMap[specificSkillMap[name]] || null;
+      }
+
+      await pool.query(
+        `INSERT INTO summon_skills (name, summon_type, template_id, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [name, summonType, templateId, desc, type, mpCost, dmgMul, healAmt, buffStat, buffVal, buffDur, reqLv, cd, isCommon]
+      ).catch(e => console.error('Summon skill insert error:', name, e.message));
+    }
+    console.log('New summon type skills (신수/용/마수) added');
+  }
+
+  // ========== 용병/소환수/몬스터 스킬 대폭 보강 ==========
+  {
+    // ── 용병 스킬 보강 (클래스당 +4개 = 총 32개 추가, Lv5/10/20/40/60/80) ──
+    const newMercSkills = [
+      // 검사
+      ['연속 베기',  '검사', 'attack', 10, 2.3, 0, null, 0, 0, 5, 1, 0, '빠른 연속 베기로 두 번 공격한다.'],
+      ['발도술',     '검사', 'attack', 14, 2.6, 0, null, 0, 0, 10, 1, 0, '칼집에서 빠르게 뽑아 베는 발도술.'],
+      ['회전참',     '검사', 'aoe',   18, 2.2, 0, null, 0, 0, 20, 2, 0, '몸을 회전하며 주변 적을 벤다.'],
+      ['검왕의 기합','검사', 'buff',  16, 0,   0, 'attack', 10, 3, 40, 3, 0, '검의 기운을 모아 공격력을 높인다.'],
+      ['천류검',     '검사', 'attack', 30, 5.0, 0, null, 0, 0, 60, 3, 0, '하늘의 흐름을 담은 궁극 검격.'],
+      ['무영검',     '검사', 'attack', 40, 6.5, 0, null, 0, 0, 80, 4, 0, '그림자조차 보이지 않는 초고속 참격.'],
+      // 창병
+      ['방패 밀치기','창병', 'debuff', 10, 0, 0, 'defense', -5, 3, 5, 1, 0, '방패로 적을 밀치고 방어를 흩뜨린다.'],
+      ['연환창',     '창병', 'attack', 14, 2.5, 0, null, 0, 0, 10, 1, 0, '창을 연속으로 세 번 찌른다.'],
+      ['창벽',       '창병', 'buff',   12, 0, 0, 'defense', 12, 3, 20, 2, 0, '창으로 방어벽을 세운다.'],
+      ['돌격 찌르기','창병', 'attack', 22, 3.2, 0, null, 0, 0, 40, 2, 0, '돌격하며 창으로 관통한다.'],
+      ['용아찌르기', '창병', 'attack', 28, 4.5, 0, null, 0, 0, 60, 3, 0, '용의 이빨처럼 강한 관통.'],
+      ['천장파쇄',   '창병', 'aoe',   35, 4.0, 0, null, 0, 0, 80, 4, 0, '하늘을 찌르는 창격이 대지를 가른다.'],
+      // 궁수
+      ['급소 사격',  '궁수', 'attack', 8, 2.2, 0, null, 0, 0, 5, 0, 0, '급소를 노린 정밀 사격.'],
+      ['속박의 화살','궁수', 'debuff', 12, 0, 0, 'defense', -6, 3, 10, 2, 0, '속박의 화살로 적의 움직임을 봉쇄.'],
+      ['폭발 화살',  '궁수', 'aoe',   20, 2.8, 0, null, 0, 0, 20, 2, 0, '폭발하는 화살로 범위 공격.'],
+      ['매의 눈',    '궁수', 'buff',   14, 0, 0, 'attack', 8, 3, 40, 3, 0, '매의 눈으로 명중률과 공격력 상승.'],
+      ['관통 연사',  '궁수', 'attack', 26, 4.2, 0, null, 0, 0, 60, 3, 0, '적을 관통하는 연속 사격.'],
+      ['멸절 사격',  '궁수', 'aoe',   38, 5.0, 0, null, 0, 0, 80, 4, 0, '하늘을 뒤덮는 화살비.'],
+      // 도사
+      ['저주 부적',  '도사', 'debuff', 10, 0, 0, 'attack', -6, 3, 5, 1, 0, '저주의 부적으로 적의 공격력을 낮춘다.'],
+      ['오행 폭발',  '도사', 'aoe',   18, 2.8, 0, null, 0, 0, 10, 2, 0, '오행의 기운을 폭발시킨다.'],
+      ['기운 흡수',  '도사', 'attack', 16, 2.0, 20, null, 0, 0, 20, 1, 0, '적의 기운을 흡수하여 HP 회복.'],
+      ['태극진',     '도사', 'buff',   20, 0, 0, 'defense', 10, 4, 40, 3, 0, '태극 진법으로 아군 방어력 상승.'],
+      ['천뢰부',     '도사', 'aoe',   32, 4.5, 0, null, 0, 0, 60, 3, 0, '하늘의 번개를 내리는 부적.'],
+      ['만법귀일',   '도사', 'attack', 45, 7.0, 0, null, 0, 0, 80, 5, 0, '모든 법술을 하나로 모은 궁극기.'],
+      // 무사
+      ['땅 가르기',  '무사', 'aoe',   14, 2.0, 0, null, 0, 0, 5, 1, 0, '대지를 가르는 강타.'],
+      ['강철 의지',  '무사', 'buff',   10, 0, 0, 'defense', 8, 3, 10, 2, 0, '강철같은 의지로 방어력 상승.'],
+      ['돌격 강타',  '무사', 'attack', 16, 2.8, 0, null, 0, 0, 20, 1, 0, '돌격하며 강력한 타격.'],
+      ['지진파',     '무사', 'aoe',   24, 3.0, 0, null, 0, 0, 40, 2, 0, '대지를 내리쳐 지진을 일으킨다.'],
+      ['전신갑파',   '무사', 'attack', 32, 5.0, 0, null, 0, 0, 60, 3, 0, '전신의 힘을 담은 갑파 일격.'],
+      ['파산철벽',   '무사', 'buff',   25, 0, 0, 'defense', 20, 4, 80, 4, 0, '산도 부수는 철벽의 방어.'],
+      // 치유사
+      ['응급 처치',  '치유사', 'heal', 6, 0, 25, null, 0, 0, 5, 0, 0, '빠른 응급 처치로 소량 회복.'],
+      ['재생의 빛',  '치유사', 'heal', 14, 0, 45, null, 0, 0, 10, 1, 0, '재생의 빛으로 중간 회복.'],
+      ['보호막',     '치유사', 'buff', 16, 0, 0, 'defense', 10, 3, 20, 2, 0, '보호막을 펼쳐 방어력 상승.'],
+      ['광역 치유',  '치유사', 'heal', 22, 0, 60, null, 0, 0, 40, 3, 0, '아군 전체를 치유하는 빛.'],
+      ['기적의 손길','치유사', 'heal', 35, 0, 100, null, 0, 0, 60, 3, 0, '기적과 같은 대량 회복.'],
+      ['부활의 축복','치유사', 'heal', 50, 0, 200, null, 0, 0, 80, 5, 0, '쓰러진 자를 일으키는 궁극 치유.'],
+      // 자객
+      ['독침',       '자객', 'debuff', 8, 0, 0, 'defense', -4, 3, 5, 0, 0, '독침으로 적의 방어를 약화.'],
+      ['연막탄',     '자객', 'buff',   10, 0, 0, 'evasion', 10, 2, 10, 2, 0, '연막으로 아군 회피율 상승.'],
+      ['이중 찌르기','자객', 'attack', 14, 2.5, 0, null, 0, 0, 20, 1, 0, '빠르게 두 번 찌른다.'],
+      ['배후 습격',  '자객', 'attack', 22, 3.5, 0, null, 0, 0, 40, 2, 0, '적의 배후를 노리는 치명타.'],
+      ['사선무영',   '자객', 'attack', 32, 5.0, 0, null, 0, 0, 60, 3, 0, '그림자를 넘나드는 사선 공격.'],
+      ['절명 암살',  '자객', 'attack', 45, 7.0, 0, null, 0, 0, 80, 5, 0, '한 번의 일격으로 모든 것을 끝낸다.'],
+      // 마법사
+      ['마력탄',     '마법사', 'attack', 7, 1.8, 0, null, 0, 0, 5, 0, 0, '마력을 응축한 기본 마법탄.'],
+      ['마력 방벽',  '마법사', 'buff',   14, 0, 0, 'defense', 8, 3, 10, 2, 0, '마력으로 방어벽을 세운다.'],
+      ['연쇄 번개',  '마법사', 'aoe',   20, 2.8, 0, null, 0, 0, 20, 2, 0, '번개가 적들 사이를 연쇄 관통.'],
+      ['흡마술',     '마법사', 'attack', 18, 2.0, 30, null, 0, 0, 40, 2, 0, '적의 마력을 흡수하여 회복.'],
+      ['메테오',     '마법사', 'aoe',   35, 5.0, 0, null, 0, 0, 60, 4, 0, '하늘에서 운석을 떨어뜨린다.'],
+      ['아포칼립스', '마법사', 'aoe',   50, 7.0, 0, null, 0, 0, 80, 5, 0, '세상을 멸망시키는 궁극 마법.'],
+    ];
+
+    for (const [name, cls, type, mp, dmg, heal, bStat, bVal, bDur, reqLv, cd, isCommon, desc] of newMercSkills) {
+      const [exist] = await pool.query('SELECT id FROM mercenary_skills WHERE name = ? AND class_type = ?', [name, cls]);
+      if (exist.length > 0) continue;
+      await pool.query(
+        `INSERT INTO mercenary_skills (name, class_type, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [name, cls, desc, type, mp, dmg, heal, bStat, bVal, bDur, reqLv, cd, isCommon]
+      ).catch(e => console.error('Merc skill error:', name, e.message));
+    }
+
+    // ── 소환수 귀신 +1 (부족분 보충) ──
+    {
+      const [exist] = await pool.query("SELECT id FROM summon_skills WHERE name = '귀화(鬼火)'");
+      if (exist.length === 0) {
+        await pool.query(
+          `INSERT INTO summon_skills (name, summon_type, template_id, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common)
+           VALUES ('귀화(鬼火)', '귀신', NULL, '귀신의 불꽃으로 적 전체를 공격한다.', 'aoe', 20, 2.8, 0, NULL, 0, 0, 4, 2, 0)`
+        ).catch(() => {});
+      }
+    }
+
+    // ── 몬스터 스킬 보강 (+7개, 상위 스킬 추가) ──
+    const newMonsterSkills = [
+      ['대지 분쇄',    'attack', 15, 2.5, 0, null, 0, 0, 3, '대지를 부수는 강력한 타격.'],
+      ['원소 화염',    'attack', 12, 2.0, 0, null, 0, 0, 2, '원소의 불꽃으로 적을 태운다.'],
+      ['흡혈',         'attack', 14, 1.8, 20, null, 0, 0, 2, '적의 피를 빨아 HP를 회복한다.'],
+      ['광역 독무',    'aoe',    18, 1.5, 0, null, 0, 0, 3, '독안개를 넓게 뿌려 범위 공격.'],
+      ['전의 고양',    'buff',   10, 0,   0, 'attack', 8, 3, 2, '전투 의지를 고양하여 공격력 상승.'],
+      ['공포의 눈빛',  'debuff', 12, 0,   0, 'attack', -7, 3, 2, '공포의 눈빛으로 적의 전의를 꺾는다.'],
+      ['용의 일격',    'attack', 25, 3.5, 0, null, 0, 0, 4, '용의 힘을 담은 파괴적 일격.'],
+    ];
+
+    for (const [name, type, mp, dmg, heal, bStat, bVal, bDur, cd, desc] of newMonsterSkills) {
+      const [exist] = await pool.query('SELECT id FROM monster_skills WHERE name = ?', [name]);
+      if (exist.length > 0) continue;
+      await pool.query(
+        `INSERT INTO monster_skills (name, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, cooldown)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [name, desc, type, mp, dmg, heal, bStat, bVal, bDur, cd]
+      ).catch(e => console.error('Monster skill error:', name, e.message));
+    }
+
+    // 새 몬스터 스킬을 고티어 몬스터에 배치
+    {
+      const [newSkills] = await pool.query("SELECT id, name FROM monster_skills WHERE name IN ('대지 분쇄','원소 화염','흡혈','광역 독무','전의 고양','공포의 눈빛','용의 일격')");
+      const skMap = {};
+      for (const s of newSkills) skMap[s.name] = s.id;
+
+      // 티어 6+ 몬스터에 상위 스킬 배치
+      if (skMap['대지 분쇄']) {
+        const [t6] = await pool.query("SELECT id FROM monsters WHERE tier >= 6 AND id NOT IN (SELECT monster_id FROM monster_skill_map WHERE skill_id = ?) ORDER BY RAND() LIMIT 30", [skMap['대지 분쇄']]);
+        for (const m of t6) await pool.query('INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)', [m.id, skMap['대지 분쇄']]).catch(() => {});
+      }
+      if (skMap['용의 일격']) {
+        const [t8] = await pool.query("SELECT id FROM monsters WHERE tier >= 8 AND id NOT IN (SELECT monster_id FROM monster_skill_map WHERE skill_id = ?) ORDER BY RAND() LIMIT 15", [skMap['용의 일격']]);
+        for (const m of t8) await pool.query('INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)', [m.id, skMap['용의 일격']]).catch(() => {});
+      }
+      if (skMap['흡혈']) {
+        const [t5] = await pool.query("SELECT id FROM monsters WHERE tier >= 5 AND range_type = 'melee' AND id NOT IN (SELECT monster_id FROM monster_skill_map WHERE skill_id = ?) ORDER BY RAND() LIMIT 20", [skMap['흡혈']]);
+        for (const m of t5) await pool.query('INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)', [m.id, skMap['흡혈']]).catch(() => {});
+      }
+      if (skMap['광역 독무']) {
+        const [tPoison] = await pool.query("SELECT id FROM monsters WHERE tier >= 4 AND id NOT IN (SELECT monster_id FROM monster_skill_map WHERE skill_id = ?) ORDER BY RAND() LIMIT 20", [skMap['광역 독무']]);
+        for (const m of tPoison) await pool.query('INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)', [m.id, skMap['광역 독무']]).catch(() => {});
+      }
+      if (skMap['원소 화염']) {
+        const [tMagic] = await pool.query("SELECT id FROM monsters WHERE tier >= 3 AND range_type = 'magic' AND id NOT IN (SELECT monster_id FROM monster_skill_map WHERE skill_id = ?) ORDER BY RAND() LIMIT 25", [skMap['원소 화염']]);
+        for (const m of tMagic) await pool.query('INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)', [m.id, skMap['원소 화염']]).catch(() => {});
+      }
+      if (skMap['전의 고양']) {
+        const [tBuff] = await pool.query("SELECT id FROM monsters WHERE tier >= 4 AND ai_type IN ('support','boss') AND id NOT IN (SELECT monster_id FROM monster_skill_map WHERE skill_id = ?) ORDER BY RAND() LIMIT 20", [skMap['전의 고양']]);
+        for (const m of tBuff) await pool.query('INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)', [m.id, skMap['전의 고양']]).catch(() => {});
+      }
+      if (skMap['공포의 눈빛']) {
+        const [tDebuff] = await pool.query("SELECT id FROM monsters WHERE tier >= 5 AND ai_type IN ('boss','defensive') AND id NOT IN (SELECT monster_id FROM monster_skill_map WHERE skill_id = ?) ORDER BY RAND() LIMIT 15", [skMap['공포의 눈빛']]);
+        for (const m of tDebuff) await pool.query('INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?, ?)', [m.id, skMap['공포의 눈빛']]).catch(() => {});
+      }
+    }
+
+    console.log('Skill expansion applied (merc +48, summon +1, monster +7)');
+  }
+
+  // ========== 용병/소환수 소개 멘트 (balance_v10a) ==========
+  await pool.query("ALTER TABLE mercenary_templates ADD COLUMN intro_message TEXT DEFAULT NULL").catch(() => {});
+  await pool.query("ALTER TABLE summon_templates ADD COLUMN intro_message TEXT DEFAULT NULL").catch(() => {});
+
+  // 용병 소개 멘트 (캐릭터성 반영)
+  const mercIntros = {
+    '민병 김돌': '잘 부탁해! 난 김돌이야. 마을을 지키던 민병인데, 검술은 좀 할 줄 알지. 최전방에서 싸울 수 있어!',
+    '보초병 만복': '만복이라 하오. 성문을 지키던 보초병이었지. 창으로 적을 찌르는 건 자신 있소.',
+    '사냥꾼 산이': '산이라고 해. 산에서 사냥하며 살았어. 활 솜씨 하나는 믿어도 돼.',
+    '점술사 복길': '복길이라 합니다. 점술로 적의 약점을 읽을 수 있지요. 부적 마법도 좀 쓸 줄 알고요.',
+    '장정 쇠돌': '쇠돌이다! 힘이라면 마을에서 내가 제일이지. 무거운 거 들고 때리는 건 자신 있어!',
+    '약초꾼 춘향': '춘향이에요. 약초로 상처를 치료할 수 있어요. 전투 중에도 든든하게 도와줄게요.',
+    '소매치기 막동': '막동이야. 손이 빠르다고? 그래, 단검 쓰는 것도 빠르지. 뒤를 맡겨줘.',
+    '서당훈장 학수': '학수라 하오. 서당에서 글을 가르치다 마법에 눈을 떴소. 화력은 보장하리다.',
+    '검사 이준': '이준이야. 정식으로 검술을 배운 검사지. 빠르고 정확한 검격으로 적을 베겠어.',
+    '창병 박무': '박무라 하오. 긴 창으로 전선을 지키는 것이 내 임무요. 단단한 방어를 보여주겠소.',
+    '궁수 한소이': '소이라고 해. 화살 한 발이면 충분해. 먼 거리에서 정확하게 적을 꿰뚫어줄게.',
+    '호위무사 태산': '태산이오! 상단을 호위하던 무사인데, 이 몸뚱이로 적의 공격을 다 막아주겠소!',
+    '무녀 소연': '소연이에요. 신전에서 기도하며 치유의 힘을 익혔어요. 여러분의 상처를 낫게 해줄게요.',
+    '야도적 칠성': '칠성이라 부르지. 밤의 그림자 속에서 움직이는 게 특기야. 암살은 내가 맡을게.',
+    '풍수견습 도현': '도현이에요. 풍수를 배우는 중인데, 바람의 술법은 꽤 자신 있습니다.',
+    '도사 최현': '최현이라 하오. 불의 부적으로 적을 태우는 도술이 전공이오. 화력을 맡기시오.',
+    '무사 강철': '강철이다. 이름처럼 단단하지. 묵직한 일격과 철벽 방어, 전장의 기둥이 되어주겠다.',
+    '치유사 윤하나': '하나예요. 은빛 치유의 빛으로 동료를 지켜왔어요. 생명의 빛이 되어줄게요.',
+    '퇴마사 혜진': '혜진이야. 귀신? 내 불타는 부적 앞에선 흔적도 못 남겨. 퇴마는 나한테 맡겨!',
+    '표창술사 은월': '은월이라 해. 표창이 날아가는 건 눈으로도 못 봐. 그림자처럼 움직이지.',
+    '화랑 선우': '선우라 하오. 화랑의 정신을 이어받은 검사요. 불꽃 검으로 적을 베겠소.',
+    '자객 서영': '서영이야. 그림자 속에서 한 번의 치명타... 그게 내 전부야. 뒤는 내가 볼게.',
+    '마법사 정은비': '은비예요. 강력한 마법으로 적 전체를 쓸어버릴 수 있어요. 마법의 힘을 보여줄게요.',
+    '관군대장 태현': '태현이오! 수백 명을 이끌던 대장이오. 전장의 흐름을 읽고 적을 꿰뚫겠소.',
+    '천기술사 소율': '소율이에요. 별의 기운을 읽어 마법을 쓰지요. 천체의 힘을 빌려줄게요.',
+    '선인 학담': '학담이라 하오. 산에서 수행하여 선인의 경지에 올랐소. 생사의 경계를 넘는 치유를 보여주리다.',
+    '검성 백무현': '백무현이다. 천하에 내 검을 막을 자는 없다. 바람처럼 빠른 검격... 직접 보여주지.',
+    '신궁 홍의': '홍의라 하오. 백발백중의 신궁이오. 내 화살은 반드시 적의 급소를 꿰뚫소.',
+    '천하장군 대호': '대호다! 천하무적의 장군이지. 이 몸이 전장에 서면 적군은 벌벌 떤다!',
+    '선녀 채운': '채운이에요. 하늘에서 내려온 선녀의 축복을 전해줄게요. 무지개 빛 치유를 받아보세요.',
+    '환웅의 후예': '나는 환웅의 피를 이은 전사다. 번개의 힘이 내 몸에 흐르지. 최강의 힘을 보여주마.',
+    '천년화호 월선': '월선이라 하지. 천 년을 수련한 구미호야. 내 불꽃 마법... 한번 맛보면 잊지 못할 거야.',
+    '사명대사': '사명이라 하오. 나라를 구한 승려의 도력으로 동료를 지키겠소. 부처의 가호가 함께하리다.',
+    '치우천왕': '나는 치우... 전쟁의 신이다. 내가 전장에 서는 순간, 승리는 정해진 것이다.',
+    '마고선녀': '나는 마고... 천지를 창조한 태초의 여신이지. 내 힘이 필요하다면 기꺼이 빌려주마.',
+  };
+
+  const summonIntros = {
+    '들쥐 소환수': '찍찍! 작지만 빠르답니다! 열심히 싸울게요!',
+    '떠도는 원혼': '으으... 이승을 떠도는 영혼이야... 네 편에서 싸워줄게...',
+    '들고양이': '냐옹~ 날렵한 발톱으로 적을 할퀴어줄게!',
+    '도깨비불': '이히히~ 나는 도깨비불이야! 훠훠~ 불꽃으로 태워버릴게!',
+    '흙 인형': '꿈틀... 나는 흙에서 태어난 인형... 주인을 지킬게...',
+    '해골병사': '카타닥... 뼈만 남았지만... 검을 드는 건... 아직 할 수 있다...',
+    '산토끼': '깡충! 바람처럼 빠르게 달릴 수 있어! 놀라지 마!',
+    '반딧불 정령': '반짝~ 작은 빛이지만 어둠을 밝혀줄 수 있어요~',
+    '야생 늑대': '크르릉... 내 이빨은 날카롭다. 적의 목을 물어뜯겠다.',
+    '해골 전사': '나는... 쓰러지지 않는다... 뼈가 부서져도... 다시 일어선다...',
+    '묘지 귀신': '키히히... 묘지에서 왔지... 무서워? 적에게 더 무서울 거야...',
+    '물의 정령': '촤아아~ 물의 흐름을 다스리는 정령이에요. 치유와 공격 모두 맡겨줘요.',
+    '독사': '쉬이이... 내 독에 물리면... 끝이야... 조심해...',
+    '나무 정령': '나는 오래된 나무에 깃든 정령이야. 대지의 힘으로 너를 지켜줄게.',
+    '부유령': '둥둥... 떠다니는 게 특기야... 적의 뒤를 잡을 수 있지...',
+    '불의 정령': '활활! 나는 불의 화신! 내 불꽃에 닿으면 재만 남을 거야!',
+    '골렘 파편': '쿵... 나는 돌에서 태어났다... 단단한 방어는 자신 있다...',
+    '바람의 정령': '휘이이~ 바람을 타고 날아다니는 정령이에요~ 빠른 공격을 보여줄게요~',
+    '도깨비': '야호! 도깨비 방망이로 뚝딱! 금은보화는 못 만들지만 적은 두들겨 팰 수 있지!',
+    '어린 구미호': '캬웅~ 아직 어리지만 불꽃 마법은 잘한다구! 꼬리 세 개밖에 없지만 열심히 할게!',
+    '강시': '끼이이... 통통... 나는 강시... 뛰어서 적을 잡는다... 통통...',
+    '구미호 영혼': '후후~ 아홉 개의 꼬리에서 피어나는 여우불... 매혹적이지 않아?',
+    '독거미 여왕': '크크크... 내 거미줄에 걸리면 아무도 빠져나올 수 없어... 독은 덤이야.',
+    '리치': '하하하... 죽음의 마법사 리치다. 내 마법 앞에선 산 자도 죽은 자가 되지...',
+    '뇌전 정령': '파지직! 번개의 힘을 다루는 정령이다! 일격에 적을 태워버리겠어!',
+    '야차': '크아아! 나는 야차! 맹수의 힘으로 적을 찢어발기겠다!',
+    '청룡': '나는 동방의 수호신 청룡이다. 물과 구름을 다스리는 용의 힘을 보여주마.',
+    '백호': '크르르... 서방의 수호신 백호다. 바람의 발톱으로 적을 갈기갈기 찢어주지.',
+    '주작': '피이이! 남방의 수호신 주작이다! 불사조의 불꽃으로 모든 것을 정화하리라!',
+    '현무': '나는... 북방의 수호신 현무다. 대지와 바다의 힘으로... 철벽을 세우리라.',
+    '봉황': '나는 봉황... 전설의 불새다. 무지개빛 깃털에서 피어나는 생명의 불꽃을 보여주마.',
+    '해태': '나는 해태. 선악을 판별하는 신수다. 정의의 이빨로 악을 심판하겠다.',
+    '삼족오': '나는 태양 속 세 발 까마귀, 삼족오다! 태양의 불꽃으로 어둠을 불살라주마!',
+    '용왕': '나는 바다의 지배자 용왕이다. 내가 전장에 서는 것만으로도 파도가 일어나지.',
+    '천마': '나는 하늘을 달리는 천마다. 구름 위를 질주하며 적을 짓밟겠다!',
+  };
+
+  for (const [name, msg] of Object.entries(mercIntros)) {
+    await pool.query("UPDATE mercenary_templates SET intro_message = ? WHERE name = ? AND (intro_message IS NULL OR intro_message = '')", [msg, name]).catch(() => {});
+  }
+  for (const [name, msg] of Object.entries(summonIntros)) {
+    await pool.query("UPDATE summon_templates SET intro_message = ? WHERE name = ? AND (intro_message IS NULL OR intro_message = '')", [msg, name]).catch(() => {});
+  }
+
+  // ========== 용병/소환수 강화(성급) 시스템 + 강화권 아이템 + 가챠 확률 수정 (balance_v10) ==========
+  await pool.query("ALTER TABLE character_mercenaries ADD COLUMN star_level INT DEFAULT 0").catch(() => {});
+  await pool.query("ALTER TABLE character_summons ADD COLUMN star_level INT DEFAULT 0").catch(() => {});
+
+  // 강화 확률 테이블 (등급 × 성급)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS unit_enhance_rates (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      grade VARCHAR(10) NOT NULL,
+      star_level INT NOT NULL,
+      success_rate FLOAT NOT NULL,
+      UNIQUE KEY unique_grade_star (grade, star_level)
+    )
+  `);
+
+  const [uerCheck] = await pool.query('SELECT COUNT(*) as cnt FROM unit_enhance_rates');
+  if (uerCheck[0].cnt === 0) {
+    const rates = [
+      ['일반',  [95, 85, 70, 55, 40, 25]],
+      ['고급',  [90, 78, 62, 48, 34, 20]],
+      ['희귀',  [85, 70, 55, 40, 28, 16]],
+      ['영웅',  [80, 65, 48, 35, 22, 12]],
+      ['전설',  [75, 58, 42, 28, 18, 9]],
+      ['신화',  [70, 52, 36, 22, 14, 7]],
+      ['초월',  [65, 45, 30, 18, 10, 5]],
+    ];
+    const vals = [];
+    for (const [grade, pcts] of rates) {
+      for (let star = 0; star < 6; star++) {
+        vals.push(`('${grade}', ${star + 1}, ${pcts[star] / 100})`);
+      }
+    }
+    await pool.query(`INSERT INTO unit_enhance_rates (grade, star_level, success_rate) VALUES ${vals.join(',')}`);
+  }
+  const enhanceTickets = [
+    // 용병 강화권
+    "('일반용병강화권', 'potion', NULL, NULL, '일반 등급 용병 중복 시 획득. 용병 강화에 사용.', 100, 50, 0, 0, 0, 0, 1, NULL)",
+    "('고급용병강화권', 'potion', NULL, NULL, '고급 등급 용병 중복 시 획득. 용병 강화에 사용.', 300, 150, 0, 0, 0, 0, 1, NULL)",
+    "('희귀용병강화권', 'potion', NULL, NULL, '희귀 등급 용병 중복 시 획득. 용병 강화에 사용.', 800, 400, 0, 0, 0, 0, 1, NULL)",
+    "('영웅용병강화권', 'potion', NULL, NULL, '영웅 등급 용병 중복 시 획득. 용병 강화에 사용.', 2000, 1000, 0, 0, 0, 0, 1, NULL)",
+    "('전설용병강화권', 'potion', NULL, NULL, '전설 등급 용병 중복 시 획득. 용병 강화에 사용.', 5000, 2500, 0, 0, 0, 0, 1, NULL)",
+    "('신화용병강화권', 'potion', NULL, NULL, '신화 등급 용병 중복 시 획득. 용병 강화에 사용.', 15000, 7500, 0, 0, 0, 0, 1, NULL)",
+    "('초월용병강화권', 'potion', NULL, NULL, '초월 등급 용병 중복 시 획득. 용병 강화에 사용.', 50000, 25000, 0, 0, 0, 0, 1, NULL)",
+    // 소환수 강화권
+    "('일반소환수강화권', 'potion', NULL, NULL, '일반 등급 소환수 중복 시 획득. 소환수 강화에 사용.', 100, 50, 0, 0, 0, 0, 1, NULL)",
+    "('고급소환수강화권', 'potion', NULL, NULL, '고급 등급 소환수 중복 시 획득. 소환수 강화에 사용.', 300, 150, 0, 0, 0, 0, 1, NULL)",
+    "('희귀소환수강화권', 'potion', NULL, NULL, '희귀 등급 소환수 중복 시 획득. 소환수 강화에 사용.', 800, 400, 0, 0, 0, 0, 1, NULL)",
+    "('영웅소환수강화권', 'potion', NULL, NULL, '영웅 등급 소환수 중복 시 획득. 소환수 강화에 사용.', 2000, 1000, 0, 0, 0, 0, 1, NULL)",
+    "('전설소환수강화권', 'potion', NULL, NULL, '전설 등급 소환수 중복 시 획득. 소환수 강화에 사용.', 5000, 2500, 0, 0, 0, 0, 1, NULL)",
+    "('신화소환수강화권', 'potion', NULL, NULL, '신화 등급 소환수 중복 시 획득. 소환수 강화에 사용.', 15000, 7500, 0, 0, 0, 0, 1, NULL)",
+    "('초월소환수강화권', 'potion', NULL, NULL, '초월 등급 소환수 중복 시 획득. 소환수 강화에 사용.', 50000, 25000, 0, 0, 0, 0, 1, NULL)",
+  ];
+  for (const v of enhanceTickets) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+  await pool.query("UPDATE shard_exchange_recipes SET target_grades = '일반:40,고급:56,영웅:5.5,전설:0.5' WHERE ticket_name = '용병소환권'").catch(() => {});
+  await pool.query("UPDATE shard_exchange_recipes SET target_grades = '고급:40,영웅:56,전설:5.5,신화:0.5' WHERE ticket_name = '고급용병소환권'").catch(() => {});
+  await pool.query("UPDATE shard_exchange_recipes SET target_grades = '일반:40,고급:56,영웅:5.5,전설:0.5' WHERE ticket_name = '소환수소환권'").catch(() => {});
+  await pool.query("UPDATE shard_exchange_recipes SET target_grades = '고급:40,영웅:56,전설:5.5,신화:0.5' WHERE ticket_name = '고급소환수소환권'").catch(() => {});
+
+  console.log('Database initialized (balance v10 applied)');
 }
 
 // 선택된 캐릭터 조회 헬퍼 (X-Char-Id 헤더 기반)

@@ -420,7 +420,7 @@ function TopNav({ character, charState, currentLocation, onLocationChange, onLog
             <button className="top-nav-v2-btn patch-notes" onClick={() => { onShowPatchNotes(); setMenuOpen(false); }}>
               <div className="top-nav-v2-btn-icon-wrap">
                 <span className="top-nav-v2-btn-icon" style={{ fontSize: '18px' }}>📋</span>
-                {!localStorage.getItem('patchNotes_v8') && <div className="top-nav-patch-dot" />}
+                {!localStorage.getItem('patchNotes_v10') && <div className="top-nav-patch-dot" />}
               </div>
               <span className="top-nav-v2-btn-name">패치</span>
             </button>

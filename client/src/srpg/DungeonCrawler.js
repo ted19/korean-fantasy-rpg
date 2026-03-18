@@ -2171,7 +2171,7 @@ export default function DungeonCrawler({
               party.push({
                 id: `merc_${m.id}`, name: m.name, level: m.level,
                 hp: m.current_hp ?? m.hp, maxHp: m.hp, mp: m.current_mp ?? m.mp ?? 0, maxMp: m.mp ?? 0,
-                imageUrl: `/mercenaries/${tid}_icon.png`, type: 'mercenary',
+                imageUrl: `/mercenaries_nobg/${tid}_icon.png`, type: 'mercenary',
                 aura: getAura(`merc_${m.id}`, 'neutral'),
               });
             });

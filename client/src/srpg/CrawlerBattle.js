@@ -1259,7 +1259,11 @@ export default function CrawlerBattle({
                   ))}
                 </div>
                 <div className="cwb-ally-info">
-                  <div className="cwb-ally-name">{ally.name}</div>
+                  <div className="cwb-ally-name">
+                    {ally.grade && <span style={{ fontSize: 8, fontWeight: 700, color: '#fff', background: {'일반':'#9ca3af','고급':'#4ade80','희귀':'#60a5fa','영웅':'#c084fc','전설':'#fbbf24','신화':'#ff6b6b','초월':'#ff44cc'}[ally.grade] || '#9ca3af', padding: '0 3px', borderRadius: 2, marginRight: 3 }}>{ally.grade}</span>}
+                    {ally.name}
+                    <span style={{ fontSize: 9, color: (ally.starLevel || 0) > 0 ? '#fbbf24' : '#555', marginLeft: 3 }}>{(ally.starLevel || 0) === 0 ? '☆' : '★'.repeat(ally.starLevel)}</span>
+                  </div>
                   <div className="cwb-ally-lv">Lv.{ally.level}</div>
                   <div className="cwb-bar hp">
                     <div className="cwb-bar-fill" style={{ width: `${hpPct}%` }} />
@@ -1353,7 +1357,11 @@ export default function CrawlerBattle({
               <img src={inspectAlly.imageUrl || ''} alt="" className="cwb-inspect-img"
                 onError={e => { e.target.style.display = 'none'; }} />
             </div>
-            <div className="cwb-inspect-name" style={{ color: '#60a5fa' }}>{inspectAlly.name}</div>
+            <div className="cwb-inspect-name" style={{ color: '#60a5fa' }}>
+              {inspectAlly.grade && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: {'일반':'#9ca3af','고급':'#4ade80','희귀':'#60a5fa','영웅':'#c084fc','전설':'#fbbf24','신화':'#ff6b6b','초월':'#ff44cc'}[inspectAlly.grade] || '#9ca3af', padding: '0 4px', borderRadius: 3, marginRight: 4 }}>{inspectAlly.grade}</span>}
+              {inspectAlly.name}
+              <span style={{ fontSize: 10, color: (inspectAlly.starLevel || 0) > 0 ? '#fbbf24' : '#555', marginLeft: 4 }}>{(inspectAlly.starLevel || 0) === 0 ? '☆' : '★'.repeat(inspectAlly.starLevel)}</span>
+            </div>
             <div className="cwb-inspect-level">Lv.{inspectAlly.level}</div>
             {inspectAlly.classType && <div className="cwb-ally-class-tag">{inspectAlly.classType}</div>}
 

@@ -207,6 +207,8 @@ export function createSummonUnit(summon, spawnPos) {
     weaponType: 'default',
     weaponName: null,
     element: summon.element || 'neutral',
+    grade: summon.grade || '일반',
+    starLevel: summon.star_level || 0,
   };
 }
 
@@ -239,11 +241,13 @@ export function createMercenaryUnit(merc, spawnPos) {
     acted: false,
     moved: false,
     icon: '🗡️',
-    imageUrl: `/mercenaries/${merc.template_id}_full.png`,
+    imageUrl: `/mercenaries_nobg/${merc.template_id}_full.png`,
     color: '#ffb347',
     weaponType,
     weaponName: null,
     element: merc.element || 'neutral',
+    grade: merc.grade || '일반',
+    starLevel: merc.star_level || 0,
   };
 }
 

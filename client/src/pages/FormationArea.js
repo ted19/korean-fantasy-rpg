@@ -93,7 +93,7 @@ function FormationArea({ character, charState, mySummons, myMercenaries }) {
       mercId: m.id,
       name: m.name,
       subText: `${m.class_type} · Lv.${m.level}`,
-      icon: `/mercenaries/${m.template_id}_icon.png`,
+      icon: `/mercenaries_nobg/${m.template_id}_icon.png`,
       fallbackIcon: '🗡️',
       rangeType: m.range_type || 'melee',
       element: m.element || 'neutral',

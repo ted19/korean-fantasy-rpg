@@ -11,7 +11,7 @@
 const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
 
 const ELEMENT_AURA = {
-  fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: '',
+  fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy',
   light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
 };
 
@@ -106,6 +106,8 @@ export function createCardSummonUnit(summon) {
     gridCol: 0,
     element: summon.element || 'neutral',
     portraitEffect: ELEMENT_AURA[summon.element] || '',
+    grade: summon.grade || '일반',
+    starLevel: summon.star_level || 0,
   };
 }
 
@@ -137,7 +139,7 @@ export function createCardMercenaryUnit(merc) {
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
     icon: '🗡️',
-    imageUrl: `/mercenaries/${merc.template_id}_full.png`,
+    imageUrl: `/mercenaries_nobg/${merc.template_id}_full.png`,
     color: '#ffb347',
     isGuarding: false,
     guardTarget: null,
@@ -147,6 +149,8 @@ export function createCardMercenaryUnit(merc) {
     gridCol: 0,
     element: merc.element || 'neutral',
     portraitEffect: ELEMENT_AURA[merc.element] || '',
+    grade: merc.grade || '일반',
+    starLevel: merc.star_level || 0,
   };
 }
 

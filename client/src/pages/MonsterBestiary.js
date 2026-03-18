@@ -35,8 +35,12 @@ const SKILL_TYPE_COLORS = {
 
 const GRADE_COLORS = {
   '일반': '#9ca3af', '고급': '#4ade80', '희귀': '#60a5fa',
-  '영웅': '#c084fc', '전설': '#fbbf24', '신화': '#ff6b6b',
+  '영웅': '#c084fc', '전설': '#fbbf24', '신화': '#ff6b6b', '초월': '#ff44cc',
 };
+const GRADE_STARS = { '일반':'★', '고급':'★★', '희귀':'★★★', '영웅':'★★★★', '전설':'★★★★★', '신화':'★★★★★★', '초월':'★★★★★★★' };
+const RANGE_LABELS = { melee: '근거리', ranged: '원거리', magic: '마법' };
+const ACQ_LABELS = { shop: '상점', boss: '보스', quest: '퀘스트', gacha: '가챠' };
+const ACQ_ICONS = { shop: '🏪', boss: '👑', quest: '📜', gacha: '🎰' };
 
 const TYPE_LABELS = {
   weapon: '무기', chest: '갑옷', helmet: '투구', boots: '장화',
@@ -1484,6 +1488,496 @@ function getSuit(card) {
   return 'pentacles';
 }
 
+/* ================================
+   MERCENARY BESTIARY TAB
+   ================================ */
+const MERC_GRADE_FILTERS = ['전체', '일반', '고급', '희귀', '영웅', '전설', '신화', '초월'];
+const MERC_CLASS_FILTERS = ['전체', '검사', '창병', '궁수', '도사', '무사', '치유사', '자객', '마법사'];
+
+function MercenaryTab() {
+  const [mercs, setMercs] = useState([]);
+  const [owned, setOwned] = useState([]);
+  const [gradeFilter, setGradeFilter] = useState('전체');
+  const [classFilter, setClassFilter] = useState('전체');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [unitSkills, setUnitSkills] = useState([]);
+
+  useEffect(() => {
+    api.get('/mercenary/templates-all').then(r => setMercs(r.data.templates || [])).catch(() => {});
+    api.get('/mercenary/my').then(r => setOwned((r.data.mercenaries || []).map(m => m.template_id))).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selected) { setUnitSkills([]); return; }
+    api.get('/skill/merc-encyclopedia', { params: { class_type: selected.class_type } })
+      .then(r => setUnitSkills(r.data.skills || []))
+      .catch(() => setUnitSkills([]));
+  }, [selected]);
+
+  const filtered = mercs.filter(m => {
+    if (gradeFilter !== '전체' && m.grade !== gradeFilter) return false;
+    if (classFilter !== '전체' && m.class_type !== classFilter) return false;
+    if (search && !m.name.includes(search) && !m.class_type.includes(search)) return false;
+    return true;
+  });
+
+  const totalByGrade = {};
+  mercs.forEach(m => { totalByGrade[m.grade] = (totalByGrade[m.grade] || 0) + 1; });
+  const ownedSet = new Set(owned);
+
+  return (
+    <div className="bestiary-tab-content">
+      {/* 수집 진행도 */}
+      <div className="bd-discovery-bar">
+        <span>보유 용병: <b style={{ color: '#fbbf24' }}>{ownedSet.size}</b> / {mercs.length}</span>
+        <div className="bd-discovery-fill-wrap">
+          <div className="bd-discovery-fill" style={{ width: `${mercs.length ? (ownedSet.size / mercs.length) * 100 : 0}%` }} />
+        </div>
+        <span style={{ fontSize: 11, color: '#888' }}>{mercs.length ? Math.floor((ownedSet.size / mercs.length) * 100) : 0}%</span>
+      </div>
+
+      {/* 등급 필터 */}
+      <div className="bd-filter-row">
+        {MERC_GRADE_FILTERS.map(g => (
+          <button key={g} className={`bd-filter-pill${gradeFilter === g ? ' active' : ''}`}
+            style={g !== '전체' ? { borderColor: GRADE_COLORS[g], color: gradeFilter === g ? '#fff' : GRADE_COLORS[g], background: gradeFilter === g ? GRADE_COLORS[g] : 'transparent' } : undefined}
+            onClick={() => setGradeFilter(g)}>
+            {g} {g !== '전체' && totalByGrade[g] ? `(${totalByGrade[g]})` : ''}
+          </button>
+        ))}
+      </div>
+      {/* 클래스 필터 */}
+      <div className="bd-filter-row">
+        {MERC_CLASS_FILTERS.map(c => (
+          <button key={c} className={`bd-filter-pill${classFilter === c ? ' active' : ''}`} onClick={() => setClassFilter(c)}>{c}</button>
+        ))}
+        <input className="bd-search" placeholder="이름 검색..." value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      {/* 카드 그리드 */}
+      <div className="bd-grid">
+        {filtered.map(m => {
+          const el = ELEMENT_INFO[m.element] || ELEMENT_INFO.neutral;
+          const isOwned = ownedSet.has(m.id);
+          const gc = GRADE_COLORS[m.grade] || '#9ca3af';
+          return (
+            <div key={m.id} className={`bd-card${!isOwned ? ' bd-card-locked' : ''}`} onClick={() => setSelected(m)}
+              style={{ borderColor: gc + '60' }}>
+              <div className="bd-card-img-wrap">
+                {el.aura && <div className={`cb-portrait-effect cb-effect-${el.aura}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', opacity: 0.5 }} />}
+                <ImgWithFallback src={`/mercenaries_nobg/${m.id}_icon.png`} fallback={m.icon || '⚔️'} className={`bd-card-img${!isOwned ? ' bd-img-locked' : ''}`} />
+                {isOwned && <span className="bd-card-owned-badge">✓</span>}
+              </div>
+              <div className="bd-card-info">
+                <div className="bd-card-name" style={{ color: gc }}>{m.name}</div>
+                <div className="bd-card-sub">
+                  {m.grade !== '일반' && <span className="inn-grade-badge" style={{ background: gc, fontSize: 8, padding: '0 3px' }}>{m.grade}</span>}
+                  <span style={{ color: el.color, fontSize: 10 }}>{el.icon}</span>
+                  <span style={{ fontSize: 10, color: '#888' }}>{m.class_type}</span>
+                </div>
+                <div style={{ fontSize: 9, color: GRADE_COLORS[m.grade], letterSpacing: -1 }}>{GRADE_STARS[m.grade]}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 상세 모달 */}
+      {selected && (() => {
+        const m = selected;
+        const el = ELEMENT_INFO[m.element] || ELEMENT_INFO.neutral;
+        const gc = GRADE_COLORS[m.grade] || '#9ca3af';
+        const isOwned = ownedSet.has(m.id);
+        const statBars = [
+          { label: 'HP', value: m.base_hp, max: 500, icon: '❤️', cls: 'hp' },
+          { label: 'MP', value: m.base_mp, max: 120, icon: '💎', cls: 'mp' },
+          { label: '물리공격', value: m.base_phys_attack, max: 60, icon: '⚔️', cls: 'atk' },
+          { label: '물리방어', value: m.base_phys_defense, max: 60, icon: '🛡️', cls: 'def' },
+          { label: '마법공격', value: m.base_mag_attack, max: 60, icon: '✨', cls: 'atk' },
+          { label: '마법방어', value: m.base_mag_defense, max: 60, icon: '🔮', cls: 'def' },
+          { label: '치명타', value: m.base_crit_rate, max: 40, icon: '💥', cls: 'atk' },
+          { label: '회피', value: m.base_evasion, max: 30, icon: '💨', cls: 'def' },
+        ];
+        return (
+          <div className="bd-overlay" onClick={() => setSelected(null)}>
+            <div className="bd-modal" onClick={e => e.stopPropagation()} style={{ '--tier-color': gc }}>
+              <button className="bd-close" onClick={() => setSelected(null)}>&times;</button>
+              {/* 몬스터 상세와 동일한 헤더 */}
+              <div className="bd-header">
+                <div className="bd-header-bg">
+                  <img src={`/mercenaries_nobg/${m.id}_full.png`} alt="" className="bd-header-bg-img" onError={e => { e.target.style.display='none'; }} />
+                  <div className="bd-header-gradient" />
+                </div>
+                <div className="bd-header-content">
+                  <div className="bd-portrait" style={{ borderColor: gc, boxShadow: `0 0 20px ${gc}60` }}>
+                    {el.aura && <div className={`bd-portrait-aura bd-aura-${el.aura}`} />}
+                    <ImgWithFallback src={`/mercenaries_nobg/${m.id}_full.png`} fallback={m.icon || '⚔️'} className="bd-portrait-img" />
+                  </div>
+                  <div className="bd-header-info">
+                    <div className="bd-name-row">
+                      <h2 className="bd-name" style={{ color: gc }}>{m.name}</h2>
+                      <span className="bd-tier-badge" style={{ background: gc }}>{m.grade}</span>
+                    </div>
+                    <div className="bd-stars" style={{ color: gc }}>{GRADE_STARS[m.grade]}</div>
+                    <div className="bd-tags">
+                      <span className="bd-tag bd-tag-category" style={{ borderColor: gc, color: gc }}>{m.class_type}</span>
+                      <span className="bd-tag" style={{ borderColor: el.color, color: el.color }}>{el.icon} {el.name}</span>
+                      <span className="bd-tag">{RANGE_LABELS[m.range_type] || '근거리'}</span>
+                      <span className="bd-tag" style={{ borderColor: '#ffffff30' }}>{ACQ_ICONS[m.acquisition_type]} {ACQ_LABELS[m.acquisition_type] || '상점'}</span>
+                      {isOwned
+                        ? <span className="bd-tag" style={{ borderColor: '#22c55e', color: '#22c55e' }}>✓ 보유중</span>
+                        : <span className="bd-tag" style={{ borderColor: '#ef4444', color: '#ef4444' }}>미보유</span>}
+                    </div>
+                    <p className="bd-desc">{m.description || ''}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bd-body">
+                {/* 전투 능력치 (스탯바 - 몬스터와 동일) */}
+                <div className="bd-section">
+                  <h3 className="bd-section-title">전투 능력치</h3>
+                  <div className="bd-stats">
+                    {statBars.map(stat => (
+                      <div className="bd-stat-row" key={stat.label}>
+                        <span className="bd-stat-icon">{stat.icon}</span>
+                        <span className="bd-stat-label">{stat.label}</span>
+                        <div className="bd-stat-bar-wrap">
+                          <div className={`bd-stat-bar bd-stat-bar-${stat.cls}`}
+                            style={{ width: `${Math.min((stat.value / stat.max) * 100, 100)}%` }} />
+                        </div>
+                        <span className={`bd-stat-value bd-sv-${stat.cls}`}>{stat.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 성장률 */}
+                <div className="bd-section">
+                  <h3 className="bd-section-title">성장률 (레벨당)</h3>
+                  <div className="bd-stat-extras">
+                    <div className="bd-extra"><span className="bd-extra-icon">❤️</span><span className="bd-extra-label">HP</span><span className="bd-extra-value">+{m.growth_hp}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">💎</span><span className="bd-extra-label">MP</span><span className="bd-extra-value">+{m.growth_mp}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">⚔️</span><span className="bd-extra-label">물공</span><span className="bd-extra-value">+{m.growth_phys_attack}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">🛡️</span><span className="bd-extra-label">물방</span><span className="bd-extra-value">+{m.growth_phys_defense}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">✨</span><span className="bd-extra-label">마공</span><span className="bd-extra-value">+{m.growth_mag_attack}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">🔮</span><span className="bd-extra-label">마방</span><span className="bd-extra-value">+{m.growth_mag_defense}</span></div>
+                  </div>
+                </div>
+
+                {/* 속성 상성 */}
+                {m.element && m.element !== 'neutral' && ELEMENT_INFO[m.element] && (
+                  <div className="bd-section">
+                    <h3 className="bd-section-title">속성 상성</h3>
+                    <div className="bd-element-info">
+                      <div className="bd-element-current">
+                        <span className="bd-element-icon" style={{ color: el.color }}>{el.icon}</span>
+                        <span className="bd-element-name" style={{ color: el.color }}>{el.name} 속성</span>
+                      </div>
+                      <div className="bd-element-relations">
+                        {Object.entries(ELEMENT_TABLE[m.element]).filter(([e]) => e !== 'neutral' && e !== m.element).map(([e, mult]) => {
+                          const info = ELEMENT_INFO[e];
+                          const defMult = ELEMENT_TABLE[e]?.[m.element] ?? 1.0;
+                          return (
+                            <div key={e} className="bd-element-row">
+                              <span style={{ color: info.color, fontSize: 16 }}>{info.icon}</span>
+                              <span className="bd-element-rel-name" style={{ color: info.color }}>{info.name}</span>
+                              <div className="bd-element-mults">
+                                <span className={`bd-element-mult ${mult > 1 ? 'strong' : mult < 1 ? 'weak' : ''}`}>공격 x{mult}</span>
+                                <span className={`bd-element-mult ${defMult > 1 ? 'weak' : defMult < 1 ? 'strong' : ''}`}>피격 x{defMult}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 보유 스킬 */}
+                {unitSkills.length > 0 && (
+                  <div className="bd-section">
+                    <h3 className="bd-section-title">보유 스킬 ({m.class_type})</h3>
+                    <div className="bd-skills">
+                      {unitSkills.map(skill => (
+                        <div className="bd-skill" key={skill.id} style={{ '--skill-color': SKILL_TYPE_COLORS[skill.type] || '#888' }}>
+                          <div className="bd-skill-icon"><ImgWithFallback src={`/merc_skills/${skill.id}_icon.png`} fallback={skill.icon || '⚔️'} className="bd-skill-icon-img" /></div>
+                          <div className="bd-skill-info">
+                            <div className="bd-skill-header">
+                              <span className="bd-skill-name">{skill.name}</span>
+                              <span className="bd-skill-type" style={{ color: SKILL_TYPE_COLORS[skill.type] }}>
+                                {skill.type === 'attack' ? '공격' : skill.type === 'heal' ? '치유' : skill.type === 'buff' ? '버프' : skill.type === 'debuff' ? '디버프' : skill.type === 'aoe' ? '광역' : skill.type}
+                              </span>
+                            </div>
+                            <div className="bd-skill-desc">{skill.description}</div>
+                            <div className="bd-skill-meta">
+                              {skill.mp_cost > 0 && <span>💎 MP {skill.mp_cost}</span>}
+                              {skill.damage_multiplier > 0 && <span>⚔️ x{skill.damage_multiplier}</span>}
+                              {skill.heal_amount > 0 && <span>💚 +{skill.heal_amount}</span>}
+                              {skill.cooldown > 0 && <span>⏱️ 쿨 {skill.cooldown}</span>}
+                              <span>📊 Lv.{skill.required_level}</span>
+                              {skill.is_common ? <span style={{ color: '#4ade80' }}>공용</span> : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 획득 정보 */}
+                <div className="bd-section">
+                  <h3 className="bd-section-title">획득 정보</h3>
+                  <div className="bd-stat-extras">
+                    <div className="bd-extra"><span className="bd-extra-icon">📊</span><span className="bd-extra-label">요구 레벨</span><span className="bd-extra-value bd-ev-exp">Lv.{m.required_level}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">{ACQ_ICONS[m.acquisition_type]}</span><span className="bd-extra-label">획득 방법</span><span className="bd-extra-value" style={{ color: gc }}>{ACQ_LABELS[m.acquisition_type] || '상점'}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">💰</span><span className="bd-extra-label">가격</span><span className="bd-extra-value bd-ev-gold">{(m.price || 0).toLocaleString()}G</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">😴</span><span className="bd-extra-label">최대 피로도</span><span className="bd-extra-value">{m.max_fatigue || 7}</span></div>
+                    {m.acquisition_ref && <div className="bd-extra"><span className="bd-extra-icon">📜</span><span className="bd-extra-label">조건</span><span className="bd-extra-value" style={{ color: '#ccc' }}>{m.acquisition_ref}</span></div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+/* ================================
+   SUMMON BESTIARY TAB
+   ================================ */
+const SUMMON_GRADE_FILTERS = ['전체', '일반', '고급', '희귀', '영웅', '전설', '신화', '초월'];
+const SUMMON_TYPE_FILTERS = ['전체', '몬스터', '귀신', '정령', '언데드', '신수', '용', '마수'];
+
+function SummonTab() {
+  const [summons, setSummons] = useState([]);
+  const [owned, setOwned] = useState([]);
+  const [gradeFilter, setGradeFilter] = useState('전체');
+  const [typeFilter, setTypeFilter] = useState('전체');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [unitSkills, setUnitSkills] = useState([]);
+
+  useEffect(() => {
+    api.get('/summon/templates-all').then(r => setSummons(r.data.templates || [])).catch(() => {});
+    api.get('/summon/my').then(r => setOwned((r.data.summons || []).map(s => s.template_id))).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selected) { setUnitSkills([]); return; }
+    api.get('/skill/summon-encyclopedia', { params: { summon_type: selected.type } })
+      .then(r => setUnitSkills(r.data.skills || []))
+      .catch(() => setUnitSkills([]));
+  }, [selected]);
+
+  const filtered = summons.filter(s => {
+    if (gradeFilter !== '전체' && s.grade !== gradeFilter) return false;
+    if (typeFilter !== '전체' && s.type !== typeFilter) return false;
+    if (search && !s.name.includes(search) && !s.type.includes(search)) return false;
+    return true;
+  });
+
+  const totalByGrade = {};
+  summons.forEach(s => { totalByGrade[s.grade] = (totalByGrade[s.grade] || 0) + 1; });
+  const ownedSet = new Set(owned);
+
+  return (
+    <div className="bestiary-tab-content">
+      <div className="bd-discovery-bar">
+        <span>보유 소환수: <b style={{ color: '#c084fc' }}>{ownedSet.size}</b> / {summons.length}</span>
+        <div className="bd-discovery-fill-wrap">
+          <div className="bd-discovery-fill" style={{ width: `${summons.length ? (ownedSet.size / summons.length) * 100 : 0}%`, background: 'linear-gradient(90deg, #a855f7, #c084fc)' }} />
+        </div>
+        <span style={{ fontSize: 11, color: '#888' }}>{summons.length ? Math.floor((ownedSet.size / summons.length) * 100) : 0}%</span>
+      </div>
+
+      <div className="bd-filter-row">
+        {SUMMON_GRADE_FILTERS.map(g => (
+          <button key={g} className={`bd-filter-pill${gradeFilter === g ? ' active' : ''}`}
+            style={g !== '전체' ? { borderColor: GRADE_COLORS[g], color: gradeFilter === g ? '#fff' : GRADE_COLORS[g], background: gradeFilter === g ? GRADE_COLORS[g] : 'transparent' } : undefined}
+            onClick={() => setGradeFilter(g)}>
+            {g} {g !== '전체' && totalByGrade[g] ? `(${totalByGrade[g]})` : ''}
+          </button>
+        ))}
+      </div>
+      <div className="bd-filter-row">
+        {SUMMON_TYPE_FILTERS.map(t => (
+          <button key={t} className={`bd-filter-pill${typeFilter === t ? ' active' : ''}`} onClick={() => setTypeFilter(t)}>{t}</button>
+        ))}
+        <input className="bd-search" placeholder="이름 검색..." value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      <div className="bd-grid">
+        {filtered.map(s => {
+          const el = ELEMENT_INFO[s.element] || ELEMENT_INFO.neutral;
+          const isOwned = ownedSet.has(s.id);
+          const gc = GRADE_COLORS[s.grade] || '#9ca3af';
+          return (
+            <div key={s.id} className={`bd-card${!isOwned ? ' bd-card-locked' : ''}`} onClick={() => setSelected(s)}
+              style={{ borderColor: gc + '60' }}>
+              <div className="bd-card-img-wrap">
+                {el.aura && <div className={`cb-portrait-effect cb-effect-${el.aura}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', opacity: 0.5 }} />}
+                <ImgWithFallback src={`/summons_nobg/${s.id}_icon.png`} fallback={s.icon || '🔮'} className={`bd-card-img${!isOwned ? ' bd-img-locked' : ''}`} />
+                {isOwned && <span className="bd-card-owned-badge">✓</span>}
+              </div>
+              <div className="bd-card-info">
+                <div className="bd-card-name" style={{ color: gc }}>{s.name}</div>
+                <div className="bd-card-sub">
+                  {s.grade !== '일반' && <span className="inn-grade-badge" style={{ background: gc, fontSize: 8, padding: '0 3px' }}>{s.grade}</span>}
+                  <span style={{ color: el.color, fontSize: 10 }}>{el.icon}</span>
+                  <span style={{ fontSize: 10, color: '#888' }}>{s.type}</span>
+                </div>
+                <div style={{ fontSize: 9, color: GRADE_COLORS[s.grade], letterSpacing: -1 }}>{GRADE_STARS[s.grade]}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selected && (() => {
+        const s = selected;
+        const el = ELEMENT_INFO[s.element] || ELEMENT_INFO.neutral;
+        const gc = GRADE_COLORS[s.grade] || '#9ca3af';
+        const isOwned = ownedSet.has(s.id);
+        const statBars = [
+          { label: 'HP', value: s.base_hp, max: 300, icon: '❤️', cls: 'hp' },
+          { label: 'MP', value: s.base_mp, max: 250, icon: '💎', cls: 'mp' },
+          { label: '공격력', value: s.base_attack, max: 70, icon: '⚔️', cls: 'atk' },
+          { label: '방어력', value: s.base_defense, max: 50, icon: '🛡️', cls: 'def' },
+        ];
+        return (
+          <div className="bd-overlay" onClick={() => setSelected(null)}>
+            <div className="bd-modal" onClick={e => e.stopPropagation()} style={{ '--tier-color': gc }}>
+              <button className="bd-close" onClick={() => setSelected(null)}>&times;</button>
+              <div className="bd-header">
+                <div className="bd-header-bg">
+                  <img src={`/summons_nobg/${s.id}_full.png`} alt="" className="bd-header-bg-img" onError={e => { e.target.style.display='none'; }} />
+                  <div className="bd-header-gradient" />
+                </div>
+                <div className="bd-header-content">
+                  <div className="bd-portrait" style={{ borderColor: gc, boxShadow: `0 0 20px ${gc}60` }}>
+                    {el.aura && <div className={`bd-portrait-aura bd-aura-${el.aura}`} />}
+                    <ImgWithFallback src={`/summons_nobg/${s.id}_full.png`} fallback={s.icon || '🔮'} className="bd-portrait-img" />
+                  </div>
+                  <div className="bd-header-info">
+                    <div className="bd-name-row">
+                      <h2 className="bd-name" style={{ color: gc }}>{s.name}</h2>
+                      <span className="bd-tier-badge" style={{ background: gc }}>{s.grade}</span>
+                    </div>
+                    <div className="bd-stars" style={{ color: gc }}>{GRADE_STARS[s.grade]}</div>
+                    <div className="bd-tags">
+                      <span className="bd-tag bd-tag-category" style={{ borderColor: gc, color: gc }}>{s.type}</span>
+                      <span className="bd-tag" style={{ borderColor: el.color, color: el.color }}>{el.icon} {el.name}</span>
+                      <span className="bd-tag">{RANGE_LABELS[s.range_type] || '근거리'}</span>
+                      <span className="bd-tag" style={{ borderColor: '#ffffff30' }}>{ACQ_ICONS[s.acquisition_type]} {ACQ_LABELS[s.acquisition_type] || '상점'}</span>
+                      {isOwned
+                        ? <span className="bd-tag" style={{ borderColor: '#22c55e', color: '#22c55e' }}>✓ 보유중</span>
+                        : <span className="bd-tag" style={{ borderColor: '#ef4444', color: '#ef4444' }}>미보유</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bd-body">
+                <div className="bd-section">
+                  <h3 className="bd-section-title">전투 능력치</h3>
+                  <div className="bd-stats">
+                    {statBars.map(stat => (
+                      <div className="bd-stat-row" key={stat.label}>
+                        <span className="bd-stat-icon">{stat.icon}</span>
+                        <span className="bd-stat-label">{stat.label}</span>
+                        <div className="bd-stat-bar-wrap">
+                          <div className={`bd-stat-bar bd-stat-bar-${stat.cls}`}
+                            style={{ width: `${Math.min((stat.value / stat.max) * 100, 100)}%` }} />
+                        </div>
+                        <span className={`bd-stat-value bd-sv-${stat.cls}`}>{stat.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 속성 상성 */}
+                {s.element && s.element !== 'neutral' && ELEMENT_INFO[s.element] && (
+                  <div className="bd-section">
+                    <h3 className="bd-section-title">속성 상성</h3>
+                    <div className="bd-element-info">
+                      <div className="bd-element-current">
+                        <span className="bd-element-icon" style={{ color: el.color }}>{el.icon}</span>
+                        <span className="bd-element-name" style={{ color: el.color }}>{el.name} 속성</span>
+                      </div>
+                      <div className="bd-element-relations">
+                        {Object.entries(ELEMENT_TABLE[s.element]).filter(([e]) => e !== 'neutral' && e !== s.element).map(([e, mult]) => {
+                          const info = ELEMENT_INFO[e];
+                          const defMult = ELEMENT_TABLE[e]?.[s.element] ?? 1.0;
+                          return (
+                            <div key={e} className="bd-element-row">
+                              <span style={{ color: info.color, fontSize: 16 }}>{info.icon}</span>
+                              <span className="bd-element-rel-name" style={{ color: info.color }}>{info.name}</span>
+                              <div className="bd-element-mults">
+                                <span className={`bd-element-mult ${mult > 1 ? 'strong' : mult < 1 ? 'weak' : ''}`}>공격 x{mult}</span>
+                                <span className={`bd-element-mult ${defMult > 1 ? 'weak' : defMult < 1 ? 'strong' : ''}`}>피격 x{defMult}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 보유 스킬 */}
+                {unitSkills.length > 0 && (
+                  <div className="bd-section">
+                    <h3 className="bd-section-title">보유 스킬 ({s.type})</h3>
+                    <div className="bd-skills">
+                      {unitSkills.map(skill => (
+                        <div className="bd-skill" key={skill.id} style={{ '--skill-color': SKILL_TYPE_COLORS[skill.type] || '#888' }}>
+                          <div className="bd-skill-icon"><ImgWithFallback src={`/summon_skills/${skill.id}_icon.png`} fallback={skill.icon || '🔮'} className="bd-skill-icon-img" /></div>
+                          <div className="bd-skill-info">
+                            <div className="bd-skill-header">
+                              <span className="bd-skill-name">{skill.name}</span>
+                              <span className="bd-skill-type" style={{ color: SKILL_TYPE_COLORS[skill.type] }}>
+                                {skill.type === 'attack' ? '공격' : skill.type === 'heal' ? '치유' : skill.type === 'buff' ? '버프' : skill.type === 'debuff' ? '디버프' : skill.type === 'aoe' ? '광역' : skill.type}
+                              </span>
+                            </div>
+                            <div className="bd-skill-desc">{skill.description}</div>
+                            <div className="bd-skill-meta">
+                              {skill.mp_cost > 0 && <span>💎 MP {skill.mp_cost}</span>}
+                              {skill.damage_multiplier > 0 && <span>⚔️ x{skill.damage_multiplier}</span>}
+                              {skill.heal_amount > 0 && <span>💚 +{skill.heal_amount}</span>}
+                              {skill.cooldown > 0 && <span>⏱️ 쿨 {skill.cooldown}</span>}
+                              <span>📊 Lv.{skill.required_level}</span>
+                              {skill.is_common ? <span style={{ color: '#4ade80' }}>공용</span> : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bd-section">
+                  <h3 className="bd-section-title">획득 정보</h3>
+                  <div className="bd-stat-extras">
+                    <div className="bd-extra"><span className="bd-extra-icon">📊</span><span className="bd-extra-label">요구 레벨</span><span className="bd-extra-value bd-ev-exp">Lv.{s.required_level}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">{ACQ_ICONS[s.acquisition_type]}</span><span className="bd-extra-label">획득 방법</span><span className="bd-extra-value" style={{ color: gc }}>{ACQ_LABELS[s.acquisition_type] || '상점'}</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">💰</span><span className="bd-extra-label">가격</span><span className="bd-extra-value bd-ev-gold">{(s.price || 0).toLocaleString()}G</span></div>
+                    <div className="bd-extra"><span className="bd-extra-icon">📈</span><span className="bd-extra-label">성장 배율</span><span className="bd-extra-value" style={{ color: gc }}>×{s.growth_mult || 1.0}</span></div>
+                    {s.acquisition_ref && <div className="bd-extra"><span className="bd-extra-icon">📜</span><span className="bd-extra-label">조건</span><span className="bd-extra-value" style={{ color: '#ccc' }}>{s.acquisition_ref}</span></div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 function TarotTab() {
   const [cards, setCards] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -1721,6 +2215,14 @@ function MonsterBestiary() {
           <ImgWithFallback src="/ui/tab_monster_bestiary.png" className="bestiary-tab-icon" fallback="👹" />
           <span>몬스터</span>
         </button>
+        <button className={`bestiary-main-tab ${mainTab === 'mercenary' ? 'active' : ''}`} onClick={() => setMainTab('mercenary')}>
+          <span className="bestiary-tab-icon" style={{ fontSize: 18 }}>⚔️</span>
+          <span>용병</span>
+        </button>
+        <button className={`bestiary-main-tab ${mainTab === 'summon' ? 'active' : ''}`} onClick={() => setMainTab('summon')}>
+          <span className="bestiary-tab-icon" style={{ fontSize: 18 }}>🔮</span>
+          <span>소환수</span>
+        </button>
         <button className={`bestiary-main-tab ${mainTab === 'equipment' ? 'active' : ''}`} onClick={() => setMainTab('equipment')}>
           <ImgWithFallback src="/ui/tab_equipment_bestiary.png" className="bestiary-tab-icon" fallback="⚔️" />
           <span>아이템</span>
@@ -1740,7 +2242,7 @@ function MonsterBestiary() {
       </div>
 
       {/* Tab Content */}
-      {mainTab === 'monster' ? <MonsterTab /> : mainTab === 'equipment' ? <EquipmentTab /> : mainTab === 'skill' ? <SkillTab /> : mainTab === 'mskill' ? <MonsterSkillTab /> : <TarotTab />}
+      {mainTab === 'monster' ? <MonsterTab /> : mainTab === 'equipment' ? <EquipmentTab /> : mainTab === 'skill' ? <SkillTab /> : mainTab === 'mercenary' ? <MercenaryTab /> : mainTab === 'summon' ? <SummonTab /> : mainTab === 'mskill' ? <MonsterSkillTab /> : <TarotTab />}
     </div>
   );
 }

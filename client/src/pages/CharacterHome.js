@@ -22,6 +22,12 @@ const CLASS_IMAGES = {
 
 const SKILL_TYPE_ICONS = { attack: '⚔️', heal: '💚', buff: '🔺', debuff: '🔻' };
 
+const GRADE_COLORS = {
+  '일반': '#9ca3af', '고급': '#4ade80', '희귀': '#60a5fa',
+  '영웅': '#c084fc', '전설': '#fbbf24', '신화': '#ff6b6b', '초월': '#ff44cc',
+};
+const starDisplay = (sl) => { const s = sl || 0; return s === 0 ? '☆' : '★'.repeat(s); };
+
 const BUFF_STAT_NAMES = {
   attack: '공격력', defense: '방어력', phys_attack: '물리공격', phys_defense: '물리방어',
   mag_attack: '마법공격', mag_defense: '마법방어', crit_rate: '치명률', evasion: '회피율',
@@ -469,7 +475,19 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
             <SummonEquipment
               summon={selectedSummon}
               onLog={onLog}
-              onSummonUpdate={() => { loadMySummons(); if (onSummonsChanged) onSummonsChanged(); }}
+              onSummonUpdate={async () => {
+                const prevId = selectedSummon?.id;
+                await loadMySummons();
+                if (onSummonsChanged) onSummonsChanged();
+                // 강화 후 선택된 소환수 유지
+                if (prevId) {
+                  setMySummons(prev => {
+                    const updated = prev.find(s => s.id === prevId);
+                    if (updated) setSelectedSummon(updated);
+                    return prev;
+                  });
+                }
+              }}
             />
           </div>
         </div>
@@ -634,6 +652,7 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
               mercenary={selectedMerc}
               onLog={onLog}
               onMercUpdate={() => { if (onMercenariesChanged) onMercenariesChanged(); }}
+              charLevel={character?.level || 1}
             />
           </div>
         </div>
@@ -853,13 +872,17 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                         <div className="char-home-avatar">
                           <div className={`cb-portrait-effect cb-effect-${getAuraEffect(`merc_${selectedMerc.id}`, selectedMerc.element)}`} style={{ position: 'absolute', inset: 0, zIndex: 3, borderRadius: 'inherit', pointerEvents: 'none' }} />
                           <SummonImg
-                            src={`/mercenaries/${selectedMerc.template_id}_full.png`}
+                            src={`/mercenaries_nobg/${selectedMerc.template_id}_full.png`}
                             fallback="🗡️"
                             className="summon-profile-img"
                           />
                         </div>
                       </div>
-                      <h4 className="game-title mb-1 text-center" style={{ fontSize: '1.3rem' }}>{selectedMerc.name}</h4>
+                      <h4 className="game-title mb-1 text-center" style={{ fontSize: '1.3rem' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: GRADE_COLORS[selectedMerc.grade] || '#9ca3af', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>{selectedMerc.grade || '일반'}</span>
+                        {selectedMerc.name}
+                        <span style={{ fontSize: 12, color: GRADE_COLORS[selectedMerc.grade] || '#fbbf24', marginLeft: 6 }}>{starDisplay(selectedMerc.star_level)}</span>
+                      </h4>
                       <div className="text-center" style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         {selectedMerc.class_type} · Lv.{selectedMerc.level}
                         <span style={{ color: ri.color, fontWeight: 600 }}>
@@ -968,14 +991,16 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                         <div className="summon-list-icon-wrap" style={{ position: 'relative' }}>
                           <div className={`cb-portrait-effect cb-effect-${getAuraEffect(`merc_${m.id}`, m.element)}`} style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', zIndex: 0, opacity: 0.7 }} />
                           <SummonImg
-                            src={`/mercenaries/${m.template_id}_icon.png`}
+                            src={`/mercenaries_nobg/${m.template_id}_icon.png`}
                             fallback="🗡️"
                             className="summon-list-icon-img"
                           />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text-bright)', fontSize: 13, whiteSpace: 'nowrap' }}>{m.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: GRADE_COLORS[m.grade] || '#9ca3af', padding: '0 4px', borderRadius: 3, lineHeight: '16px' }}>{m.grade || '일반'}</span>
+                            <span style={{ fontWeight: 600, color: GRADE_COLORS[m.grade] || 'var(--text-bright)', fontSize: 13, whiteSpace: 'nowrap' }}>{m.name}</span>
+                            <span style={{ fontSize: 10, color: GRADE_COLORS[m.grade] || '#fbbf24' }}>{starDisplay(m.star_level)}</span>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                               {m.class_type} · Lv.{m.level}
                               {m.element && ELEMENT_INFO[m.element] && (
@@ -1062,7 +1087,11 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                         />
                       </div>
                     </div>
-                    <h4 className="game-title mb-1 text-center" style={{ fontSize: '1.3rem' }}>{selectedSummon.name}</h4>
+                    <h4 className="game-title mb-1 text-center" style={{ fontSize: '1.3rem' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: GRADE_COLORS[selectedSummon.grade] || '#9ca3af', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>{selectedSummon.grade || '일반'}</span>
+                      {selectedSummon.name}
+                      <span style={{ fontSize: 12, color: GRADE_COLORS[selectedSummon.grade] || '#fbbf24', marginLeft: 6 }}>{starDisplay(selectedSummon.star_level)}</span>
+                    </h4>
                     <div className="text-center" style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       {selectedSummon.type} · Lv.{selectedSummon.level}
                       {selectedSummon.range_type && RANGE_TYPE_INFO[selectedSummon.range_type] && (
@@ -1183,8 +1212,10 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
                           />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text-bright)', fontSize: 13, whiteSpace: 'nowrap' }}>{s.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: GRADE_COLORS[s.grade] || '#9ca3af', padding: '0 4px', borderRadius: 3, lineHeight: '16px' }}>{s.grade || '일반'}</span>
+                            <span style={{ fontWeight: 600, color: GRADE_COLORS[s.grade] || 'var(--text-bright)', fontSize: 13, whiteSpace: 'nowrap' }}>{s.name}</span>
+                            <span style={{ fontSize: 10, color: GRADE_COLORS[s.grade] || '#fbbf24' }}>{starDisplay(s.star_level)}</span>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                               {s.type} · Lv.{s.level}
                               {s.element && ELEMENT_INFO[s.element] && (

@@ -28,6 +28,87 @@ const CLASS_STATS = {
   '저승사자': { hp: 90, mp: 90, attack: 18, defense: 4, phys_attack: 12, phys_defense: 2, mag_attack: 12, mag_defense: 4, crit_rate: 12, evasion: 10 },
 };
 
+// ── 닉네임 제한 규칙 ──
+const NAME_MIN_LENGTH = 2;
+const NAME_MAX_LENGTH = 12;
+// 허용: 한글, 영문, 일본어(히라가나/가타카나) — 숫자/특수문자/공백 불가
+const NAME_PATTERN = /^[가-힣a-zA-Zぁ-んァ-ヶ]+$/;
+
+// 금지어 목록 (비속어, 차별적 표현, 정치/종교, 사칭, 성적 표현, 게임 시스템 사칭)
+const BANNED_WORDS = [
+  // 비속어/욕설 (한글)
+  '시발', '씨발', '씹', '개새끼', '병신', '지랄', '좆', '미친놈', '미친년', '꺼져', '닥쳐',
+  '느금마', '니미', '니엄마', '엠창', '씨바', '시바', '쉬발', '쓰발', '개씹', '존나', '졸라',
+  '개좆', '개자식', '개년', '썅', '엿먹', '빠가', '찐따', '또라이', '멍청이', '바보',
+  '한남', '한녀', '김치녀', '된장녀', '맘충',
+  // 비속어 (영문)
+  'fuck', 'shit', 'bitch', 'asshole', 'dick', 'pussy', 'cock', 'nigger', 'nigga',
+  'faggot', 'retard', 'slut', 'whore', 'bastard', 'damn', 'cunt',
+  // 차별/혐오
+  '장애인', '찐따', '쪽바리', '짱깨', '깜둥이', '왜놈',
+  // 정치/종교 민감어
+  '대통령', '국회의원', '김정은', '김일성', '히틀러', '나치', '이슬람국가',
+  // 성적 표현
+  '섹스', '성관계', '야동', '포르노', '자위', '강간', '성폭행',
+  'sex', 'porn', 'hentai',
+  // 시스템 사칭
+  '운영자', '관리자', 'admin', 'gm', 'gamemaster', 'system', 'operator',
+  'moderator', '시스템', '고객센터',
+  // 약물/범죄
+  '마약', '대마', '필로폰', '코카인', '자살', '살인',
+  // 도박/사기
+  '현거래', '현금거래', 'rmt', '작업장', '봇', 'bot',
+];
+
+// 게임 내 유닛 이름 캐시 (서버 시작 시 로드, 5분마다 갱신)
+let _reservedNames = new Set();
+let _reservedNamesLoaded = false;
+
+async function loadReservedNames() {
+  try {
+    const [monsters] = await pool.query('SELECT name FROM monsters');
+    const [mercs] = await pool.query('SELECT name FROM mercenary_templates');
+    const [summons] = await pool.query('SELECT name FROM summon_templates');
+    const names = new Set();
+    [...monsters, ...mercs, ...summons].forEach(r => {
+      if (r.name) names.add(r.name.toLowerCase().trim());
+    });
+    _reservedNames = names;
+    _reservedNamesLoaded = true;
+  } catch {}
+}
+// 초기 로드 + 5분마다 갱신
+loadReservedNames();
+setInterval(loadReservedNames, 5 * 60 * 1000);
+
+async function validateCharacterName(name) {
+  if (!name || typeof name !== 'string') return '캐릭터 이름을 입력해주세요.';
+
+  const trimmed = name.trim();
+  if (trimmed.length < NAME_MIN_LENGTH) return `이름은 최소 ${NAME_MIN_LENGTH}자 이상이어야 합니다.`;
+  if (trimmed.length > NAME_MAX_LENGTH) return `이름은 최대 ${NAME_MAX_LENGTH}자까지 가능합니다.`;
+  if (!NAME_PATTERN.test(trimmed)) return '이름은 한글, 영문만 사용할 수 있습니다. (숫자, 특수문자, 공백 불가)';
+
+  // 같은 문자 3번 이상 반복 금지 (예: ㅋㅋㅋ, aaa)
+  if (/(.)\1{2,}/.test(trimmed)) return '같은 문자를 3번 이상 연속 사용할 수 없습니다.';
+
+  // 금지어 검사 (소문자 변환 후 부분 일치)
+  const lower = trimmed.toLowerCase();
+  for (const word of BANNED_WORDS) {
+    if (lower.includes(word.toLowerCase())) {
+      return '사용할 수 없는 이름입니다. (부적절한 표현 포함)';
+    }
+  }
+
+  // 게임 내 유닛 이름과 완전 일치 검사 (몬스터/용병/소환수)
+  if (!_reservedNamesLoaded) await loadReservedNames();
+  if (_reservedNames.has(lower)) {
+    return '게임 내 캐릭터 이름과 동일한 이름은 사용할 수 없습니다.';
+  }
+
+  return null; // 유효
+}
+
 // 캐릭터 생성
 router.post('/', auth, async (req, res) => {
   try {
@@ -37,12 +118,17 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: '캐릭터 이름과 직업을 선택해주세요.' });
     }
 
+    // 닉네임 유효성 검사
+    const nameError = await validateCharacterName(name);
+    if (nameError) {
+      return res.status(400).json({ message: nameError });
+    }
+
     if (!CLASS_STATS[classType]) {
       return res.status(400).json({ message: '올바른 직업을 선택해주세요.' });
     }
 
     const validElements = ['fire', 'water', 'earth', 'wind', 'neutral'];
-    // 저승사자는 중립 속성만 가능
     const charElement = classType === '저승사자' ? 'neutral' : (validElements.includes(element) ? element : 'neutral');
 
     // 캐릭터 3개까지 생성 가능
@@ -57,7 +143,7 @@ router.post('/', auth, async (req, res) => {
     // 캐릭터 이름 중복 확인
     const [nameDup] = await pool.query(
       'SELECT id FROM characters WHERE name = ?',
-      [name]
+      [name.trim()]
     );
     if (nameDup.length > 0) {
       return res.status(409).json({ message: '이미 사용 중인 캐릭터 이름입니다.' });
@@ -70,7 +156,15 @@ router.post('/', auth, async (req, res) => {
       [req.user.id, name, classType, stats.hp, stats.mp, stats.attack, stats.defense, stats.phys_attack, stats.phys_defense, stats.mag_attack, stats.mag_defense, stats.crit_rate, stats.evasion, charElement, initStamina, initStamina]
     );
 
-    const [chars] = await pool.query('SELECT * FROM characters WHERE id = ?', [result.insertId]);
+    const charId = result.insertId;
+    const [chars] = await pool.query('SELECT * FROM characters WHERE id = ?', [charId]);
+
+    // 용병소환권 1장 지급
+    await pool.query(
+      `INSERT INTO character_gacha_tickets (character_id, ticket_type, quantity) VALUES (?, 'mercenary', 1)
+       ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
+      [charId]
+    ).catch(() => {});
 
     res.status(201).json({ message: '캐릭터가 생성되었습니다.', character: chars[0] });
   } catch (err) {

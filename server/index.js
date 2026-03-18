@@ -65,7 +65,8 @@ app.use('/api', async (req, res, next) => {
 
   const authHeader = req.headers.authorization;
   if (!authHeader) return next();
-  console.log(`[SESSION] Checking ${req.method} ${req.path}`);
+  // SESSION 체크 로그 (디버그용, 평시 비활성)
+  // console.log(`[SESSION] Checking ${req.method} ${req.path}`);
 
   try {
     const token = authHeader.split(' ')[1];

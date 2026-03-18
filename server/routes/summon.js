@@ -46,10 +46,24 @@ function getSummonSlotInfo(charLevel, currentCount) {
   return { current: currentCount, max: maxSlots, next: next || null };
 }
 
+// 전체 소환수 목록 (도감용)
+router.get('/templates-all', auth, async (req, res) => {
+  try {
+    const [templates] = await pool.query("SELECT * FROM summon_templates ORDER BY FIELD(grade,'일반','고급','희귀','영웅','전설','신화','초월'), required_level");
+    res.json({ templates });
+  } catch (err) {
+    console.error('Summon templates-all error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // 구매 가능한 소환수 목록
 router.get('/templates', auth, async (req, res) => {
   try {
-    const [templates] = await pool.query('SELECT * FROM summon_templates ORDER BY type, required_level, price');
+    // 상점에서는 일반/고급 + shop 타입만 표시 (희귀 이상은 가챠/퀘스트/보스로 획득)
+    const [templates] = await pool.query(
+      "SELECT * FROM summon_templates WHERE acquisition_type = 'shop' AND grade IN ('일반','고급') ORDER BY type, required_level, price"
+    );
     const [growthRates] = await pool.query('SELECT * FROM summon_growth_rates');
     const growthMap = {};
     growthRates.forEach(g => { growthMap[g.summon_type] = g; });
@@ -120,10 +134,10 @@ router.get('/my', auth, async (req, res) => {
     const [summons] = await pool.query(
       `SELECT cs.id, cs.level, cs.exp, cs.hp, cs.mp, cs.attack, cs.defense,
               cs.phys_attack, cs.phys_defense, cs.mag_attack, cs.mag_defense, cs.crit_rate, cs.evasion,
-              cs.template_id,
+              cs.template_id, cs.star_level,
               st.name, st.type, st.icon, st.base_hp, st.base_mp, st.base_attack, st.base_defense,
               st.base_phys_attack, st.base_phys_defense, st.base_mag_attack, st.base_mag_defense, st.base_crit_rate, st.base_evasion,
-              st.sell_price, st.range_type, st.element
+              st.sell_price, st.range_type, st.element, st.grade, st.growth_mult
        FROM character_summons cs
        JOIN summon_templates st ON cs.template_id = st.id
        WHERE cs.character_id = ?
@@ -191,6 +205,11 @@ router.post('/buy', auth, async (req, res) => {
     const [templates] = await conn.query('SELECT * FROM summon_templates WHERE id = ?', [templateId]);
     if (templates.length === 0) return res.status(404).json({ message: '소환수를 찾을 수 없습니다.' });
     const tmpl = templates[0];
+
+    // 상점 구매는 일반/고급 + shop 타입만 허용
+    if (tmpl.acquisition_type !== 'shop' || !['일반', '고급'].includes(tmpl.grade)) {
+      return res.status(400).json({ message: '이 소환수는 상점에서 소환할 수 없습니다. (가챠/퀘스트/보스 클리어로 획득)' });
+    }
 
     if (char.level < tmpl.required_level) {
       return res.status(400).json({ message: `레벨 ${tmpl.required_level} 이상만 소환할 수 있습니다.` });
@@ -872,6 +891,146 @@ router.put('/:id/skill-priority', auth, async (req, res) => {
   } catch (err) {
     console.error('Summon skill priority error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// ── 소환수 성급 강화 ──
+const STAR_LEVEL_REQUIREMENTS = {
+  1: 1, 2: 10, 3: 20, 4: 35, 5: 50, 6: 70,
+};
+
+const GRADE_ENHANCE_TICKET_SUMMON = {
+  '일반': '일반소환수강화권', '고급': '고급소환수강화권', '희귀': '희귀소환수강화권',
+  '영웅': '영웅소환수강화권', '전설': '전설소환수강화권', '신화': '신화소환수강화권', '초월': '초월소환수강화권',
+};
+
+// 강화 정보 조회
+router.get('/enhance-info/:summonId', auth, async (req, res) => {
+  try {
+    const char = await require('../db').getSelectedChar(req, pool);
+    if (!char) return res.status(400).json({ message: '캐릭터를 찾을 수 없습니다.' });
+
+    const [summons] = await pool.query(
+      `SELECT cs.*, st.grade FROM character_summons cs
+       JOIN summon_templates st ON cs.template_id = st.id
+       WHERE cs.id = ? AND cs.character_id = ?`,
+      [req.params.summonId, char.id]
+    );
+    if (summons.length === 0) return res.status(404).json({ message: '소환수를 찾을 수 없습니다.' });
+    const sm = summons[0];
+
+    if (sm.star_level >= 6) return res.json({ maxed: true, starLevel: 6, grade: sm.grade });
+
+    const nextStar = (sm.star_level || 0) + 1;
+    const requiredLevel = STAR_LEVEL_REQUIREMENTS[nextStar] || 1;
+    const [rates] = await pool.query('SELECT success_rate FROM unit_enhance_rates WHERE grade = ? AND star_level = ?', [sm.grade, nextStar]);
+    const successRate = rates.length > 0 ? rates[0].success_rate : 0.5;
+
+    const ticketName = GRADE_ENHANCE_TICKET_SUMMON[sm.grade];
+    const [ticketItem] = await pool.query('SELECT id, name FROM items WHERE name = ?', [ticketName]);
+    let ticketOwned = 0;
+    if (ticketItem.length > 0) {
+      const [inv] = await pool.query('SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?', [char.id, ticketItem[0].id]);
+      ticketOwned = inv.length > 0 ? inv[0].quantity : 0;
+    }
+
+    res.json({
+      starLevel: sm.star_level || 0,
+      nextStar,
+      grade: sm.grade,
+      successRate,
+      requiredLevel,
+      unitLevel: sm.level || 1,
+      ticketName,
+      ticketItemId: ticketItem[0]?.id,
+      ticketOwned,
+      maxed: false,
+    });
+  } catch (err) {
+    console.error('Summon enhance info error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 강화 실행
+router.post('/enhance', auth, async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const char = await require('../db').getSelectedChar(req, conn);
+    if (!char) { conn.release(); return res.status(400).json({ message: '캐릭터를 찾을 수 없습니다.' }); }
+
+    const { summonId } = req.body;
+    const [summons] = await conn.query(
+      `SELECT cs.*, st.grade, st.base_hp, st.base_mp, st.base_attack, st.base_defense
+       FROM character_summons cs JOIN summon_templates st ON cs.template_id = st.id
+       WHERE cs.id = ? AND cs.character_id = ?`, [summonId, char.id]
+    );
+    if (summons.length === 0) { conn.release(); return res.status(404).json({ message: '소환수를 찾을 수 없습니다.' }); }
+    const sm = summons[0];
+
+    const currentStar = sm.star_level || 0;
+    if (currentStar >= 6) { conn.release(); return res.status(400).json({ message: '이미 최대 성급(6성)입니다.' }); }
+
+    const nextStar = currentStar + 1;
+    const requiredLevel = STAR_LEVEL_REQUIREMENTS[nextStar] || 1;
+    if (sm.level < requiredLevel) {
+      conn.release();
+      return res.status(400).json({ message: `${nextStar}성 강화는 소환수 Lv.${requiredLevel} 이상이어야 합니다. (현재 Lv.${sm.level})` });
+    }
+
+    const ticketName = GRADE_ENHANCE_TICKET_SUMMON[sm.grade];
+    const [ticketItem] = await conn.query('SELECT id FROM items WHERE name = ?', [ticketName]);
+    if (ticketItem.length === 0) { conn.release(); return res.status(500).json({ message: '강화권 아이템 오류' }); }
+
+    const [inv] = await conn.query('SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?', [char.id, ticketItem[0].id]);
+    if (!inv.length || inv[0].quantity <= 0) {
+      conn.release();
+      return res.status(400).json({ message: `${ticketName}이(가) 부족합니다.` });
+    }
+
+    const [rates] = await conn.query('SELECT success_rate FROM unit_enhance_rates WHERE grade = ? AND star_level = ?', [sm.grade, nextStar]);
+    const successRate = rates.length > 0 ? rates[0].success_rate : 0.5;
+
+    await conn.beginTransaction();
+
+    // 강화권 1개 소모
+    await conn.query('UPDATE inventory SET quantity = quantity - 1 WHERE character_id = ? AND item_id = ?', [char.id, ticketItem[0].id]);
+
+    const roll = Math.random();
+    const success = roll < successRate;
+
+    if (success) {
+      const STAR_BONUS = { 1: 0.03, 2: 0.04, 3: 0.05, 4: 0.06, 5: 0.08, 6: 0.10 };
+      const bonus = STAR_BONUS[nextStar] || 0.05;
+      await conn.query(
+        `UPDATE character_summons SET star_level = ?,
+          hp = hp + FLOOR(? * ?), mp = mp + FLOOR(? * ?),
+          attack = attack + GREATEST(1, FLOOR(? * ?)),
+          defense = defense + GREATEST(1, FLOOR(? * ?))
+        WHERE id = ?`,
+        [nextStar,
+         sm.base_hp, bonus, sm.base_mp, bonus,
+         sm.base_attack, bonus, sm.base_defense, bonus,
+         summonId]
+      );
+    }
+
+    await conn.commit();
+
+    res.json({
+      success,
+      starLevel: success ? nextStar : currentStar,
+      successRate: Math.round(successRate * 100),
+      message: success
+        ? `강화 성공! → ${nextStar}성 ⭐`
+        : `강화 실패... (${Math.round(successRate * 100)}% 확률)`,
+    });
+  } catch (err) {
+    await conn.rollback().catch(() => {});
+    console.error('Summon enhance error:', err);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  } finally {
+    conn.release();
   }
 });
 

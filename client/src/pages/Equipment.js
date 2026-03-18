@@ -461,7 +461,7 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                     {potions.map(pot => (
                       <div key={pot.inv_id} className="inv-mat-item" style={{ cursor: 'pointer' }}>
                         <div className="inv-mat-icon">
-                          <EquipImg itemId={pot.item_id} fallback={pot.type === 'talisman' ? '📜' : '🧪'} className="inv-cell-img" />
+                          <EquipImg itemId={pot.item_id} fallback={pot.name?.includes('강화권') ? '⭐' : pot.type === 'talisman' ? '📜' : '🧪'} className="inv-cell-img" />
                         </div>
                         <div className="inv-mat-info">
                           <div className="inv-mat-name">{pot.name}</div>
@@ -477,7 +477,11 @@ function Equipment({ character, charState, onCharStateUpdate, onLog }) {
                           </div>
                         </div>
                         <div className="inv-mat-qty">x{pot.quantity}</div>
-                        {pot.type !== 'talisman' && (
+                        {pot.name?.includes('강화권') ? (
+                          <button className="inv-potion-use-btn disabled" disabled title="용병/소환수 장비 화면에서 사용하세요">
+                            용병/소환수용
+                          </button>
+                        ) : pot.type !== 'talisman' && (
                           <button
                             className="inv-potion-use-btn"
                             onClick={() => handleUsePotion(pot)}

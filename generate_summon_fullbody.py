@@ -279,8 +279,9 @@ PROMPT_TEMPLATE = (
     "single character, white background"
 )
 
-# 소환수 영문 이름 매핑
+# 소환수 영문 이름 매핑 (전체 35종)
 NAME_EN = {
+    # 기존 12종
     1: "wandering ghost spirit with ethereal glow",
     2: "graveyard ghost in tattered robes",
     3: "gumiho nine-tailed fox spirit soul",
@@ -293,6 +294,36 @@ NAME_EN = {
     10: "wind elemental spirit with swirling air",
     11: "skeleton warrior with sword and shield",
     12: "lich necromancer with skull staff and dark robes",
+    # 신규 일반
+    13: "stray wild cat with sharp eyes and striped fur",
+    14: "ghostly will-o-wisp floating fire ball",
+    15: "earth clay golem doll small construct",
+    16: "skeleton soldier in rusty armor with sword",
+    17: "swift mountain rabbit with wind aura",
+    18: "tiny firefly spirit glowing fairy bioluminescent",
+    # 신규 고급
+    19: "venomous serpent coiled strike pose dripping venom",
+    20: "ancient tree spirit with bark skin and leaves",
+    21: "floating translucent ghost hovering above ground",
+    # 신규 희귀
+    22: "Korean goblin dokkaebi with horned face and magical club",
+    23: "young nine-tailed fox cub glowing fox spirit cute",
+    24: "jiangshi hopping vampire with paper talisman on forehead",
+    # 신규 영웅
+    25: "thunder elemental spirit made of lightning bolts",
+    26: "yaksha fierce demon with muscular body and fire",
+    # 신규 전설 (사신수)
+    27: "Azure Dragon Cheongryong East Asian blue dragon with clouds",
+    28: "White Tiger Baekho sacred white tiger with wind energy",
+    29: "Vermillion Bird Jujak phoenix-like firebird with crimson flames",
+    30: "Black Tortoise Hyeonmu giant tortoise with snake earth water",
+    # 신규 신화
+    31: "Korean Phoenix Bonghwang sacred firebird with rainbow tail feathers celestial",
+    32: "Haetae divine lion-dog beast judge of good and evil stone mane",
+    33: "Three-legged crow Samjokoh sun crow with golden solar fire",
+    # 신규 초월
+    34: "Dragon King Yongwang supreme sea dragon with underwater palace crown",
+    35: "Heavenly Horse Cheonma winged horse celestial steed running on clouds",
 }
 
 # ============================================================
