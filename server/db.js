@@ -6746,7 +6746,425 @@ async function initialize() {
     }
   }
 
-  console.log('Database initialized (balance v6 applied)');
+  // ========== 종합 밸런스 패치 v7 ==========
+  const [balV7Flag] = await pool.query("SELECT * FROM db_flags WHERE flag_name = 'balance_v7'");
+  if (balV7Flag.length === 0) {
+    console.log('Applying comprehensive balance patch v7...');
+
+    // ──────────────────────────────────────────────
+    // 1. 스테이지 레벨 범위 확장 (1~28 → 1~100)
+    //    한국: 초반~중반 (Lv1~38)
+    //    일본: 중반~후반 (Lv12~68)
+    //    중국: 후반~엔드게임 (Lv35~100)
+    // ──────────────────────────────────────────────
+    const stageGroupBalance = {
+      // 한국 (display_order 1~10)
+      'gojoseon':  { reqLv: 1,  baseLv: 1,  maxLv: 5  },
+      'samhan':    { reqLv: 3,  baseLv: 4,  maxLv: 9  },
+      'goguryeo':  { reqLv: 6,  baseLv: 7,  maxLv: 13 },
+      'baekje':    { reqLv: 9,  baseLv: 10, maxLv: 17 },
+      'silla':     { reqLv: 13, baseLv: 14, maxLv: 21 },
+      'balhae':    { reqLv: 17, baseLv: 18, maxLv: 25 },
+      'goryeo':    { reqLv: 21, baseLv: 22, maxLv: 29 },
+      'joseon':    { reqLv: 25, baseLv: 26, maxLv: 33 },
+      'imjin':     { reqLv: 29, baseLv: 30, maxLv: 36 },
+      'modern':    { reqLv: 33, baseLv: 34, maxLv: 40 },
+      // 일본 (display_order 11~20)
+      'jomon':     { reqLv: 12, baseLv: 12, maxLv: 18 },
+      'yayoi':     { reqLv: 16, baseLv: 17, maxLv: 23 },
+      'yamato':    { reqLv: 20, baseLv: 21, maxLv: 28 },
+      'nara':      { reqLv: 24, baseLv: 25, maxLv: 33 },
+      'heian':     { reqLv: 29, baseLv: 30, maxLv: 38 },
+      'kamakura':  { reqLv: 34, baseLv: 35, maxLv: 43 },
+      'muromachi': { reqLv: 39, baseLv: 40, maxLv: 49 },
+      'sengoku':   { reqLv: 45, baseLv: 46, maxLv: 55 },
+      'edo':       { reqLv: 51, baseLv: 52, maxLv: 62 },
+      'meiji':     { reqLv: 58, baseLv: 59, maxLv: 70 },
+      // 중국 (display_order 21~30)
+      'xia_shang': { reqLv: 35, baseLv: 35, maxLv: 42 },
+      'zhou':      { reqLv: 40, baseLv: 40, maxLv: 48 },
+      'qin':       { reqLv: 45, baseLv: 46, maxLv: 54 },
+      'han':       { reqLv: 50, baseLv: 51, maxLv: 60 },
+      'three_kingdoms': { reqLv: 56, baseLv: 57, maxLv: 66 },
+      'tang':      { reqLv: 62, baseLv: 63, maxLv: 73 },
+      'song':      { reqLv: 69, baseLv: 70, maxLv: 80 },
+      'yuan':      { reqLv: 76, baseLv: 77, maxLv: 88 },
+      'ming':      { reqLv: 84, baseLv: 85, maxLv: 95 },
+      'qing':      { reqLv: 92, baseLv: 93, maxLv: 100 },
+    };
+
+    // 1a. stage_groups required_level 업데이트
+    for (const [key, cfg] of Object.entries(stageGroupBalance)) {
+      await pool.query(
+        'UPDATE stage_groups SET required_level = ? WHERE key_name = ?',
+        [cfg.reqLv, key]
+      ).catch(() => {});
+    }
+
+    // 1b. stage_levels 몬스터 레벨 & 보상 업데이트
+    const [allGroups] = await pool.query('SELECT id, key_name FROM stage_groups');
+    const gIdMap = {};
+    for (const g of allGroups) gIdMap[g.key_name] = g.id;
+
+    for (const [key, cfg] of Object.entries(stageGroupBalance)) {
+      const groupId = gIdMap[key];
+      if (!groupId) continue;
+
+      const [stages] = await pool.query(
+        'SELECT stage_number, is_boss FROM stage_levels WHERE group_id = ? ORDER BY stage_number',
+        [groupId]
+      );
+      if (stages.length === 0) continue;
+
+      const totalStages = stages.length;
+      const lvRange = cfg.maxLv - cfg.baseLv;
+
+      for (let i = 0; i < totalStages; i++) {
+        const s = stages[i];
+        const progress = totalStages > 1 ? i / (totalStages - 1) : 0;
+        const lmin = Math.max(1, Math.floor(cfg.baseLv + lvRange * progress * 0.7));
+        const lmax = Math.min(100, Math.floor(cfg.baseLv + lvRange * (progress * 0.7 + 0.3)));
+        const avgLv = (lmin + lmax) / 2;
+
+        // EXP/골드 공식: 레벨에 따라 스케일링
+        let baseExp = Math.floor(50 + avgLv * 12 + Math.pow(avgLv / 10, 2) * 8);
+        let baseGold = Math.floor(25 + avgLv * 6 + Math.pow(avgLv / 10, 2) * 4);
+        if (s.is_boss) {
+          baseExp = Math.floor(baseExp * 2.5);
+          baseGold = Math.floor(baseGold * 2.5);
+        }
+
+        await pool.query(
+          `UPDATE stage_levels SET monster_level_min = ?, monster_level_max = ?,
+           reward_exp = ?, reward_gold = ? WHERE group_id = ? AND stage_number = ?`,
+          [lmin, lmax, baseExp, baseGold, groupId, s.stage_number]
+        ).catch(() => {});
+      }
+    }
+
+    // ──────────────────────────────────────────────
+    // 2. 몬스터 스탯 재조정 (Tier 1~10, 레벨 스케일링)
+    //    기존 v6 대비: 고티어 강화, 보상 스케일링 추가
+    // ──────────────────────────────────────────────
+
+    // 몬스터 EXP/골드 보상: 티어 기반 스케일링
+    await pool.query(`UPDATE monsters SET
+      exp_reward = CASE
+        WHEN tier = 1 THEN FLOOR(15 + RAND() * 8)
+        WHEN tier = 2 THEN FLOOR(35 + RAND() * 15)
+        WHEN tier = 3 THEN FLOOR(65 + RAND() * 25)
+        WHEN tier = 4 THEN FLOOR(110 + RAND() * 40)
+        WHEN tier = 5 THEN FLOOR(180 + RAND() * 60)
+        WHEN tier = 6 THEN FLOOR(280 + RAND() * 80)
+        WHEN tier = 7 THEN FLOOR(400 + RAND() * 100)
+        WHEN tier = 8 THEN FLOOR(550 + RAND() * 130)
+        WHEN tier = 9 THEN FLOOR(750 + RAND() * 160)
+        ELSE FLOOR(1000 + RAND() * 200)
+      END
+    `).catch(() => {});
+
+    await pool.query(`UPDATE monsters SET
+      gold_reward = CASE
+        WHEN tier = 1 THEN FLOOR(8 + RAND() * 5)
+        WHEN tier = 2 THEN FLOOR(20 + RAND() * 10)
+        WHEN tier = 3 THEN FLOOR(40 + RAND() * 15)
+        WHEN tier = 4 THEN FLOOR(70 + RAND() * 25)
+        WHEN tier = 5 THEN FLOOR(110 + RAND() * 35)
+        WHEN tier = 6 THEN FLOOR(170 + RAND() * 50)
+        WHEN tier = 7 THEN FLOOR(250 + RAND() * 70)
+        WHEN tier = 8 THEN FLOOR(360 + RAND() * 90)
+        WHEN tier = 9 THEN FLOOR(500 + RAND() * 120)
+        ELSE FLOOR(700 + RAND() * 150)
+      END
+    `).catch(() => {});
+
+    // 고티어 몬스터(6-10) 스탯 미세 강화: HP +10%, ATK +8%
+    await pool.query(`UPDATE monsters SET
+      hp = FLOOR(hp * 1.10),
+      attack = FLOOR(attack * 1.08),
+      phys_attack = FLOOR(phys_attack * 1.08),
+      mag_attack = FLOOR(mag_attack * 1.08)
+    WHERE tier >= 6`).catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 3. 용병 가격 & 레벨 요구 재조정
+    //    초반 용병: 저렴, 후반 용병: 고급화
+    // ──────────────────────────────────────────────
+    await pool.query("UPDATE mercenary_templates SET price = 2000, sell_price = 200, required_level = 1 WHERE name = '검사 이준'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 5000, sell_price = 500, required_level = 5 WHERE name = '창병 박무'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 10000, sell_price = 1000, required_level = 12 WHERE name = '궁수 한소이'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 18000, sell_price = 1800, required_level = 20 WHERE name = '도사 최현'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 30000, sell_price = 3000, required_level = 30 WHERE name = '무사 강철'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 45000, sell_price = 4500, required_level = 40 WHERE name = '치유사 윤하나'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 65000, sell_price = 6500, required_level = 50 WHERE name = '자객 서영'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET price = 100000, sell_price = 10000, required_level = 60 WHERE name = '마법사 정은비'").catch(() => {});
+
+    // 용병 기본 스탯 상향 (후반 용병 강화)
+    await pool.query("UPDATE mercenary_templates SET base_hp = 95, base_mp = 28, base_phys_attack = 11, base_phys_defense = 7, base_mag_attack = 3, base_mag_defense = 4 WHERE name = '검사 이준'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET base_hp = 110, base_mp = 22, base_phys_attack = 10, base_phys_defense = 9, base_mag_attack = 2, base_mag_defense = 5 WHERE name = '창병 박무'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET base_hp = 80, base_mp = 35, base_phys_attack = 13, base_phys_defense = 4, base_mag_attack = 6, base_mag_defense = 4 WHERE name = '궁수 한소이'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET base_hp = 75, base_mp = 70, base_phys_attack = 4, base_phys_defense = 4, base_mag_attack = 15, base_mag_defense = 8 WHERE name = '도사 최현'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET base_hp = 140, base_mp = 18, base_phys_attack = 15, base_phys_defense = 13, base_mag_attack = 2, base_mag_defense = 6 WHERE name = '무사 강철'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET base_hp = 85, base_mp = 95, base_phys_attack = 3, base_phys_defense = 5, base_mag_attack = 12, base_mag_defense = 10 WHERE name = '치유사 윤하나'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET base_hp = 70, base_mp = 40, base_phys_attack = 18, base_phys_defense = 3, base_mag_attack = 8, base_mag_defense = 3 WHERE name = '자객 서영'").catch(() => {});
+    await pool.query("UPDATE mercenary_templates SET base_hp = 65, base_mp = 110, base_phys_attack = 3, base_phys_defense = 3, base_mag_attack = 20, base_mag_defense = 9 WHERE name = '마법사 정은비'").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 4. 소환수 비용 & 레벨 요구 재조정
+    // ──────────────────────────────────────────────
+    await pool.query("UPDATE summon_templates SET price = 150, sell_price = 75, required_level = 1 WHERE name = '들쥐 소환수'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 300, sell_price = 150, required_level = 1 WHERE name = '떠도는 원혼'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 500, sell_price = 250, required_level = 5 WHERE name = '해골 전사'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 700, sell_price = 350, required_level = 8 WHERE name = '야생 늑대'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 1000, sell_price = 500, required_level = 10 WHERE name = '물의 정령'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 1200, sell_price = 600, required_level = 10 WHERE name = '불의 정령'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 1000, sell_price = 500, required_level = 12 WHERE name = '묘지 귀신'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 1800, sell_price = 900, required_level = 15 WHERE name = '골렘 파편'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 2200, sell_price = 1100, required_level = 18 WHERE name = '바람의 정령'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 2800, sell_price = 1400, required_level = 22 WHERE name = '구미호 영혼'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 3500, sell_price = 1750, required_level = 25 WHERE name = '독거미 여왕'").catch(() => {});
+    await pool.query("UPDATE summon_templates SET price = 8000, sell_price = 4000, required_level = 35 WHERE name = '리치'").catch(() => {});
+
+    // 소환수 재료 비용 정규화 (레벨에 맞게 조정)
+    // 저레벨 소환수: 재료 소량, 고레벨: 다량
+    const summonMatScale = {
+      '들쥐 소환수': 0.3,     // 가장 저렴
+      '떠도는 원혼': 0.5,
+      '해골 전사': 0.7,
+      '야생 늑대': 0.8,
+      '물의 정령': 1.0,
+      '불의 정령': 1.0,
+      '묘지 귀신': 1.2,
+      '골렘 파편': 1.5,
+      '바람의 정령': 1.8,
+      '구미호 영혼': 2.2,
+      '독거미 여왕': 2.5,
+      '리치': 4.0,             // 가장 비쌈
+    };
+
+    for (const [sName, scale] of Object.entries(summonMatScale)) {
+      // 기본 재료량 = 10 * scale, 최소 3
+      const baseQty = Math.max(3, Math.floor(10 * scale));
+      await pool.query(
+        `UPDATE summon_material_costs smc
+         JOIN summon_templates st ON smc.template_id = st.id
+         SET smc.quantity = GREATEST(3, FLOOR(? * (1 + (smc.material_id - 1) * 0.1)))
+         WHERE st.name = ?`,
+        [baseQty, sName]
+      ).catch(() => {});
+    }
+
+    // ──────────────────────────────────────────────
+    // 5. 소환수 슬롯 해금 레벨 변경 (route에서 처리하므로 여기선 주석만)
+    //    기존: 1/10/20/30/40/50 → 변경: 1/8/18/30/45/60
+    //    (summon.js에서 수정 필요)
+    // ──────────────────────────────────────────────
+
+    // ──────────────────────────────────────────────
+    // 6. 강화 비용 & 성공률 재조정
+    //    초반 강화: 더 저렴하게, 후반: 약간 관대하게
+    // ──────────────────────────────────────────────
+    const enhanceUpdates = [
+      [1,  1.00,    50,  1, 0.05],
+      [2,  0.97,   120,  1, 0.05],
+      [3,  0.93,   250,  2, 0.05],
+      [4,  0.88,   400,  2, 0.06],
+      [5,  0.82,   650,  3, 0.06],
+      [6,  0.74,  1000,  3, 0.07],
+      [7,  0.64,  1500,  4, 0.07],
+      [8,  0.54,  2200,  5, 0.08],
+      [9,  0.44,  3000,  6, 0.08],
+      [10, 0.34,  4000,  7, 0.09],
+      [11, 0.26,  5500,  8, 0.09],
+      [12, 0.19,  7500, 10, 0.10],
+      [13, 0.13, 10000, 12, 0.10],
+      [14, 0.09, 14000, 15, 0.11],
+      [15, 0.06, 20000, 18, 0.12],
+      [16, 0.045,28000, 22, 0.13],
+      [17, 0.035,38000, 26, 0.13],
+      [18, 0.025,50000, 32, 0.14],
+      [19, 0.018,65000, 38, 0.14],
+      [20, 0.012,85000, 45, 0.15],
+    ];
+    for (const [lv, rate, gold, matCnt, bonus] of enhanceUpdates) {
+      await pool.query(
+        `UPDATE enhance_rates SET success_rate = ?, gold_cost = ?, material_count = ?, stat_bonus_percent = ? WHERE enhance_level = ?`,
+        [rate, gold, matCnt, bonus, lv]
+      ).catch(() => {});
+    }
+
+    // ──────────────────────────────────────────────
+    // 7. 스페셜 던전 난이도 확장 (고레벨 콘텐츠)
+    // ──────────────────────────────────────────────
+
+    // 무한의 탑: 50층 유지하되 난이도 커브 개선
+    await pool.query(`UPDATE tower_floors SET
+      hp_multiplier = ROUND(1.0 + floor_num * 0.08, 2),
+      atk_multiplier = ROUND(1.0 + floor_num * 0.05, 3),
+      monster_count = LEAST(3 + FLOOR(floor_num / 7), 9),
+      level_bonus = floor_num * 2,
+      exp_reward = CASE WHEN is_boss THEN (100 + floor_num * 25) * 2 ELSE 100 + floor_num * 25 END,
+      gold_reward = CASE WHEN is_boss THEN (60 + floor_num * 16) * 2 ELSE 60 + floor_num * 16 END
+    `).catch(() => {});
+
+    // 정령의 시련: 레벨 요구 상향, 보상 대폭 증가
+    await pool.query(`UPDATE elemental_trials SET required_level = 20, hp_multiplier = 1.5, atk_multiplier = 1.3, monster_count = 4, exp_reward = 200, gold_reward = 120 WHERE tier = 1`).catch(() => {});
+    await pool.query(`UPDATE elemental_trials SET required_level = 30, hp_multiplier = 2.0, atk_multiplier = 1.6, monster_count = 5, exp_reward = 400, gold_reward = 250 WHERE tier = 2`).catch(() => {});
+    await pool.query(`UPDATE elemental_trials SET required_level = 42, hp_multiplier = 2.6, atk_multiplier = 2.0, monster_count = 5, exp_reward = 650, gold_reward = 420 WHERE tier = 3`).catch(() => {});
+    await pool.query(`UPDATE elemental_trials SET required_level = 55, hp_multiplier = 3.3, atk_multiplier = 2.5, monster_count = 6, exp_reward = 1000, gold_reward = 650 WHERE tier = 4`).catch(() => {});
+    await pool.query(`UPDATE elemental_trials SET required_level = 70, hp_multiplier = 4.2, atk_multiplier = 3.0, monster_count = 7, exp_reward = 1600, gold_reward = 1000 WHERE tier = 5`).catch(() => {});
+
+    // 보스 토벌전: 레벨 요구 대폭 상향, 엔드게임 콘텐츠화
+    await pool.query(`UPDATE boss_raid_configs SET required_level = 25, boss_hp_mult = 5.0, boss_atk_mult = 3.0, monster_count = 4, exp_reward = 500, gold_reward = 350 WHERE display_order = 1`).catch(() => {});
+    await pool.query(`UPDATE boss_raid_configs SET required_level = 35, boss_hp_mult = 6.5, boss_atk_mult = 3.5, monster_count = 5, exp_reward = 850, gold_reward = 550 WHERE display_order = 2`).catch(() => {});
+    await pool.query(`UPDATE boss_raid_configs SET required_level = 45, boss_hp_mult = 8.0, boss_atk_mult = 4.0, monster_count = 5, exp_reward = 1300, gold_reward = 850 WHERE display_order = 3`).catch(() => {});
+    await pool.query(`UPDATE boss_raid_configs SET required_level = 55, boss_hp_mult = 10.0, boss_atk_mult = 4.5, monster_count = 6, exp_reward = 1800, gold_reward = 1200 WHERE display_order = 4`).catch(() => {});
+    await pool.query(`UPDATE boss_raid_configs SET required_level = 68, boss_hp_mult = 12.0, boss_atk_mult = 5.5, monster_count = 6, exp_reward = 2800, gold_reward = 1800 WHERE display_order = 5`).catch(() => {});
+    await pool.query(`UPDATE boss_raid_configs SET required_level = 80, boss_hp_mult = 15.0, boss_atk_mult = 6.5, monster_count = 7, exp_reward = 4500, gold_reward = 3000 WHERE display_order = 6`).catch(() => {});
+
+    // 스페셜 던전 입장 레벨 상향
+    await pool.query("UPDATE special_dungeon_types SET required_level = 15 WHERE key_name = 'tower'").catch(() => {});
+    await pool.query("UPDATE special_dungeon_types SET required_level = 20 WHERE key_name = 'elemental'").catch(() => {});
+    await pool.query("UPDATE special_dungeon_types SET required_level = 25 WHERE key_name = 'boss_raid'").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 8. 스킬 트리 레벨 요구 재조정
+    //    Tier 1: Lv1/1pt, Tier 2: Lv5/1pt, Tier 3: Lv12/2pt
+    //    Tier 4: Lv22/3pt, Tier 5: Lv35/5pt, Tier 6: Lv55/7pt, Tier 7: Lv80/10pt
+    // ──────────────────────────────────────────────
+    await pool.query("UPDATE skill_tree_nodes SET required_level = 1, point_cost = 1 WHERE tier = 1").catch(() => {});
+    await pool.query("UPDATE skill_tree_nodes SET required_level = 5, point_cost = 1 WHERE tier = 2").catch(() => {});
+    await pool.query("UPDATE skill_tree_nodes SET required_level = 12, point_cost = 2 WHERE tier = 3").catch(() => {});
+    await pool.query("UPDATE skill_tree_nodes SET required_level = 22, point_cost = 3 WHERE tier = 4").catch(() => {});
+    await pool.query("UPDATE skill_tree_nodes SET required_level = 35, point_cost = 5 WHERE tier = 5").catch(() => {});
+    await pool.query("UPDATE skill_tree_nodes SET required_level = 55, point_cost = 7 WHERE tier = 6").catch(() => {});
+    await pool.query("UPDATE skill_tree_nodes SET required_level = 80, point_cost = 10 WHERE tier = 7").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 9. 상점 아이템 가격 재조정 (레벨 대비 적정 가격)
+    //    기본 원칙: 골드 10~30회 전투 수입으로 구매 가능
+    // ──────────────────────────────────────────────
+
+    // 물약 가격 조정 (소/중/대/특대/영약)
+    await pool.query("UPDATE items SET price = 10, sell_price = 5 WHERE name = '체력 물약(소)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 30, sell_price = 15 WHERE name = '체력 물약(중)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 80, sell_price = 40 WHERE name = '체력 물약(대)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 250, sell_price = 125 WHERE name = '체력 물약(특대)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 700, sell_price = 350 WHERE name = '체력 영약'").catch(() => {});
+    await pool.query("UPDATE items SET price = 2000, sell_price = 1000 WHERE name = '선단'").catch(() => {});
+    await pool.query("UPDATE items SET price = 15, sell_price = 7 WHERE name = '마력 물약(소)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 40, sell_price = 20 WHERE name = '마력 물약(중)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 100, sell_price = 50 WHERE name = '마력 물약(대)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 300, sell_price = 150 WHERE name = '마력 물약(특대)'").catch(() => {});
+    await pool.query("UPDATE items SET price = 1200, sell_price = 600 WHERE name = '영력약'").catch(() => {});
+    await pool.query("UPDATE items SET price = 500, sell_price = 250 WHERE name = '만병통치약'").catch(() => {});
+    await pool.query("UPDATE items SET price = 400, sell_price = 200 WHERE name = '환생석'").catch(() => {});
+    await pool.query("UPDATE items SET price = 150, sell_price = 75 WHERE name = '공격 부적'").catch(() => {});
+    await pool.query("UPDATE items SET price = 150, sell_price = 75 WHERE name = '방어 부적'").catch(() => {});
+
+    // 장비 가격 스케일링: required_level 기반 자동 조정
+    // 공식: price = base * (1 + required_level * 0.12)^1.5
+    // 무기는 가격이 약간 더 높음
+    await pool.query(`UPDATE items SET
+      price = GREATEST(price, FLOOR(
+        CASE
+          WHEN type = 'weapon' THEN 40 * POW(1 + required_level * 0.12, 1.5)
+          WHEN type IN ('chest') THEN 35 * POW(1 + required_level * 0.12, 1.5)
+          WHEN type IN ('helmet','shield') THEN 25 * POW(1 + required_level * 0.12, 1.5)
+          WHEN type IN ('boots') THEN 22 * POW(1 + required_level * 0.12, 1.5)
+          WHEN type IN ('ring','necklace') THEN 30 * POW(1 + required_level * 0.12, 1.5)
+          ELSE price
+        END
+      )),
+      sell_price = GREATEST(sell_price, FLOOR(price * 0.4))
+    WHERE type != 'potion' AND type != 'talisman'`).catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 10. 제작 비용 재조정 (골드 + 재료)
+    // ──────────────────────────────────────────────
+    await pool.query(`UPDATE crafting_recipes cr
+      JOIN items i ON cr.result_item_id = i.id
+      SET cr.gold_cost = GREATEST(cr.gold_cost, FLOOR(i.price * 0.4)),
+          cr.required_level = i.required_level
+    `).catch(() => {});
+
+    // 제작 재료 수량도 레벨에 비례하여 조정
+    await pool.query(`UPDATE crafting_recipe_materials crm
+      JOIN crafting_recipes cr ON crm.recipe_id = cr.id
+      SET crm.quantity = GREATEST(crm.quantity, FLOOR(1 + cr.required_level * 0.3))
+    `).catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 11. 클래스 성장률 미세 조정
+    //     고레벨 밸런스: 수련(승려) 방어 약간 하향, 저승사자 크리 소폭 하향
+    // ──────────────────────────────────────────────
+    // 풍수사: 마법 특화 유지, HP 약간 상향
+    await pool.query("UPDATE class_growth_rates SET hp_per_level = 9, mp_per_level = 8, mag_attack_per_level = 2.8, mag_defense_per_level = 2.0 WHERE class_type = '풍수사'").catch(() => {});
+    // 무당: 밸런스형 유지, 크리/회피 소폭 상향
+    await pool.query("UPDATE class_growth_rates SET crit_per_10level = 0.25, evasion_per_10level = 0.2 WHERE class_type = '무당'").catch(() => {});
+    // 승려: 탱커, 물방 약간 하향 (기존 너무 높음)
+    await pool.query("UPDATE class_growth_rates SET phys_defense_per_level = 2.2, defense_per_level = 2.2 WHERE class_type = '승려'").catch(() => {});
+    // 저승사자: 어쌔신, 크리 소폭 하향 (기존 0.3 → 0.25)
+    await pool.query("UPDATE class_growth_rates SET crit_per_10level = 0.25, evasion_per_10level = 0.22 WHERE class_type = '저승사자'").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 12. 소환수 성장률 조정 (약간 강화)
+    // ──────────────────────────────────────────────
+    // 몬스터형: 물리 탱커, HP/물방 상향
+    await pool.query("UPDATE summon_growth_rates SET hp_per_level = 8, phys_attack_per_level = 2.0, phys_defense_per_level = 1.8 WHERE summon_type = '몬스터'").catch(() => {});
+    // 귀신형: 마법 딜러, 마공 상향
+    await pool.query("UPDATE summon_growth_rates SET mag_attack_per_level = 2.0, evasion_per_10level = 3 WHERE summon_type = '귀신'").catch(() => {});
+    // 정령형: 마법 서포터, 마방 상향
+    await pool.query("UPDATE summon_growth_rates SET mag_attack_per_level = 2.2, mag_defense_per_level = 2.0 WHERE summon_type = '정령'").catch(() => {});
+    // 언데드형: 밸런스, 전체 소폭 상향
+    await pool.query("UPDATE summon_growth_rates SET hp_per_level = 7, attack_per_level = 1.3, phys_attack_per_level = 1.3, mag_attack_per_level = 1.2 WHERE summon_type = '언데드'").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 13. 몬스터 스킬 데미지 배율 재조정
+    //     기본 공격: 1.0~1.5x, 중급: 1.5~2.5x, 상급: 2.5~4.0x, 궁극: 4.0x+
+    // ──────────────────────────────────────────────
+    // 기본 공격 계열
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.2 WHERE name = '물기'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.4 WHERE name = '할퀴기'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.5 WHERE name = '돌진'").catch(() => {});
+    // 중급 스킬
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.8, mp_cost = 8 WHERE name = '화염 토'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.7, mp_cost = 8 WHERE name = '얼음 숨결'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 2.0, mp_cost = 12 WHERE name = '번개 강타'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.5, mp_cost = 8 WHERE name = '마법 화살'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.6, mp_cost = 6 WHERE name = '암흑 구체'").catch(() => {});
+    // AoE 스킬 (넓은 대신 데미지 낮음)
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.3, mp_cost = 10 WHERE name = '지진'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 0.9, mp_cost = 6 WHERE name = '독안개'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.2, mp_cost = 6 WHERE name = '꼬리 휘두르기'").catch(() => {});
+    // 상급 AoE
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 2.2, mp_cost = 18 WHERE name = '폭풍 브레스'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET damage_multiplier = 1.8, mp_cost = 14 WHERE name = '암흑 폭발'").catch(() => {});
+    // 힐/버프/디버프 수치 조정
+    await pool.query("UPDATE monster_skills SET heal_amount = 25, mp_cost = 8 WHERE name = '치유'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET heal_amount = 55, mp_cost = 16 WHERE name = '대치유'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET heal_amount = 35, mp_cost = 12 WHERE name = '치유의 안개'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET buff_value = 6, mp_cost = 8 WHERE name = '포효'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET buff_value = 5, mp_cost = 5 WHERE name = '방어 태세'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET buff_value = 10, mp_cost = 12 WHERE name = '광폭화'").catch(() => {});
+    await pool.query("UPDATE monster_skills SET buff_value = 8, mp_cost = 10 WHERE name = '정령 보호'").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 14. 행동력(스태미나) 비용 정규화
+    //     콘텐츠별 차등화: 일반 1, 보스 2, 던전 2, 타워 2, 정령 3, 보스토벌 3
+    // ──────────────────────────────────────────────
+    await pool.query("UPDATE special_dungeon_types SET stamina_cost = 2 WHERE key_name = 'tower'").catch(() => {});
+    await pool.query("UPDATE special_dungeon_types SET stamina_cost = 3 WHERE key_name = 'elemental'").catch(() => {});
+    await pool.query("UPDATE special_dungeon_types SET stamina_cost = 3 WHERE key_name = 'boss_raid'").catch(() => {});
+
+    // ──────────────────────────────────────────────
+    // 밸런스 v7 플래그 등록
+    // ──────────────────────────────────────────────
+    await pool.query("INSERT INTO db_flags (flag_name) VALUES ('balance_v7')").catch(() => {});
+    console.log('Comprehensive balance patch v7 applied');
+  }
+
+  console.log('Database initialized (balance v7 applied)');
 }
 
 // 선택된 캐릭터 조회 헬퍼 (X-Char-Id 헤더 기반)

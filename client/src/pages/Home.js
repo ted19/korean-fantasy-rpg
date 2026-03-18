@@ -69,7 +69,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [battleBlockMsg, setBattleBlockMsg] = useState(null);
   const [battleLoading, setBattleLoading] = useState(null); // { type: 'dungeon'|'stage'|'tower'|'boss_raid'|'elemental', name: string }
   const [showPatchNotes, setShowPatchNotes] = useState(() => {
-    const key = 'patchNotes_v7';
+    const key = 'patchNotes_v8';
     if (localStorage.getItem(key)) return false;
     return true;
   });
@@ -371,7 +371,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     const isBossRaid = specialCtx?.type === 'boss_raid';
     const isSpecialDungeon = !!specialCtx && !isTower;
     // 콘텐츠별 행동력 소모: 일반던전=2, 스페셜던전=3, 보스토벌=4, 기본=1
-    const staminaCost = isBossRaid ? 4 : isSpecialDungeon ? 3 : isDungeon ? 2 : (stage?.isBoss ? 2 : 1);
+    const staminaCost = isBossRaid ? 3 : isSpecialDungeon ? 3 : isDungeon ? 2 : (stage?.isBoss ? 2 : 1);
     if (!isTower) {
       if (charState.stamina < staminaCost) {
         setBattleLoading(null);
@@ -1181,59 +1181,96 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
 
       {/* 패치노트 팝업 */}
       {showPatchNotes && (
-        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v7', '1'); }}>
+        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v8', '1'); }}>
           <div className="patch-notes-popup" onClick={e => e.stopPropagation()}>
             <div className="patch-notes-header">
-              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v7', '1'); }}>&times;</button>
+              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v8', '1'); }}>&times;</button>
               <div className="patch-notes-badge">NEW</div>
-              <h2 className="patch-notes-title">패치 노트 v7</h2>
-              <div className="patch-notes-date">2026.03.17</div>
+              <h2 className="patch-notes-title">패치 노트 v8 — 종합 밸런스 대개편</h2>
+              <div className="patch-notes-date">2026.03.18</div>
             </div>
             <div className="patch-notes-body">
               <div className="patch-section">
-                <h3>던전 3D 크롤러</h3>
+                <h3>스테이지 대개편</h3>
                 <ul>
-                  <li><span className="patch-tag new">신규</span> DOOM 스타일 <b>3D 레이캐스팅 엔진</b>으로 던전 탐험 전면 개편</li>
-                  <li><span className="patch-tag new">신규</span> 던전별 고유 테마 텍스처 — 숲/동굴/늪/해저/마왕성/용의둥지 <b>7종</b></li>
-                  <li><span className="patch-tag new">신규</span> 바닥/천장 원근 텍스처 + 횃불 조명 + 배회 몬스터 AI</li>
-                  <li><span className="patch-tag new">신규</span> 자동 길찾기 (BFS) + 자동 전투 모드</li>
-                  <li><span className="patch-tag improve">개선</span> 벽돌 줄눈/균열/얼룩 등 <b>벽 텍스처 전면 개선</b> (해상도 800x500)</li>
-                  <li><span className="patch-tag improve">개선</span> 벽 장식 추가 — 횃대, 두개골, 쇠사슬, 균열, 풍화 얼룩</li>
-                  <li><span className="patch-tag improve">개선</span> 바닥 장식 추가 — 뼈다귀, 자갈, 웅덩이</li>
-                  <li><span className="patch-tag improve">개선</span> 필수 처치 몬스터도 <b>배회</b>하도록 변경</li>
-                  <li><span className="patch-tag new">신규</span> 던전 클리어 축하 팝업 (등급 S/A/B/C, 통계 표시)</li>
-                  <li><span className="patch-tag improve">개선</span> 보물상자 팝업 전면 개편 (코인 이펙트, CSS 폴백)</li>
+                  <li><span className="patch-tag improve">개선</span> 스테이지 레벨 범위 <b>전면 확장</b> (기존 1~28 → 1~100)</li>
+                  <li><span className="patch-tag improve">개선</span> <b>한국</b> 스테이지: 초~중반 (Lv 1~40)</li>
+                  <li><span className="patch-tag improve">개선</span> <b>일본</b> 스테이지: 중~후반 (Lv 12~70)</li>
+                  <li><span className="patch-tag improve">개선</span> <b>중국</b> 스테이지: 후반~엔드게임 (Lv 35~100)</li>
+                  <li><span className="patch-tag improve">개선</span> 전 스테이지 EXP/골드 보상 레벨 비례 재조정</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>전투/진형 시스템</h3>
+                <h3>몬스터 밸런스</h3>
                 <ul>
-                  <li><span className="patch-tag improve">개선</span> 아군 공격 바운스 모션 + 웨이브 적 배치 랜덤화</li>
-                  <li><span className="patch-tag fix">수정</span> 진형에 배치 안 한 유닛이 전투에 참전하던 버그 수정</li>
-                  <li><span className="patch-tag fix">수정</span> 주인공 진형 제외 시 HP/MP가 0이 되던 버그 수정</li>
-                  <li><span className="patch-tag fix">수정</span> 던전 탐험에서 진형 미배치 유닛이 표시되던 버그 수정</li>
-                  <li><span className="patch-tag fix">수정</span> 크롤러 전투 퀘스트 진행 카운트 안 되던 버그 수정</li>
-                  <li><span className="patch-tag fix">수정</span> 용병/소환수 장비 레벨 제한 미적용 버그 수정</li>
+                  <li><span className="patch-tag improve">개선</span> 티어 1~10 몬스터 <b>EXP/골드 보상</b> 전면 재조정</li>
+                  <li><span className="patch-tag improve">개선</span> 고티어(6~10) 몬스터 HP +10%, 공격력 +8% 강화</li>
+                  <li><span className="patch-tag improve">개선</span> 몬스터 스킬 데미지 배율 재조정 (기본 1.2x~궁극 2.2x)</li>
+                  <li><span className="patch-tag improve">개선</span> 힐/버프/디버프 스킬 수치 재조정</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>장비 시스템</h3>
+                <h3>용병 시스템</h3>
                 <ul>
-                  <li><span className="patch-tag new">신규</span> 마법사 공용 무기 <b>지팡이</b> 13종 + <b>로브</b> 13종 + <b>관모</b> 13종</li>
-                  <li><span className="patch-tag fix">수정</span> 폭풍궁, 뇌광검 등 일부 아이템 스탯 미표시 수정</li>
-                  <li><span className="patch-tag improve">개선</span> 전 장비 물공/마공/물방/마방 세부 스탯 적용</li>
+                  <li><span className="patch-tag improve">개선</span> 용병 가격 & 레벨 요구 전면 재조정</li>
+                  <li><span className="patch-tag improve">개선</span> 검사 2,000골드(Lv1) ~ 마법사 100,000골드(Lv60)</li>
+                  <li><span className="patch-tag improve">개선</span> 후반 용병(무사/치유사/자객/마법사) 기본 스탯 상향</li>
+                  <li><span className="patch-tag improve">개선</span> 슬롯 해금: Lv 1/8/18/30/45 (기존 1/10/20/30/40)</li>
                 </ul>
               </div>
               <div className="patch-section">
-                <h3>UI/UX</h3>
+                <h3>소환수 시스템</h3>
                 <ul>
-                  <li><span className="patch-tag new">신규</span> 던전/스테이지 진입 <b>로딩 팝업</b> (전투 팁)</li>
-                  <li><span className="patch-tag new">신규</span> 상단 네비 <b>패치노트 버튼</b> 추가</li>
-                  <li><span className="patch-tag fix">수정</span> 업적 중복 표시 버그 수정</li>
+                  <li><span className="patch-tag improve">개선</span> 소환수 가격 & 레벨 요구 전면 재조정</li>
+                  <li><span className="patch-tag improve">개선</span> 들쥐 150골드(Lv1) ~ 리치 8,000골드(Lv35)</li>
+                  <li><span className="patch-tag improve">개선</span> 소환 재료 비용 레벨 비례 정규화</li>
+                  <li><span className="patch-tag improve">개선</span> 슬롯 해금: Lv 1/8/18/30/45/60 (기존 1/10/20/30/40/50)</li>
+                  <li><span className="patch-tag improve">개선</span> 소환수 성장률 상향 (몬스터형 HP↑, 귀신형 마공↑, 정령형 마방↑)</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>특수 던전</h3>
+                <ul>
+                  <li><span className="patch-tag improve">개선</span> <b>무한의 탑</b>: 입장 Lv15, 층당 난이도 커브 강화 (HP×1.08/층, 레벨보너스 ×2/층)</li>
+                  <li><span className="patch-tag improve">개선</span> <b>정령의 시련</b>: 5단계 (Lv 20/30/42/55/70), HP·공격 배율 대폭 상향</li>
+                  <li><span className="patch-tag improve">개선</span> <b>보스 토벌전</b>: 6보스 (Lv 25/35/45/55/68/80), 엔드게임 콘텐츠화</li>
+                  <li><span className="patch-tag improve">개선</span> 보스 토벌전 보상 대폭 증가 (최대 EXP 4,500 / 골드 3,000)</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>장비 & 강화</h3>
+                <ul>
+                  <li><span className="patch-tag improve">개선</span> 강화 비용 재조정: 초반 더 저렴 (+1: 50골드), 후반 관대하게</li>
+                  <li><span className="patch-tag improve">개선</span> 강화 성공률 소폭 상향 (+6: 74%, +10: 34%, +15: 6%)</li>
+                  <li><span className="patch-tag improve">개선</span> 장비 가격 레벨 기반 스케일링 적용</li>
+                  <li><span className="patch-tag improve">개선</span> 물약 가격 재조정 (소형 10골드~선단 2,000골드)</li>
+                  <li><span className="patch-tag improve">개선</span> 제작 비용 & 재료량 레벨 비례 조정</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>스킬 트리</h3>
+                <ul>
+                  <li><span className="patch-tag improve">개선</span> 티어별 레벨 요구 재조정: T1(Lv1) → T2(Lv5) → T3(Lv12) → T4(Lv22) → T5(Lv35) → T6(Lv55) → T7(Lv80)</li>
+                  <li><span className="patch-tag improve">개선</span> 티어별 포인트 비용: 1 → 1 → 2 → 3 → 5 → 7 → 10</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>클래스 밸런스</h3>
+                <ul>
+                  <li><span className="patch-tag improve">개선</span> <b>풍수사</b>: HP 성장 8→9, 마법 특화 유지</li>
+                  <li><span className="patch-tag improve">개선</span> <b>무당</b>: 크리/회피 성장 소폭 상향</li>
+                  <li><span className="patch-tag improve">개선</span> <b>승려</b>: 방어 성장 소폭 하향 (2.5→2.2, 밸런스 조정)</li>
+                  <li><span className="patch-tag improve">개선</span> <b>저승사자</b>: 크리 성장 소폭 하향 (0.3→0.25, 밸런스 조정)</li>
+                </ul>
+              </div>
+              <div className="patch-section">
+                <h3>행동력</h3>
+                <ul>
+                  <li><span className="patch-tag improve">개선</span> 콘텐츠별 행동력 소모 정규화: 일반 1, 보스 2, 던전 2, 타워 2, 정령/토벌 3</li>
                 </ul>
               </div>
             </div>
-            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v7', '1'); }}>
+            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v8', '1'); }}>
               확인
             </button>
           </div>

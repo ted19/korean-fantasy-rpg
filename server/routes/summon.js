@@ -30,11 +30,11 @@ const SLOT_NAMES = {
 
 const SUMMON_SLOTS = [
   { level: 1,  slots: 1 },
-  { level: 10, slots: 2 },
-  { level: 20, slots: 3 },
+  { level: 8,  slots: 2 },
+  { level: 18, slots: 3 },
   { level: 30, slots: 4 },
-  { level: 40, slots: 5 },
-  { level: 50, slots: 6 },
+  { level: 45, slots: 5 },
+  { level: 60, slots: 6 },
 ];
 
 function getSummonSlotInfo(charLevel, currentCount) {

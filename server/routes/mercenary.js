@@ -101,8 +101,8 @@ router.get('/my', auth, async (req, res) => {
 
     // 고용 슬롯 정보
     const MERC_SLOTS = [
-      { level: 1, slots: 1 }, { level: 10, slots: 2 }, { level: 20, slots: 3 },
-      { level: 30, slots: 4 }, { level: 40, slots: 5 },
+      { level: 1, slots: 1 }, { level: 8, slots: 2 }, { level: 18, slots: 3 },
+      { level: 30, slots: 4 }, { level: 45, slots: 5 },
     ];
     const maxSlots = MERC_SLOTS.filter(s => charLevel >= s.level).pop()?.slots || 1;
     const nextSlot = MERC_SLOTS.find(s => s.slots > maxSlots) || null;
@@ -144,10 +144,10 @@ router.post('/hire', auth, async (req, res) => {
     // 레벨별 고용 인원 제한
     const MERC_SLOTS = [
       { level: 1,  slots: 1 },
-      { level: 10, slots: 2 },
-      { level: 20, slots: 3 },
+      { level: 8,  slots: 2 },
+      { level: 18, slots: 3 },
       { level: 30, slots: 4 },
-      { level: 40, slots: 5 },
+      { level: 45, slots: 5 },
     ];
     const maxSlots = MERC_SLOTS.filter(s => char.level >= s.level).pop()?.slots || 1;
     const [countCheck] = await conn.query(
