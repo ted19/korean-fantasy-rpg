@@ -17,6 +17,7 @@ const mercenaryRoutes = require('./routes/mercenary');
 const fortuneRoutes = require('./routes/fortune');
 const specialDungeonRoutes = require('./routes/special-dungeon');
 const gachaRoutes = require('./routes/gacha');
+const casinoRoutes = require('./routes/casino');
 const db = require('./db');
 
 const http = require('http');
@@ -115,6 +116,7 @@ app.use('/api/mercenary', mercenaryRoutes);
 app.use('/api/fortune', fortuneRoutes);
 app.use('/api/special-dungeon', specialDungeonRoutes);
 app.use('/api/gacha', gachaRoutes);
+app.use('/api/casino', casinoRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

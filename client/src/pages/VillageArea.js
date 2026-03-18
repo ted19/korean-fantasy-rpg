@@ -7,6 +7,7 @@ import Summon from './Summon';
 import BlacksmithArea from './BlacksmithArea';
 import InnArea from './InnArea';
 import FortuneArea from './FortuneArea';
+import CasinoArea from './CasinoArea';
 
 const VILLAGE_SCENES = [
   {
@@ -124,6 +125,7 @@ const VILLAGE_ACTIONS = [
   { id: 'quest', name: '길드', icon: '📜', desc: '퀘스트를 확인합니다.' },
   { id: 'summon', name: '소환술사의 집', icon: '👻', desc: '소환수를 고용하고 관리합니다.' },
   { id: 'fortune', name: '운명술사의 집', icon: '🔮', desc: '운세, 점괘, 부적으로 힘을 얻습니다.' },
+  { id: 'casino', name: '도깨비 노름방', icon: '🎲', desc: '운을 시험하여 골드를 벌어보세요!' },
 ];
 
 function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummonsChanged, onMercenariesChanged, initialView, initialViewData, onInitialViewConsumed }) {
@@ -161,6 +163,7 @@ function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummons
       quest: <Quest charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
       summon: <Summon charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} initialSummonId={viewData?.summonId} />,
       fortune: <FortuneArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
+      casino: <CasinoArea charState={charState} onCharStateUpdate={onCharStateUpdate} onLog={onLog} />,
     }[activeView];
 
     return (

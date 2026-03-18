@@ -77,7 +77,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [battleBlockMsg, setBattleBlockMsg] = useState(null);
   const [battleLoading, setBattleLoading] = useState(null); // { type: 'dungeon'|'stage'|'tower'|'boss_raid'|'elemental', name: string }
   const [showPatchNotes, setShowPatchNotes] = useState(() => {
-    const key = 'patchNotes_v10';
+    const key = 'patchNotes_v11';
     if (localStorage.getItem(key)) return false;
     return true;
   });
@@ -1194,12 +1194,12 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
 
       {/* 패치노트 팝업 */}
       {showPatchNotes && (
-        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v10', '1'); }}>
+        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v11', '1'); }}>
           <div className="patch-notes-popup" onClick={e => e.stopPropagation()}>
             <div className="patch-notes-header">
-              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v10', '1'); }}>&times;</button>
+              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v11', '1'); }}>&times;</button>
               <div className="patch-notes-badge">NEW</div>
-              <h2 className="patch-notes-title">패치 노트 v10 — 강화 & 가챠 대개편</h2>
+              <h2 className="patch-notes-title">패치 노트 v11 — 도깨비 노름방</h2>
               <div className="patch-notes-date">2026.03.19</div>
             </div>
             <div className="patch-notes-body">
@@ -1253,20 +1253,32 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
                 </ul>
               </div>
               <div className="patch-section">
+                <h3>도깨비 노름방 (신규 시설)</h3>
+                <ul>
+                  <li><span className="patch-tag new">신규</span> 마을에 <b>도깨비 노름방</b> 시설 추가</li>
+                  <li><span className="patch-tag new">신규</span> NPC: 도깨비 노름방 주인 (AI 생성 초상화)</li>
+                  <li><span className="patch-tag new">신규</span> <b>🎲 도깨비 주사위</b>: 3D 주사위 물리 시뮬레이션 (Three.js)</li>
+                  <li><span className="patch-tag new">신규</span> <b>🪙 동전 던지기</b>: 3D 금화 뒤집기 (앞면 태양 / 뒷면 달)</li>
+                  <li><span className="patch-tag new">신규</span> <b>📊 하이로우</b>: 3D 카드 뒤집기 + 연승 보상 시스템</li>
+                  <li><span className="patch-tag new">신규</span> 하이로우 연승 중 <b>"멈추고 보상 받기"</b> 기능</li>
+                  <li><span className="patch-tag new">신규</span> 베팅 금액 선택: 50 ~ 5,000G (최대 10,000G)</li>
+                  <li><span className="patch-tag new">신규</span> 서버 기반 결과 계산 (조작 방지)</li>
+                </ul>
+              </div>
+              <div className="patch-section">
                 <h3>기타 개선</h3>
                 <ul>
                   <li><span className="patch-tag improve">개선</span> 캐릭터 닉네임 <b>금지어 시스템</b>: 비속어/사칭/몬스터명 등 350+ 차단</li>
-                  <li><span className="patch-tag improve">개선</span> 닉네임 규칙: 2~12자, 한글/영문만, 특수문자/숫자 불가, 연속 문자 제한</li>
                   <li><span className="patch-tag improve">개선</span> 속성 미선택 시 <b>빨간 테두리 깜박</b> + 자동 스크롤</li>
-                  <li><span className="patch-tag improve">개선</span> 무한의 탑: 몬스터/소환수/용병 이미지를 <b>배경 제거 버전</b>으로 교체</li>
-                  <li><span className="patch-tag improve">개선</span> 모든 유닛에 <b>속성 오라</b> 적용 (neutral 포함 holy 오라)</li>
+                  <li><span className="patch-tag improve">개선</span> 모든 유닛에 <b>속성 오라</b> 적용 (neutral 포함)</li>
+                  <li><span className="patch-tag improve">개선</span> 자동전투 중 정예 몬스터 팝업 2초 후 자동 닫힘</li>
                   <li><span className="patch-tag fix">수정</span> 상점에서 강화권/소환권 판매 차단</li>
-                  <li><span className="patch-tag fix">수정</span> 스킬 반복 호출 무한루프 수정</li>
-                  <li><span className="patch-tag fix">수정</span> 세션 체크 로그 과다 출력 제거</li>
+                  <li><span className="patch-tag fix">수정</span> 프롤로그 중복 전투 버그</li>
+                  <li><span className="patch-tag fix">수정</span> WebGL 컨텍스트 누수 수정</li>
                 </ul>
               </div>
             </div>
-            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v10', '1'); }}>
+            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v11', '1'); }}>
               확인
             </button>
           </div>
