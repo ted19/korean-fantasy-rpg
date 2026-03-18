@@ -9,7 +9,7 @@ const ELEMENT_INFO = {
   water:   { name: '물', icon: '💧', color: '#4da6ff', aura: 'ice' },
   earth:   { name: '땅', icon: '🪨', color: '#8bc34a', aura: 'aura_gold' },
   wind:    { name: '바람', icon: '🌀', color: '#b388ff', aura: 'wind' },
-  neutral: { name: '중립', icon: '⚪', color: '#9ca3af', aura: '' },
+  neutral: { name: '중립', icon: '⚪', color: '#9ca3af', aura: 'holy' },
 };
 
 const ELEMENT_TABLE = {
@@ -45,13 +45,13 @@ const ACQ_ICONS = { shop: '🏪', boss: '👑', quest: '📜', gacha: '🎰' };
 const TYPE_LABELS = {
   weapon: '무기', chest: '갑옷', helmet: '투구', boots: '장화',
   ring: '반지', necklace: '목걸이', shield: '방패', armor: '방어구',
-  cosmetic: '오라', potion: '물약', talisman: '부적',
+  cosmetic: '오라', potion: '물약', talisman: '부적', enhance: '강화권',
 };
 
 const TYPE_ICONS = {
   weapon: '⚔️', chest: '🛡️', helmet: '🪖', boots: '👢',
   ring: '💍', necklace: '📿', shield: '🛡️', armor: '🛡️',
-  cosmetic: '✨', potion: '🧪', talisman: '📜',
+  cosmetic: '✨', potion: '🧪', talisman: '📜', enhance: '⭐',
 };
 
 const COSMETIC_AURA_MAP = {
@@ -579,7 +579,7 @@ function MonsterTab() {
                   <div className="bd-skills">
                     {monsterSkills.map(skill => (
                       <div className="bd-skill" key={skill.id} style={{ '--skill-color': SKILL_TYPE_COLORS[skill.type] || '#888' }}>
-                        <div className="bd-skill-icon">{skill.icon}</div>
+                        <div className="bd-skill-icon"><ImgWithFallback src={`/monster_skills/${skill.id}_icon.png`} fallback={skill.icon || '⚔️'} className="bd-skill-icon-img" /></div>
                         <div className="bd-skill-info">
                           <div className="bd-skill-header">
                             <span className="bd-skill-name">{skill.name}</span>
@@ -669,7 +669,7 @@ function EquipmentTab() {
   useEffect(() => { loadItems(); }, [loadItems]);
 
   const grades = ['일반', '고급', '희귀', '영웅', '전설', '신화'];
-  const types = ['weapon', 'chest', 'helmet', 'boots', 'shield', 'ring', 'necklace', 'cosmetic', 'potion', 'talisman'];
+  const types = ['weapon', 'chest', 'helmet', 'boots', 'shield', 'ring', 'necklace', 'cosmetic', 'potion', 'talisman', 'enhance'];
 
   return (
     <>
@@ -1967,6 +1967,151 @@ function SummonTab() {
                     <div className="bd-extra"><span className="bd-extra-icon">💰</span><span className="bd-extra-label">가격</span><span className="bd-extra-value bd-ev-gold">{(s.price || 0).toLocaleString()}G</span></div>
                     <div className="bd-extra"><span className="bd-extra-icon">📈</span><span className="bd-extra-label">성장 배율</span><span className="bd-extra-value" style={{ color: gc }}>×{s.growth_mult || 1.0}</span></div>
                     {s.acquisition_ref && <div className="bd-extra"><span className="bd-extra-icon">📜</span><span className="bd-extra-label">조건</span><span className="bd-extra-value" style={{ color: '#ccc' }}>{s.acquisition_ref}</span></div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+/* ================================
+   ENHANCE TICKET TAB (강화권 도감)
+   ================================ */
+const ENHANCE_GRADE_FILTERS = ['전체', '일반', '고급', '희귀', '영웅', '전설', '신화', '초월'];
+const ENHANCE_TYPE_FILTERS = ['전체', '용병', '소환수'];
+
+function EnhanceTicketTab() {
+  const [tickets, setTickets] = useState([]);
+  const [inventory, setInventory] = useState({});
+  const [gradeFilter, setGradeFilter] = useState('전체');
+  const [typeFilter, setTypeFilter] = useState('전체');
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    // 강화권 아이템 목록
+    api.get('/monsters/equipment-encyclopedia', { params: { search: '강화권' } })
+      .then(r => setTickets((r.data.items || []).filter(i => i.name?.includes('강화권'))))
+      .catch(() => {});
+    // 보유량
+    api.get('/shop/inventory')
+      .then(r => {
+        const inv = {};
+        (r.data.inventory || []).filter(i => i.name?.includes('강화권')).forEach(i => { inv[i.item_id] = i.quantity; });
+        setInventory(inv);
+      })
+      .catch(() => {});
+  }, []);
+
+  const getGrade = (name) => {
+    for (const g of ['초월','신화','전설','영웅','희귀','고급','일반']) {
+      if (name.includes(g)) return g;
+    }
+    return '일반';
+  };
+
+  const getUnitType = (name) => name.includes('용병') ? '용병' : '소환수';
+
+  const filtered = tickets.filter(t => {
+    if (gradeFilter !== '전체' && getGrade(t.name) !== gradeFilter) return false;
+    if (typeFilter !== '전체' && getUnitType(t.name) !== typeFilter) return false;
+    return true;
+  });
+
+  return (
+    <div className="bestiary-tab-content">
+      <div className="bd-discovery-bar">
+        <span>강화권: <b style={{ color: '#fbbf24' }}>{tickets.length}</b>종</span>
+      </div>
+
+      <div className="bd-filter-row">
+        {ENHANCE_GRADE_FILTERS.map(g => (
+          <button key={g} className={`bd-filter-pill${gradeFilter === g ? ' active' : ''}`}
+            style={g !== '전체' ? { borderColor: GRADE_COLORS[g], color: gradeFilter === g ? '#fff' : GRADE_COLORS[g], background: gradeFilter === g ? GRADE_COLORS[g] : 'transparent' } : undefined}
+            onClick={() => setGradeFilter(g)}>
+            {g}
+          </button>
+        ))}
+      </div>
+      <div className="bd-filter-row">
+        {ENHANCE_TYPE_FILTERS.map(t => (
+          <button key={t} className={`bd-filter-pill${typeFilter === t ? ' active' : ''}`} onClick={() => setTypeFilter(t)}>
+            {t === '용병' ? '⚔️ ' : t === '소환수' ? '🔮 ' : ''}{t}
+          </button>
+        ))}
+      </div>
+
+      <div className="bd-grid">
+        {filtered.map(t => {
+          const grade = getGrade(t.name);
+          const gc = GRADE_COLORS[grade] || '#9ca3af';
+          const utype = getUnitType(t.name);
+          const owned = inventory[t.id] || 0;
+          return (
+            <div key={t.id} className="bd-card" onClick={() => setSelected(t)} style={{ borderColor: gc + '60' }}>
+              <div className="bd-card-img-wrap" style={{ background: `radial-gradient(circle, ${gc}20, #0f1320)` }}>
+                <ImgWithFallback src={`/equipment/${t.id}_icon.png`} fallback="⭐" className="bd-card-img" />
+                {owned > 0 && <span className="bd-card-owned-badge">{owned}</span>}
+              </div>
+              <div className="bd-card-info">
+                <div className="bd-card-name" style={{ color: gc, fontSize: 10 }}>{t.name}</div>
+                <div className="bd-card-sub">
+                  <span className="inn-grade-badge" style={{ background: gc, fontSize: 7, padding: '0 3px' }}>{grade}</span>
+                  <span style={{ fontSize: 9, color: '#888' }}>{utype === '용병' ? '⚔️' : '🔮'} {utype}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 상세 모달 */}
+      {selected && (() => {
+        const grade = getGrade(selected.name);
+        const gc = GRADE_COLORS[grade] || '#9ca3af';
+        const utype = getUnitType(selected.name);
+        const owned = inventory[selected.id] || 0;
+        return (
+          <div className="bd-overlay" onClick={() => setSelected(null)}>
+            <div className="bd-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+              <button className="bd-close" onClick={() => setSelected(null)}>&times;</button>
+              <div className="bd-header" style={{ background: `linear-gradient(135deg, ${gc}30, #0f132080)` }}>
+                <div className="bd-portrait" style={{ borderColor: gc, boxShadow: `0 0 20px ${gc}50`, width: 120, height: 120 }}>
+                  <ImgWithFallback src={`/equipment/${selected.id}_icon.png`} fallback="⭐" className="bd-portrait-img" />
+                </div>
+                <div className="bd-header-info">
+                  <h2 style={{ color: gc, fontSize: 18 }}>
+                    <span className="inn-grade-badge" style={{ background: gc, marginRight: 6 }}>{grade}</span>
+                    {selected.name}
+                  </h2>
+                  <div className="bd-tags">
+                    <span className="bd-tag" style={{ borderColor: gc, color: gc }}>{utype === '용병' ? '⚔️ 용병' : '🔮 소환수'} 강화권</span>
+                    <span className="bd-tag">{grade} 등급</span>
+                    {owned > 0
+                      ? <span className="bd-tag" style={{ borderColor: '#22c55e', color: '#22c55e' }}>{owned}개 보유</span>
+                      : <span className="bd-tag" style={{ borderColor: '#ef4444', color: '#ef4444' }}>미보유</span>}
+                  </div>
+                  <p className="bd-desc">{selected.description}</p>
+                </div>
+              </div>
+              <div className="bd-body">
+                <div className="bd-section">
+                  <h3 className="bd-section-title">사용 방법</h3>
+                  <div style={{ padding: '8px 12px', fontSize: 13, color: '#ccc', lineHeight: 1.8 }}>
+                    <div>1. {utype === '용병' ? '여관 → 내 용병' : '소환술사의 집 → 내 소환수'} 선택</div>
+                    <div>2. 장비 관리 → 소모품 탭</div>
+                    <div>3. <b style={{ color: gc }}>{selected.name}</b> 사용 버튼 클릭</div>
+                    <div>4. <b style={{ color: gc }}>{grade}</b> 등급 {utype}의 성급을 1단계 강화</div>
+                  </div>
+                </div>
+                <div className="bd-section">
+                  <h3 className="bd-section-title">획득 방법</h3>
+                  <div style={{ padding: '8px 12px', fontSize: 13, color: '#ccc' }}>
+                    <div>• {utype} 소환 시 이미 보유한 <b style={{ color: gc }}>{grade}</b> 등급 {utype}가 중복되면 자동 지급</div>
+                    <div>• 가격: <b style={{ color: '#fbbf24' }}>{(selected.price || 0).toLocaleString()}G</b> (판매: {(selected.sell_price || 0).toLocaleString()}G)</div>
                   </div>
                 </div>
               </div>

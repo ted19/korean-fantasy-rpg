@@ -1750,7 +1750,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                         {contributions.filter(c => c.pct > 0).sort((a, b) => b.pct - a.pct).map(c => (
                           <div key={c.id} className={`srpg-contrib-row ${c.id === 'player' ? 'player' : ''}`}>
                             <div className="srpg-contrib-unit">
-                              <img src={c.imageUrl} alt="" className="srpg-contrib-icon" onError={e => { e.target.style.display='none'; }} />
+                              <img src={c.imageUrl?.replace('_full.png', '_icon.png')} alt="" className="srpg-contrib-icon" onError={e => { e.target.style.display='none'; }} />
                               <span className="srpg-contrib-name">{c.name}</span>
                             </div>
                             <div className="srpg-contrib-stats">
@@ -1824,7 +1824,7 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
                           const sPct = s.expNeeded > 0 ? Math.min(100, (s.exp / s.expNeeded) * 100) : 0;
                           return (
                             <div key={s.id} className="srpg-result-summon-row">
-                              <img src={`/summons/${s.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
+                              <img src={`/summons_nobg/${s.templateId}_icon.png`} alt="" className="srpg-result-summon-icon-img" onError={e => { e.target.style.display='none'; }} />
                               <div className="srpg-result-summon-info">
                                 <div className="srpg-result-summon-name">
                                   {s.name} <span className="srpg-result-summon-lv">Lv.{s.level}</span>

@@ -109,7 +109,11 @@ router.get('/equipment-encyclopedia', auth, async (req, res) => {
                FROM items WHERE 1=1`;
     const params = [];
 
-    if (type) {
+    if (type === 'enhance') {
+      sql += " AND name LIKE '%강화권%'";
+    } else if (type === 'potion') {
+      sql += " AND type = 'potion' AND name NOT LIKE '%강화권%'";
+    } else if (type) {
       sql += ' AND type = ?';
       params.push(type);
     }
