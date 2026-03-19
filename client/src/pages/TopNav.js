@@ -128,7 +128,7 @@ function StaminaDisplay({ stamina, maxStamina, lastStaminaTime }) {
   );
 }
 
-function TopNav({ character, charState, currentLocation, onLocationChange, onLogout, onGoToCharacterSelect, prologueCleared, onShowPatchNotes }) {
+function TopNav({ character, charState, currentLocation, onLocationChange, onLogout, onGoToCharacterSelect, prologueCleared, onShowPatchNotes, latestPatchVersion }) {
   const [imgError, setImgError] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showCharPopup, setShowCharPopup] = useState(false);
@@ -426,7 +426,7 @@ function TopNav({ character, charState, currentLocation, onLocationChange, onLog
             <button className="top-nav-v2-btn patch-notes" onClick={() => { onShowPatchNotes(); setMenuOpen(false); }}>
               <div className="top-nav-v2-btn-icon-wrap">
                 <span className="top-nav-v2-btn-icon" style={{ fontSize: '18px' }}>📋</span>
-                {!localStorage.getItem('patchNotes_v11') && <div className="top-nav-patch-dot" />}
+                {latestPatchVersion && !localStorage.getItem(`patchNotes_${latestPatchVersion}`) && <div className="top-nav-patch-dot" />}
               </div>
               <span className="top-nav-v2-btn-name">패치</span>
             </button>

@@ -905,12 +905,17 @@ router.post('/srpg-result', auth, async (req, res) => {
                mt.growth_phys_attack, mt.growth_phys_defense,
                mt.growth_mag_attack, mt.growth_mag_defense, merc.id]
             );
-            // 레벨업 시 새 스킬 자동 학습
+            // 레벨업 시 새 스킬 자동 학습 (등급 제한 체크 포함)
+            const { GRADE_ORDER } = require('../db');
+            const mercGradeForSkill = mt.grade || '일반';
+            const gradeIdx = GRADE_ORDER.indexOf(mercGradeForSkill);
+            const eligibleGrades = GRADE_ORDER.slice(0, gradeIdx + 1);
             const [newSkills] = await conn.query(
               `SELECT id FROM mercenary_skills
                WHERE required_level <= ? AND (is_common = 1 OR class_type = ?)
+               AND (min_grade IS NULL OR min_grade IN (?))
                AND id NOT IN (SELECT skill_id FROM mercenary_learned_skills WHERE mercenary_id = ?)`,
-              [newMercLevel, mt.class_type, merc.id]
+              [newMercLevel, mt.class_type, eligibleGrades, merc.id]
             );
             for (const sk of newSkills) {
               await conn.query('INSERT IGNORE INTO mercenary_learned_skills (mercenary_id, skill_id) VALUES (?, ?)', [merc.id, sk.id]);

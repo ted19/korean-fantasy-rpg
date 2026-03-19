@@ -1317,6 +1317,26 @@ body {
   height: 60%;
   background: linear-gradient(to top, var(--bg-card) 10%, transparent 100%);
 }
+.village-building-img-wrap.quest-alert-glow {
+  animation: quest-window-glow 1.5s ease-in-out infinite;
+}
+@keyframes quest-window-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,200,50,0.3); }
+  50% { box-shadow: 0 0 20px rgba(255,200,50,0.8), 0 0 40px rgba(255,165,0,0.4); }
+}
+.village-quest-badge {
+  position: absolute; top: 8px; right: 8px;
+  background: #ef4444; color: #fff;
+  font-size: 11px; font-weight: 700;
+  min-width: 20px; height: 20px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 5px; box-shadow: 0 0 6px rgba(239,68,68,0.6); z-index: 2;
+  animation: quest-badge-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes quest-badge-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.15); }
+}
 .village-building-info {
   padding: 8px 12px 14px;
   margin-top: -2px;
@@ -6140,6 +6160,43 @@ body {
   background: linear-gradient(135deg, #ff6b6b, #e94560);
   transform: translateY(-1px);
   box-shadow: 0 4px 15px rgba(233,69,96,0.4);
+}
+.patch-notes-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 28px 4px;
+}
+.patch-notes-page-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: #ccc;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.patch-notes-page-btn:hover:not(:disabled) {
+  color: #ffa502;
+  background: rgba(255,165,2,0.1);
+  border-color: rgba(255,165,2,0.3);
+}
+.patch-notes-page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.patch-notes-page-indicator {
+  font-size: 13px;
+  color: #888;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: center;
 }
 
 /* === 전투 로딩 팝업 === */

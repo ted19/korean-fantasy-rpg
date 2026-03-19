@@ -246,7 +246,7 @@ function CosmeticSection({ character, mercenaries, onLog }) {
   );
 }
 
-function ContentGuide({ onNavigateVillage }) {
+function ContentGuide({ onNavigateVillage, onNavigateLocation }) {
   const [guide, setGuide] = useState(null);
   const [collapsed, setCollapsed] = useState(true);
   const [msgIdx, setMsgIdx] = useState(0);
@@ -284,12 +284,12 @@ function ContentGuide({ onNavigateVillage }) {
 
   // mark done items
   const allCards = [
-    { key: 'reward', icon: '🎁', label: '보상 수령', done: guide.pendingRewards === 0 },
-    { key: 'daily', icon: '📋', label: '일일 퀘스트', done: guide.dailyQuestsTotal > 0 ? guide.dailyQuestsCompleted >= guide.dailyQuestsTotal : true },
-    { key: 'fortune', icon: '🔮', label: '운세', done: guide.fortuneDone },
-    { key: 'tarot', icon: '🃏', label: '타로', done: guide.tarotDone },
-    { key: 'stage', icon: '⚔️', label: '스테이지', done: guide.stageBattlesDone > 0 },
-    { key: 'dungeon', icon: '🏰', label: '던전', done: guide.dungeonBattlesDone > 0 },
+    { key: 'reward', icon: '🎁', label: '보상 수령', done: guide.pendingRewards === 0, nav: () => onNavigateVillage && onNavigateVillage('quest') },
+    { key: 'daily', icon: '📋', label: '일일 퀘스트', done: guide.dailyQuestsTotal > 0 ? guide.dailyQuestsCompleted >= guide.dailyQuestsTotal : true, nav: () => onNavigateVillage && onNavigateVillage('quest') },
+    { key: 'fortune', icon: '🔮', label: '운세', done: guide.fortuneDone, nav: () => onNavigateVillage && onNavigateVillage('fortune') },
+    { key: 'tarot', icon: '🃏', label: '타로', done: guide.tarotDone, nav: () => onNavigateVillage && onNavigateVillage('fortune') },
+    { key: 'stage', icon: '⚔️', label: '스테이지', done: guide.stageBattlesDone > 0, nav: () => onNavigateLocation && onNavigateLocation('stage') },
+    { key: 'dungeon', icon: '🏰', label: '던전', done: guide.dungeonBattlesDone > 0, nav: () => onNavigateLocation && onNavigateLocation('dungeon') },
   ];
 
   return (
@@ -308,7 +308,9 @@ function ContentGuide({ onNavigateVillage }) {
             const pending = items.find(i => i.key === c.key);
             const status = c.done ? 'done' : (pending?.status || 'pending');
             return (
-              <div key={c.key} className={`content-guide-card ${status}`}>
+              <div key={c.key} className={`content-guide-card ${status}`}
+                onClick={() => !c.done && c.nav && c.nav()}
+                style={{ cursor: c.done ? 'default' : 'pointer' }}>
                 <div className="content-guide-card-icon">{c.icon}</div>
                 <div className="content-guide-card-label">{c.label}</div>
                 <div className="content-guide-card-status">
@@ -323,7 +325,7 @@ function ContentGuide({ onNavigateVillage }) {
   );
 }
 
-function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkillsUpdate, onSummonsChanged, onMercenariesChanged, myMercenaries, onNavigateVillage, initialTab, onInitialTabConsumed, prologueCleared }) {
+function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkillsUpdate, onSummonsChanged, onMercenariesChanged, myMercenaries, onNavigateVillage, onNavigateLocation, initialTab, onInitialTabConsumed, prologueCleared }) {
   const [tab, setTab] = useState(initialTab || 'character');
 
   useEffect(() => {
@@ -713,7 +715,7 @@ function CharacterHome({ character, charState, onCharStateUpdate, onLog, onSkill
             <div className="home-banner-v2-sub">모험을 떠날 준비가 되었습니다</div>
           </div>
         </div>
-        <ContentGuide onNavigateVillage={onNavigateVillage} />
+        <ContentGuide onNavigateVillage={onNavigateVillage} onNavigateLocation={onNavigateLocation} />
         <Row>
           {/* 왼쪽: 캐릭터 프로필 */}
           <Col lg={5} className="mb-3">

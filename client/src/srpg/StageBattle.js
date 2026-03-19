@@ -61,10 +61,11 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
   const [contributions, setContributions] = useState([]); // {id, name, icon, imageUrl, damage, kills, pct, exp}
   const [eliteAlert, setEliteAlert] = useState(null); // { name, icon, monsterId, tier }
 
-  // 자동전투 중 정예 팝업 2초 후 자동 닫기
+  // 정예 팝업 자동 닫기: 자동전투 1.5초, 수동 2초
   useEffect(() => {
-    if (!eliteAlert || !autoAll) return;
-    const timer = setTimeout(() => setEliteAlert(null), 2000);
+    if (!eliteAlert) return;
+    const delay = autoAll ? 1500 : 2000;
+    const timer = setTimeout(() => setEliteAlert(null), delay);
     return () => clearTimeout(timer);
   }, [eliteAlert, autoAll]);
   const battleSummonIdsRef = useRef([]);
@@ -2211,6 +2212,14 @@ function UnitCard({ unit, isCurrent, isTarget, onSelect, animating, popups, drop
           <div className="cb-card-bar mp">
             <div className="cb-card-bar-fill" style={{ width: `${mpPct}%` }} />
             <span className="cb-card-bar-text">{unit.mp}/{unit.maxMp}</span>
+          </div>
+        )}
+
+        {/* 피로도 바 (용병만) */}
+        {unit.fatigue !== null && unit.fatigue !== undefined && unit.id?.startsWith('merc_') && (
+          <div className="cb-card-bar fatigue">
+            <div className="cb-card-bar-fill" style={{ width: `${Math.max(0, (unit.fatigue / unit.maxFatigue) * 100)}%` }} />
+            <span className="cb-card-bar-text">⚡{unit.fatigue}/{unit.maxFatigue}</span>
           </div>
         )}
 

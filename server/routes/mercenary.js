@@ -199,12 +199,17 @@ router.post('/hire', auth, async (req, res) => {
     const [inserted] = await conn.query('SELECT LAST_INSERT_ID() as mercId');
     const newMercId = inserted[0].mercId;
 
-    // 기본 스킬 자동 학습 (레벨 1 이하 스킬만)
+    // 기본 스킬 자동 학습 (레벨 1 이하 스킬만, 등급 제한 체크)
+    const { GRADE_ORDER } = require('../db');
+    const hireGrade = tpl.grade || '일반';
+    const hireGradeIdx = GRADE_ORDER.indexOf(hireGrade);
+    const hireEligibleGrades = GRADE_ORDER.slice(0, hireGradeIdx + 1);
     const [defaultSkills] = await conn.query(
       `SELECT id FROM mercenary_skills
-       WHERE (is_common = 1 AND required_level <= 1)
-          OR (class_type = ? AND required_level <= 1)`,
-      [tpl.class_type]
+       WHERE ((is_common = 1 AND required_level <= 1)
+          OR (class_type = ? AND required_level <= 1))
+          AND (min_grade IS NULL OR min_grade IN (?))`,
+      [tpl.class_type, hireEligibleGrades]
     );
     for (const sk of defaultSkills) {
       await conn.query(
@@ -571,7 +576,7 @@ router.get('/:mercId/skills', auth, async (req, res) => {
     if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
 
     const [mercs] = await pool.query(
-      `SELECT cm.*, mt.class_type FROM character_mercenaries cm
+      `SELECT cm.*, mt.class_type, mt.grade FROM character_mercenaries cm
        JOIN mercenary_templates mt ON cm.template_id = mt.id
        WHERE cm.id = ? AND cm.character_id = ?`,
       [req.params.mercId, char.id]
@@ -579,12 +584,18 @@ router.get('/:mercId/skills', auth, async (req, res) => {
     if (mercs.length === 0) return res.status(404).json({ message: '용병을 찾을 수 없습니다.' });
     const merc = mercs[0];
 
-    // 학습 가능한 스킬 (공통 + class_type 매칭)
+    const { GRADE_ORDER } = require('../db');
+    const mercGrade = merc.grade || '일반';
+    const gradeIdx = GRADE_ORDER.indexOf(mercGrade);
+    const eligibleGrades = GRADE_ORDER.slice(0, gradeIdx + 1);
+
+    // 학습 가능한 스킬 (공통 + class_type 매칭 + 등급 필터)
     const [available] = await pool.query(
       `SELECT * FROM mercenary_skills
-       WHERE (is_common = 1) OR (class_type = ?)
+       WHERE ((is_common = 1) OR (class_type = ?))
+       AND (min_grade IS NULL OR min_grade IN (?))
        ORDER BY required_level, id`,
-      [merc.class_type]
+      [merc.class_type, eligibleGrades]
     );
 
     // 이미 학습한 스킬 ID + 우선도
@@ -595,15 +606,19 @@ router.get('/:mercId/skills', auth, async (req, res) => {
     const learnedMap = {};
     for (const l of learned) learnedMap[l.skill_id] = l.auto_priority ?? 100;
 
-    const skills = available.map(s => ({
-      ...s,
-      learned: s.id in learnedMap,
-      auto_priority: learnedMap[s.id] ?? 100,
-      canLearn: !(s.id in learnedMap) && merc.level >= s.required_level,
-      gold_cost: Math.floor(s.required_level * 50 * (1 + (merc.level - 1) * 0.1)),
-    }));
+    const skills = available.map(s => {
+      const gradeEligible = !s.min_grade || eligibleGrades.includes(s.min_grade);
+      return {
+        ...s,
+        learned: s.id in learnedMap,
+        auto_priority: learnedMap[s.id] ?? 100,
+        canLearn: !(s.id in learnedMap) && merc.level >= s.required_level && gradeEligible,
+        gradeRestricted: !gradeEligible,
+        gold_cost: Math.floor(s.required_level * 50 * (1 + (merc.level - 1) * 0.1)),
+      };
+    });
 
-    res.json({ skills, mercLevel: merc.level });
+    res.json({ skills, mercLevel: merc.level, mercGrade });
   } catch (err) {
     console.error('Mercenary skills error:', err);
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
@@ -618,7 +633,7 @@ router.post('/:mercId/learn-skill', auth, async (req, res) => {
     if (!char) return res.status(404).json({ message: '캐릭터를 찾을 수 없습니다.' });
 
     const [mercs] = await pool.query(
-      `SELECT cm.*, mt.class_type FROM character_mercenaries cm
+      `SELECT cm.*, mt.class_type, mt.grade FROM character_mercenaries cm
        JOIN mercenary_templates mt ON cm.template_id = mt.id
        WHERE cm.id = ? AND cm.character_id = ?`,
       [req.params.mercId, char.id]
@@ -637,6 +652,16 @@ router.post('/:mercId/learn-skill', auth, async (req, res) => {
     }
     if (merc.level < skill.required_level) {
       return res.status(400).json({ message: `레벨 ${skill.required_level} 이상이어야 배울 수 있습니다.` });
+    }
+    // 등급 제한 체크
+    if (skill.min_grade) {
+      const { GRADE_ORDER } = require('../db');
+      const mercGrade = merc.grade || '일반';
+      const gradeIdx = GRADE_ORDER.indexOf(mercGrade);
+      const eligibleGrades = GRADE_ORDER.slice(0, gradeIdx + 1);
+      if (!eligibleGrades.includes(skill.min_grade)) {
+        return res.status(400).json({ message: `이 스킬은 ${skill.min_grade} 등급 이상의 용병만 배울 수 있습니다. (현재: ${mercGrade})` });
+      }
     }
 
     // 중복 체크

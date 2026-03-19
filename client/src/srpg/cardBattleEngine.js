@@ -164,6 +164,8 @@ export function createCardMercenaryUnit(merc) {
     portraitEffect: ELEMENT_AURA[merc.element] || '',
     grade: merc.grade || '일반',
     starLevel: merc.star_level || 0,
+    fatigue: merc.fatigue ?? null,
+    maxFatigue: merc.max_fatigue || merc.maxFatigue || 8,
   };
 }
 

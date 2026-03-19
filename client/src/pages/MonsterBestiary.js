@@ -909,6 +909,7 @@ function SkillTab() {
   const [classFilter, setClassFilter] = useState('all');
   const [branchFilter, setBranchFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [gradeFilter, setGradeFilter] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [selectedSkill, setSelectedSkill] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -927,6 +928,7 @@ function SkillTab() {
       } else if (source === 'mercenary') {
         const params = {};
         if (classFilter !== 'all') params.class_type = classFilter;
+        if (gradeFilter !== 'all') params.grade = gradeFilter;
         if (searchText) params.search = searchText;
         const res = await api.get('/skill/merc-encyclopedia', { params });
         setSkills(res.data.skills);
@@ -939,7 +941,7 @@ function SkillTab() {
       }
     } catch { setSkills([]); }
     setLoading(false);
-  }, [source, classFilter, branchFilter, typeFilter, searchText]);
+  }, [source, classFilter, branchFilter, typeFilter, gradeFilter, searchText]);
 
   useEffect(() => { loadSkills(); }, [loadSkills]);
 
@@ -976,6 +978,7 @@ function SkillTab() {
     setClassFilter('all');
     setBranchFilter('all');
     setTypeFilter('all');
+    setGradeFilter('all');
     setSearchText('');
     setSelectedSkill(null);
   };
@@ -1107,6 +1110,25 @@ function SkillTab() {
                   {v}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Grade filter for mercenary */}
+        {source === 'mercenary' && (
+          <div className="bestiary-filter-row">
+            <div className="bestiary-cat-pills">
+              <button className={`bestiary-pill ${gradeFilter === 'all' ? 'active' : ''}`} onClick={() => setGradeFilter('all')}>전체 등급</button>
+              {['일반','고급','희귀','영웅','전설','신화','초월'].map(g => {
+                const gc = {'일반':'#9ca3af','고급':'#4ade80','희귀':'#60a5fa','영웅':'#c084fc','전설':'#fbbf24','신화':'#ff6b6b','초월':'#ff44cc'}[g];
+                return (
+                  <button key={g} className={`bestiary-pill ${gradeFilter === g ? 'active' : ''}`}
+                    onClick={() => setGradeFilter(gradeFilter === g ? 'all' : g)}
+                    style={gradeFilter === g ? { borderColor: gc, color: gc } : {}}>
+                    {g}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1516,7 +1538,7 @@ function MercenaryTab() {
 
   useEffect(() => {
     if (!selected) { setUnitSkills([]); return; }
-    api.get('/skill/merc-encyclopedia', { params: { class_type: selected.class_type } })
+    api.get('/skill/merc-encyclopedia', { params: { class_type: selected.class_type, grade: selected.grade || '일반' } })
       .then(r => setUnitSkills(r.data.skills || []))
       .catch(() => setUnitSkills([]));
   }, [selected]);

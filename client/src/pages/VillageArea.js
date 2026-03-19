@@ -134,6 +134,13 @@ function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummons
   const [showCutscene, setShowCutscene] = useState(() => !localStorage.getItem(seenKey));
   const [activeView, setActiveView] = useState(initialView || null);
   const [viewData, setViewData] = useState(initialViewData || null);
+  const [questAlert, setQuestAlert] = useState(0); // 보상 대기 + 수락 가능 퀘스트 수
+
+  React.useEffect(() => {
+    api.get('/characters/daily-guide').then(r => {
+      setQuestAlert(r.data.pendingRewards || 0);
+    }).catch(() => {});
+  }, [activeView]); // 시설에서 돌아올 때마다 갱신
 
   React.useEffect(() => {
     if (initialView) {
@@ -193,7 +200,7 @@ function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummons
               className="village-building"
               onClick={() => handleAction(action.id)}
             >
-              <div className="village-building-img-wrap">
+              <div className={`village-building-img-wrap ${action.id === 'quest' && questAlert > 0 ? 'quest-alert-glow' : ''}`}>
                 <img
                   src={`/village/${action.id}_card.png`}
                   alt={action.name}
@@ -201,6 +208,9 @@ function VillageArea({ character, charState, onCharStateUpdate, onLog, onSummons
                   onError={(e) => { e.target.style.display='none'; }}
                 />
                 <div className="village-building-glow" />
+                {action.id === 'quest' && questAlert > 0 && (
+                  <div className="village-quest-badge">{questAlert}</div>
+                )}
               </div>
               <div className="village-building-info">
                 <div className="village-building-name">{action.name}</div>

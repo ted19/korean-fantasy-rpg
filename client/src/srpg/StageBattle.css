@@ -806,6 +806,13 @@
   border-radius: 3px;
   transition: width 0.4s ease;
 }
+.cb-card-bar.fatigue { height: 6px; }
+.cb-card-bar.fatigue .cb-card-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
 
 .cb-card-bar-text {
   position: absolute;

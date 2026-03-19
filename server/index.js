@@ -18,6 +18,7 @@ const fortuneRoutes = require('./routes/fortune');
 const specialDungeonRoutes = require('./routes/special-dungeon');
 const gachaRoutes = require('./routes/gacha');
 const casinoRoutes = require('./routes/casino');
+const patchNotesRoutes = require('./routes/patch-notes');
 const db = require('./db');
 
 const http = require('http');
@@ -117,6 +118,7 @@ app.use('/api/fortune', fortuneRoutes);
 app.use('/api/special-dungeon', specialDungeonRoutes);
 app.use('/api/gacha', gachaRoutes);
 app.use('/api/casino', casinoRoutes);
+app.use('/api/patch-notes', patchNotesRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

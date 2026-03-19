@@ -1291,6 +1291,12 @@ export default function CrawlerBattle({
                       <span className="cwb-bar-text">{ally.mp}/{ally.maxMp}</span>
                     </div>
                   )}
+                  {ally.fatigue !== null && ally.fatigue !== undefined && ally.id?.startsWith('merc_') && (
+                    <div className="cwb-bar fatigue">
+                      <div className="cwb-bar-fill" style={{ width: `${Math.max(0, (ally.fatigue / (ally.maxFatigue || 8)) * 100)}%`, background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
+                      <span className="cwb-bar-text">⚡{ally.fatigue}/{ally.maxFatigue || 8}</span>
+                    </div>
+                  )}
                   <BuffIcons unit={ally} />
                 </div>
               </div>

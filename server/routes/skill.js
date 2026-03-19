@@ -38,24 +38,32 @@ router.get('/encyclopedia', auth, async (req, res) => {
 // GET /skill/merc-encyclopedia - 용병 스킬 도감
 router.get('/merc-encyclopedia', auth, async (req, res) => {
   try {
-    const { class_type, search } = req.query;
+    const { class_type, grade, search } = req.query;
     let sql = 'SELECT * FROM mercenary_skills WHERE 1=1';
     const params = [];
     if (class_type && class_type !== 'all') {
       if (class_type === '공용') {
         sql += ' AND is_common = 1';
       } else {
-        sql += ' AND class_type = ?';
+        sql += ' AND (class_type = ? OR is_common = 1 OR class_type IS NULL)';
         params.push(class_type);
       }
+    }
+    if (grade && grade !== 'all') {
+      const GRADE_ORDER = ['일반','고급','희귀','영웅','전설','신화','초월'];
+      const idx = GRADE_ORDER.indexOf(grade);
+      const eligible = GRADE_ORDER.slice(0, idx + 1);
+      sql += ' AND (min_grade IS NULL OR min_grade IN (?))';
+      params.push(eligible);
     }
     if (search) { sql += ' AND name LIKE ?'; params.push(`%${search}%`); }
     sql += ' ORDER BY COALESCE(class_type, "공용"), required_level, id';
     const [skills] = await pool.query(sql, params);
-    // 공용 스킬에 class_type 표시
+    // 공용 스킬에 class_type 표시 + 등급 표시
     for (const s of skills) {
       if (!s.class_type || s.is_common) s.class_type_display = '공용';
       else s.class_type_display = s.class_type;
+      s.grade_display = s.min_grade || '전체';
     }
     res.json({ skills });
   } catch (err) {

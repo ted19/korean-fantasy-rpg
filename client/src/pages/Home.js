@@ -76,11 +76,10 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
   const [battleStageCleared, setBattleStageCleared] = useState(false);
   const [battleBlockMsg, setBattleBlockMsg] = useState(null);
   const [battleLoading, setBattleLoading] = useState(null); // { type: 'dungeon'|'stage'|'tower'|'boss_raid'|'elemental', name: string }
-  const [showPatchNotes, setShowPatchNotes] = useState(() => {
-    const key = 'patchNotes_v11';
-    if (localStorage.getItem(key)) return false;
-    return true;
-  });
+  const [showPatchNotes, setShowPatchNotes] = useState(false);
+  const [patchNotesData, setPatchNotesData] = useState(null); // { notes, total, page, totalPages }
+  const [patchNotesPage, setPatchNotesPage] = useState(1);
+  const [patchNotesLatestVersion, setPatchNotesLatestVersion] = useState(null);
   const [dungeonClearPopup, setDungeonClearPopup] = useState(null); // { dungeonKey, stageName, stepCount, monstersDefeated, treasuresFound, goldEarned }
   const [specialBattleCtx, setSpecialBattleCtx] = useState(null);
   const [returnSpecialType, setReturnSpecialType] = useState(null);
@@ -125,6 +124,50 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
       const res = await api.get('/mercenary/my');
       setMyMercenaries(res.data.mercenaries);
     } catch {}
+  };
+
+  // 패치노트: 최신 버전 체크 → 자동 표시
+  useEffect(() => {
+    const checkPatchNotes = async () => {
+      try {
+        const res = await api.get('/patch-notes/latest');
+        if (res.data.note) {
+          const latestVer = res.data.note.version;
+          setPatchNotesLatestVersion(latestVer);
+          const seenKey = `patchNotes_${latestVer}`;
+          if (!localStorage.getItem(seenKey)) {
+            // 최신 패치노트를 안 본 경우 → 1페이지 로드 후 표시
+            const listRes = await api.get('/patch-notes?page=1&limit=1');
+            setPatchNotesData(listRes.data);
+            setPatchNotesPage(1);
+            setShowPatchNotes(true);
+          }
+        }
+      } catch {}
+    };
+    checkPatchNotes();
+  }, []); // eslint-disable-line
+
+  // 패치노트 페이지 변경 시 데이터 로드
+  const loadPatchNotesPage = async (page) => {
+    try {
+      const res = await api.get(`/patch-notes?page=${page}&limit=1`);
+      setPatchNotesData(res.data);
+      setPatchNotesPage(page);
+    } catch {}
+  };
+
+  // 패치노트 열기 (TopNav 버튼용)
+  const openPatchNotes = async () => {
+    await loadPatchNotesPage(1);
+    setShowPatchNotes(true);
+  };
+
+  const closePatchNotes = () => {
+    setShowPatchNotes(false);
+    if (patchNotesLatestVersion) {
+      localStorage.setItem(`patchNotes_${patchNotesLatestVersion}`, '1');
+    }
   };
 
   useEffect(() => {
@@ -939,6 +982,7 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
             onMercenariesChanged={loadMyMercenaries}
             myMercenaries={myMercenaries}
             onNavigateVillage={navigateToVillage}
+            onNavigateLocation={(loc) => setCurrentLocation(loc)}
             initialTab={homeInitialTab}
             onInitialTabConsumed={() => setHomeInitialTab(null)}
             prologueCleared={prologueCleared}
@@ -1008,7 +1052,8 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         onLogout={onLogout}
         onGoToCharacterSelect={onGoToCharacterSelect}
         prologueCleared={prologueCleared}
-        onShowPatchNotes={() => setShowPatchNotes(true)}
+        onShowPatchNotes={openPatchNotes}
+        latestPatchVersion={patchNotesLatestVersion}
       />
 
       <main className="game-main-top">
@@ -1192,98 +1237,41 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
         </div>
       )}
 
-      {/* 패치노트 팝업 */}
-      {showPatchNotes && (
-        <div className="patch-notes-overlay" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v11', '1'); }}>
-          <div className="patch-notes-popup" onClick={e => e.stopPropagation()}>
-            <div className="patch-notes-header">
-              <button className="patch-notes-x" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v11', '1'); }}>&times;</button>
-              <div className="patch-notes-badge">NEW</div>
-              <h2 className="patch-notes-title">패치 노트 v11 — 도깨비 노름방</h2>
-              <div className="patch-notes-date">2026.03.19</div>
+      {/* 패치노트 팝업 (DB 기반 페이지네이션) */}
+      {showPatchNotes && patchNotesData && patchNotesData.notes && patchNotesData.notes.length > 0 && (() => {
+        const note = patchNotesData.notes[0];
+        const isLatest = patchNotesPage === 1;
+        const dateStr = note.date ? new Date(note.date).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\./g, '.').replace(/\s/g, '') : '';
+        return (
+          <div className="patch-notes-overlay" onClick={closePatchNotes}>
+            <div className="patch-notes-popup" onClick={e => e.stopPropagation()}>
+              <div className="patch-notes-header">
+                <button className="patch-notes-x" onClick={closePatchNotes}>&times;</button>
+                {isLatest && <div className="patch-notes-badge">NEW</div>}
+                <h2 className="patch-notes-title">{note.title}</h2>
+                <div className="patch-notes-date">{dateStr}</div>
+              </div>
+              <div className="patch-notes-body" dangerouslySetInnerHTML={{ __html: note.content }} />
+              <div className="patch-notes-pagination">
+                <button
+                  className="patch-notes-page-btn"
+                  disabled={patchNotesPage <= 1}
+                  onClick={() => loadPatchNotesPage(patchNotesPage - 1)}
+                >&#9664;</button>
+                <span className="patch-notes-page-indicator">{patchNotesPage} / {patchNotesData.totalPages}</span>
+                <button
+                  className="patch-notes-page-btn"
+                  disabled={patchNotesPage >= patchNotesData.totalPages}
+                  onClick={() => loadPatchNotesPage(patchNotesPage + 1)}
+                >&#9654;</button>
+              </div>
+              <button className="patch-notes-close" onClick={closePatchNotes}>
+                확인
+              </button>
             </div>
-            <div className="patch-notes-body">
-              <div className="patch-section">
-                <h3>용병/소환수 성급 강화 시스템</h3>
-                <ul>
-                  <li><span className="patch-tag new">신규</span> <b>0성 → 6성</b> 강화 시스템 (강화권 사용)</li>
-                  <li><span className="patch-tag new">신규</span> 등급별 × 성급별 <b>차등 성공 확률</b> (일반 95%~25% / 초월 65%~5%)</li>
-                  <li><span className="patch-tag new">신규</span> 성급별 <b>레벨 제한</b>: 2성(Lv10), 3성(Lv20), 4성(Lv35), 5성(Lv50), 6성(Lv70)</li>
-                  <li><span className="patch-tag new">신규</span> 성급별 <b>스탯 보너스</b> 차등: 1성(+3%) ~ 6성(+10%), 총 36%</li>
-                  <li><span className="patch-tag new">신규</span> <b>강화 팝업</b> 연출: AI 배경 이미지 + 마법진/대장간 이펙트 + 성공/실패 결과 화면</li>
-                  <li><span className="patch-tag improve">개선</span> 용병/소환수별 다른 강화 배경 (용병: 대장간, 소환수: 크리스탈)</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>강화권 시스템</h3>
-                <ul>
-                  <li><span className="patch-tag new">신규</span> <b>14종 강화권</b>: 일반~초월 × 용병/소환수 (가챠 중복 시 획득)</li>
-                  <li><span className="patch-tag new">신규</span> 가챠 중복 소환 시 골드 대신 <b>해당 등급 강화권</b> 지급</li>
-                  <li><span className="patch-tag improve">개선</span> 강화권은 소모품 탭에 ⭐ 아이콘으로 표시</li>
-                  <li><span className="patch-tag improve">개선</span> 주인공 인벤토리에서는 "용병/소환수용" 비활성 표시</li>
-                  <li><span className="patch-tag improve">개선</span> 용병 장비에서 소환수강화권은 "소환수용", 반대도 동일</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>가챠 연출 대개편</h3>
-                <ul>
-                  <li><span className="patch-tag new">신규</span> <b>AI 고품질 배경</b> 16장 (ComfyUI + Flux.1-dev)</li>
-                  <li><span className="patch-tag new">신규</span> 용병: <b>전장 봉화</b> 테마 (불꽃/검/충격파)</li>
-                  <li><span className="patch-tag new">신규</span> 소환수: <b>마법진 소환</b> 테마 (마법진/빛기둥/룬문자)</li>
-                  <li><span className="patch-tag new">신규</span> 고급 소환권: 일반 대비 <b>2배 긴 연출</b> + 프리미엄 배경 + 금색 이펙트</li>
-                  <li><span className="patch-tag new">신규</span> 소환 결과 시 유닛별 <b>고유 소개 멘트</b> (타이핑 효과)</li>
-                  <li><span className="patch-tag new">신규</span> 중복 소환 시 <b>강화권 획득 안내</b> 팝업</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>성급 표시 UI</h3>
-                <ul>
-                  <li><span className="patch-tag new">신규</span> 모든 화면에 <b>성급 표시</b>: 0성(☆) ~ 6성(★★★★★★)</li>
-                  <li><span className="patch-tag new">신규</span> 홈/여관/소환술사/도감/전투 카드 모두 등급 뱃지 + 성급 표시</li>
-                  <li><span className="patch-tag new">신규</span> 스테이지 전투/크롤러 전투/SRPG 전투 아군 카드에 등급+성급</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>스킬 대폭 보강</h3>
-                <ul>
-                  <li><span className="patch-tag new">신규</span> 용병 스킬 <b>38 → 86개</b> (+48): 클래스당 10개 (Lv1~Lv80)</li>
-                  <li><span className="patch-tag new">신규</span> 소환수 스킬 <b>50 → 51개</b>: 신수/용/마수 타입 22종 추가</li>
-                  <li><span className="patch-tag new">신규</span> 몬스터 스킬 <b>33 → 40개</b> (+7): 고티어 전용 상위 스킬</li>
-                  <li><span className="patch-tag new">신규</span> 스킬 아이콘 <b>78장</b> Pillow 자동 생성 (기존 스타일 유지)</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>도깨비 노름방 (신규 시설)</h3>
-                <ul>
-                  <li><span className="patch-tag new">신규</span> 마을에 <b>도깨비 노름방</b> 시설 추가</li>
-                  <li><span className="patch-tag new">신규</span> NPC: 도깨비 노름방 주인 (AI 생성 초상화)</li>
-                  <li><span className="patch-tag new">신규</span> <b>🎲 도깨비 주사위</b>: 3D 주사위 물리 시뮬레이션 (Three.js)</li>
-                  <li><span className="patch-tag new">신규</span> <b>🪙 동전 던지기</b>: 3D 금화 뒤집기 (앞면 태양 / 뒷면 달)</li>
-                  <li><span className="patch-tag new">신규</span> <b>📊 하이로우</b>: 3D 카드 뒤집기 + 연승 보상 시스템</li>
-                  <li><span className="patch-tag new">신규</span> 하이로우 연승 중 <b>"멈추고 보상 받기"</b> 기능</li>
-                  <li><span className="patch-tag new">신규</span> 베팅 금액 선택: 50 ~ 5,000G (최대 10,000G)</li>
-                  <li><span className="patch-tag new">신규</span> 서버 기반 결과 계산 (조작 방지)</li>
-                </ul>
-              </div>
-              <div className="patch-section">
-                <h3>기타 개선</h3>
-                <ul>
-                  <li><span className="patch-tag improve">개선</span> 캐릭터 닉네임 <b>금지어 시스템</b>: 비속어/사칭/몬스터명 등 350+ 차단</li>
-                  <li><span className="patch-tag improve">개선</span> 속성 미선택 시 <b>빨간 테두리 깜박</b> + 자동 스크롤</li>
-                  <li><span className="patch-tag improve">개선</span> 모든 유닛에 <b>속성 오라</b> 적용 (neutral 포함)</li>
-                  <li><span className="patch-tag improve">개선</span> 자동전투 중 정예 몬스터 팝업 2초 후 자동 닫힘</li>
-                  <li><span className="patch-tag fix">수정</span> 상점에서 강화권/소환권 판매 차단</li>
-                  <li><span className="patch-tag fix">수정</span> 프롤로그 중복 전투 버그</li>
-                  <li><span className="patch-tag fix">수정</span> WebGL 컨텍스트 누수 수정</li>
-                </ul>
-              </div>
-            </div>
-            <button className="patch-notes-close" onClick={() => { setShowPatchNotes(false); localStorage.setItem('patchNotes_v11', '1'); }}>
-              확인
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 전투 로딩 팝업 */}
       {battleLoading && (

@@ -498,6 +498,167 @@ async function initialize() {
   `).catch(() => {});
   } // end quest duplicate guard
 
+  // ========== 퀘스트 확장: 챕터 6-10, 일일/현상금 고레벨 ==========
+  // prerequisite를 title로 찾아서 안전하게 연결
+  const getQId = async (title) => {
+    const [r] = await pool.query("SELECT id FROM quests WHERE title = ? LIMIT 1", [title]);
+    return r.length > 0 ? r[0].id : null;
+  };
+  const sqlVal = (v) => v === null || v === undefined ? 'NULL' : v;
+
+  const lastCh5 = await getQId('전설의 모험가'); // Chapter 5 마지막
+
+  // -- Chapter 6: 토리이 너머 - 일본 진입 (Lv15-20) --
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('토리이를 넘어서', '일본 아오키가하라에서 요괴 5마리를 처치하세요.', 'main', 'hunt_location', 'jp_forest', 5, 2500, 1500, NULL, 0, 15, ${sqlVal(lastCh5)}, 6, 1, '⛩️'),
+    ('변신 여우 사냥', '킷수네 3마리를 처치하세요.', 'main', 'hunt', '킷수네', 3, 3000, 2000, NULL, 0, 15, NULL, 6, 2, '🦊'),
+    ('백귀야행의 길', '요괴의 길에서 몬스터 8마리를 처치하세요.', 'main', 'hunt_location', 'jp_spirit', 8, 3200, 2200, NULL, 0, 16, NULL, 6, 3, '👺'),
+    ('오에산의 오니', '오에산에서 아카오니와 아오오니를 각 3마리씩 처치하세요.', 'main', 'hunt_location', 'jp_mountain', 10, 3500, 2500, NULL, 0, 17, NULL, 6, 4, '👹'),
+    ('폐신사 정화', '폐신사 던전을 3회 클리어하세요.', 'main', 'clear_dungeon', 'jp_temple', 3, 3800, 2800, NULL, 0, 18, NULL, 6, 5, '😈'),
+    ('일본 수호자', '레벨 20을 달성하세요.', 'main', 'level', '20', 1, 4000, 3000, NULL, 0, 15, NULL, 6, 6, '⭐')
+  `).catch(() => {});
+
+  // 챕터 6 prerequisite 체인 연결
+  const ch6q1 = await getQId('토리이를 넘어서');
+  const ch6q2 = await getQId('변신 여우 사냥');
+  const ch6q3 = await getQId('백귀야행의 길');
+  const ch6q4 = await getQId('오에산의 오니');
+  const ch6q5 = await getQId('폐신사 정화');
+  const ch6q6 = await getQId('일본 수호자');
+  if (ch6q1 && ch6q2) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch6q1, ch6q2]).catch(() => {});
+  if (ch6q2 && ch6q3) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch6q2, ch6q3]).catch(() => {});
+  if (ch6q3 && ch6q4) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch6q3, ch6q4]).catch(() => {});
+  if (ch6q4 && ch6q5) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch6q4, ch6q5]).catch(() => {});
+  if (ch6q5 && ch6q6) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch6q5, ch6q6]).catch(() => {});
+
+  // -- Chapter 7: 심연의 일본 + 중국 서막 (Lv20-30) --
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('슈텐도지의 위협', '슈텐도지를 처치하세요.', 'main', 'hunt', '슈텐도지', 1, 4500, 3500, NULL, 0, 20, ${sqlVal(ch6q6)}, 7, 1, '👹'),
+    ('용궁성 탐사', '일본 용궁에서 몬스터 10마리를 처치하세요.', 'main', 'hunt_location', 'jp_ocean', 10, 5000, 3800, NULL, 0, 22, NULL, 7, 2, '🌊'),
+    ('야마타노오로치 토벌', '야마타노오로치를 처치하세요.', 'main', 'hunt', '야마타노오로치', 1, 6000, 4500, NULL, 0, 24, NULL, 7, 3, '🐍'),
+    ('산해경의 부름', '중국 산해경 숲에서 몬스터 5마리를 처치하세요.', 'main', 'hunt_location', 'cn_forest', 5, 6500, 5000, NULL, 0, 26, NULL, 7, 4, '🌲'),
+    ('곤륜산 입문', '중국 곤륜산에서 몬스터 8마리를 처치하세요.', 'main', 'hunt_location', 'cn_mountain', 8, 7500, 5500, NULL, 0, 28, NULL, 7, 5, '🏔️'),
+    ('대륙의 전사', '레벨 30을 달성하세요.', 'main', 'level', '30', 1, 8000, 6000, NULL, 0, 20, NULL, 7, 6, '⭐')
+  `).catch(() => {});
+
+  const ch7q1 = await getQId('슈텐도지의 위협');
+  const ch7q2 = await getQId('용궁성 탐사');
+  const ch7q3 = await getQId('야마타노오로치 토벌');
+  const ch7q4 = await getQId('산해경의 부름');
+  const ch7q5 = await getQId('곤륜산 입문');
+  const ch7q6 = await getQId('대륙의 전사');
+  if (ch7q1 && ch7q2) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch7q1, ch7q2]).catch(() => {});
+  if (ch7q2 && ch7q3) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch7q2, ch7q3]).catch(() => {});
+  if (ch7q3 && ch7q4) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch7q3, ch7q4]).catch(() => {});
+  if (ch7q4 && ch7q5) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch7q4, ch7q5]).catch(() => {});
+  if (ch7q5 && ch7q6) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch7q5, ch7q6]).catch(() => {});
+
+  // -- Chapter 8: 봉신대의 전쟁 - 중국 심화 (Lv30-50) --
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('사흉 토벌: 도철', '도철을 처치하세요.', 'main', 'hunt', '도철', 1, 9000, 7000, NULL, 0, 30, ${sqlVal(ch7q6)}, 8, 1, '👹'),
+    ('황천의 망자', '중국 황천에서 몬스터 12마리를 처치하세요.', 'main', 'hunt_location', 'cn_swamp', 12, 10000, 8000, NULL, 0, 33, NULL, 8, 2, '💀'),
+    ('봉신대 격전', '봉신대 던전을 5회 클리어하세요.', 'main', 'clear_dungeon', 'cn_temple', 5, 11000, 9000, NULL, 0, 36, NULL, 8, 3, '🏯'),
+    ('달기의 환술', '달기를 처치하세요.', 'main', 'hunt', '달기', 1, 12000, 10000, NULL, 0, 40, NULL, 8, 4, '🦊'),
+    ('요계 침입', '중국 요계에서 몬스터 15마리를 처치하세요.', 'main', 'hunt_location', 'cn_spirit', 15, 13500, 11000, NULL, 0, 44, NULL, 8, 5, '🐉'),
+    ('무림의 고수', '레벨 50을 달성하세요.', 'main', 'level', '50', 1, 15000, 12000, NULL, 0, 30, NULL, 8, 6, '⭐')
+  `).catch(() => {});
+
+  const ch8q1 = await getQId('사흉 토벌: 도철');
+  const ch8q2 = await getQId('황천의 망자');
+  const ch8q3 = await getQId('봉신대 격전');
+  const ch8q4 = await getQId('달기의 환술');
+  const ch8q5 = await getQId('요계 침입');
+  const ch8q6 = await getQId('무림의 고수');
+  if (ch8q1 && ch8q2) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch8q1, ch8q2]).catch(() => {});
+  if (ch8q2 && ch8q3) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch8q2, ch8q3]).catch(() => {});
+  if (ch8q3 && ch8q4) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch8q3, ch8q4]).catch(() => {});
+  if (ch8q4 && ch8q5) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch8q4, ch8q5]).catch(() => {});
+  if (ch8q5 && ch8q6) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch8q5, ch8q6]).catch(() => {});
+
+  // -- Chapter 9: 삼국의 시련 (Lv50-75) --
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('축음의 눈', '축음을 처치하세요.', 'main', 'hunt', '축음', 1, 18000, 14000, NULL, 0, 50, ${sqlVal(ch8q6)}, 9, 1, '🐍'),
+    ('무한의 탑 도전', '무한의 탑 10층을 돌파하세요.', 'main', 'clear_dungeon', 'tower', 10, 20000, 16000, NULL, 0, 55, NULL, 9, 2, '🗼'),
+    ('정령의 시련 통과', '정령의 시련을 5회 완료하세요.', 'main', 'clear_dungeon', 'elemental', 5, 22000, 18000, NULL, 0, 60, NULL, 9, 3, '🔥'),
+    ('기린의 축복', '기린을 처치하고 축복을 받으세요.', 'main', 'hunt', '기린', 1, 25000, 20000, NULL, 0, 65, NULL, 9, 4, '🦌'),
+    ('보스 토벌전 정복', '보스 토벌전을 3회 완료하세요.', 'main', 'clear_dungeon', 'boss_raid', 3, 28000, 22000, NULL, 0, 70, NULL, 9, 5, '💀'),
+    ('전설의 귀환', '레벨 75를 달성하세요.', 'main', 'level', '75', 1, 30000, 25000, NULL, 0, 50, NULL, 9, 6, '⭐')
+  `).catch(() => {});
+
+  const ch9q1 = await getQId('축음의 눈');
+  const ch9q2 = await getQId('무한의 탑 도전');
+  const ch9q3 = await getQId('정령의 시련 통과');
+  const ch9q4 = await getQId('기린의 축복');
+  const ch9q5 = await getQId('보스 토벌전 정복');
+  const ch9q6 = await getQId('전설의 귀환');
+  if (ch9q1 && ch9q2) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch9q1, ch9q2]).catch(() => {});
+  if (ch9q2 && ch9q3) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch9q2, ch9q3]).catch(() => {});
+  if (ch9q3 && ch9q4) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch9q3, ch9q4]).catch(() => {});
+  if (ch9q4 && ch9q5) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch9q4, ch9q5]).catch(() => {});
+  if (ch9q5 && ch9q6) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch9q5, ch9q6]).catch(() => {});
+
+  // -- Chapter 10: 천상의 결전 (Lv75-100) --
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('삼국 통일의 서막', '한국/일본/중국 각 지역에서 몬스터 20마리씩 처치하세요.', 'main', 'hunt_location', 'any', 60, 32000, 28000, NULL, 0, 75, ${sqlVal(ch9q6)}, 10, 1, '🌏'),
+    ('백택의 지혜', '백택을 처치하여 만 가지 요괴의 비밀을 얻으세요.', 'main', 'hunt', '백택', 1, 35000, 30000, NULL, 0, 80, NULL, 10, 2, '🐂'),
+    ('무한의 탑 최상층', '무한의 탑 30층을 돌파하세요.', 'main', 'clear_dungeon', 'tower', 30, 38000, 32000, NULL, 0, 85, NULL, 10, 3, '🗼'),
+    ('청룡의 심판', '청룡을 처치하세요.', 'main', 'hunt', '청룡', 1, 42000, 38000, NULL, 0, 90, NULL, 10, 4, '🐉'),
+    ('최후의 보스 토벌', '보스 토벌전을 10회 완료하세요.', 'main', 'clear_dungeon', 'boss_raid', 10, 45000, 42000, NULL, 0, 95, NULL, 10, 5, '💀'),
+    ('천상의 존재', '레벨 100을 달성하세요.', 'main', 'level', '100', 1, 50000, 50000, NULL, 0, 75, NULL, 10, 6, '👑')
+  `).catch(() => {});
+
+  const ch10q1 = await getQId('삼국 통일의 서막');
+  const ch10q2 = await getQId('백택의 지혜');
+  const ch10q3 = await getQId('무한의 탑 최상층');
+  const ch10q4 = await getQId('청룡의 심판');
+  const ch10q5 = await getQId('최후의 보스 토벌');
+  const ch10q6 = await getQId('천상의 존재');
+  if (ch10q1 && ch10q2) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch10q1, ch10q2]).catch(() => {});
+  if (ch10q2 && ch10q3) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch10q2, ch10q3]).catch(() => {});
+  if (ch10q3 && ch10q4) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch10q3, ch10q4]).catch(() => {});
+  if (ch10q4 && ch10q5) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch10q4, ch10q5]).catch(() => {});
+  if (ch10q5 && ch10q6) await pool.query("UPDATE quests SET prerequisite_quest_id = ? WHERE id = ?", [ch10q5, ch10q6]).catch(() => {});
+
+  // -- 일일 퀘스트 추가 (Lv50/70/100 티어) --
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('대륙의 사냥꾼', '몬스터 120마리를 처치하세요.', 'daily', 'hunt_location', 'any', 120, 5000, 3000, NULL, 0, 50, NULL, 0, 14, '🌏'),
+    ('스테이지 폭풍', '스테이지 전투를 10회 완료하세요.', 'daily', 'clear_stage', 'any', 10, 4000, 2500, NULL, 0, 50, NULL, 0, 15, '⚡'),
+    ('전설의 사냥', '몬스터 150마리를 처치하세요.', 'daily', 'hunt_location', 'any', 150, 10000, 6000, NULL, 0, 70, NULL, 0, 16, '🔥'),
+    ('던전 파괴자', '던전 스테이지를 8회 클리어하세요.', 'daily', 'clear_dungeon', 'any', 8, 8000, 5000, NULL, 0, 70, NULL, 0, 17, '💥'),
+    ('천상의 전사', '몬스터 200마리를 처치하세요.', 'daily', 'hunt_location', 'any', 200, 20000, 12000, NULL, 0, 100, NULL, 0, 18, '👑'),
+    ('궁극의 도전', '스테이지 전투를 15회 완료하세요.', 'daily', 'clear_stage', 'any', 15, 15000, 10000, NULL, 0, 100, NULL, 0, 19, '🌟')
+  `).catch(() => {});
+
+  // -- 현상금 의뢰 추가 (Lv25-100) --
+  await pool.query(`INSERT IGNORE INTO quests (title, description, category, type, target, target_count, reward_exp, reward_gold, reward_item_id, reward_item_qty, required_level, prerequisite_quest_id, chapter, sort_order, icon) VALUES
+    ('텐구 현상 수배', '텐구를 5마리 처치하세요.', 'bounty', 'hunt', '텐구', 5, 2000, 1500, NULL, 0, 25, NULL, 0, 21, '👺'),
+    ('폐신사 완전정복', '폐신사를 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'jp_temple', 10, 2500, 2000, NULL, 0, 28, NULL, 0, 22, '⛩️'),
+    ('유키온나 토벌', '유키온나를 3마리 처치하세요.', 'bounty', 'hunt', '유키온나', 3, 3000, 2200, NULL, 0, 35, NULL, 0, 23, '❄️'),
+    ('호리정 추적', '호리정을 5마리 처치하세요.', 'bounty', 'hunt', '호리정', 5, 4000, 3000, NULL, 0, 40, NULL, 0, 24, '🦊'),
+    ('봉신대 완전정복', '봉신대를 10회 클리어하세요.', 'bounty', 'clear_dungeon', 'cn_temple', 10, 5000, 4000, NULL, 0, 50, NULL, 0, 25, '🏯'),
+    ('사흉 소탕전', '도철, 혼돈, 궁기, 도올 중 하나를 처치하세요.', 'bounty', 'hunt', '혼돈', 1, 6000, 5000, NULL, 0, 60, NULL, 0, 26, '👹'),
+    ('무한의 탑 20층', '무한의 탑 20층을 돌파하세요.', 'bounty', 'clear_dungeon', 'tower', 20, 10000, 8000, NULL, 0, 70, NULL, 0, 27, '🗼'),
+    ('기린 사냥 의뢰', '기린을 처치하세요.', 'bounty', 'hunt', '기린', 1, 12000, 10000, NULL, 0, 75, NULL, 0, 28, '🦌'),
+    ('축음 토벌 의뢰', '축음을 처치하세요.', 'bounty', 'hunt', '축음', 1, 15000, 12000, NULL, 0, 85, NULL, 0, 29, '🐍'),
+    ('천하제일 현상금', '보스 토벌전을 5회 완료하세요.', 'bounty', 'clear_dungeon', 'boss_raid', 5, 20000, 18000, NULL, 0, 100, NULL, 0, 30, '💎')
+  `).catch(() => {});
+
+  // -- 메인 퀘스트 챕터 완료 보상 아이템 (장비) 부여 --
+  // 등급: 일반 < 고급 < 희귀 < 영웅 < 전설 < 신화 < 초월
+  // 챕터 6 완료 (Lv20): 희귀 장비
+  await pool.query(`UPDATE quests SET reward_item_id = (SELECT id FROM items WHERE grade IN ('희귀','영웅') AND required_level <= 20 ORDER BY required_level DESC LIMIT 1), reward_item_qty = 1 WHERE title = '일본 수호자' AND category = 'main' AND reward_item_id IS NULL`).catch(() => {});
+  // 챕터 7 완료 (Lv30): 희귀~영웅 장비
+  await pool.query(`UPDATE quests SET reward_item_id = (SELECT id FROM items WHERE grade IN ('희귀','영웅') AND required_level <= 30 ORDER BY required_level DESC LIMIT 1), reward_item_qty = 1 WHERE title = '대륙의 전사' AND category = 'main' AND reward_item_id IS NULL`).catch(() => {});
+  // 챕터 8 완료 (Lv50): 영웅 장비
+  await pool.query(`UPDATE quests SET reward_item_id = (SELECT id FROM items WHERE grade IN ('영웅','전설') AND required_level <= 50 ORDER BY required_level DESC LIMIT 1), reward_item_qty = 1 WHERE title = '무림의 고수' AND category = 'main' AND reward_item_id IS NULL`).catch(() => {});
+  // 챕터 9 완료 (Lv75): 전설 장비
+  await pool.query(`UPDATE quests SET reward_item_id = (SELECT id FROM items WHERE grade IN ('전설','신화') AND required_level <= 75 ORDER BY required_level DESC LIMIT 1), reward_item_qty = 1 WHERE title = '전설의 귀환' AND category = 'main' AND reward_item_id IS NULL`).catch(() => {});
+  // 챕터 10 완료 (Lv100): 신화~초월 장비
+  await pool.query(`UPDATE quests SET reward_item_id = (SELECT id FROM items WHERE grade IN ('신화','초월','전설') ORDER BY required_level DESC LIMIT 1), reward_item_qty = 1 WHERE title = '천상의 존재' AND category = 'main' AND reward_item_id IS NULL`).catch(() => {});
+  // 고레벨 현상금 보상
+  await pool.query(`UPDATE quests SET reward_item_id = (SELECT id FROM items WHERE grade IN ('영웅','전설') ORDER BY RAND() LIMIT 1), reward_item_qty = 1 WHERE title = '천하제일 현상금' AND category = 'bounty' AND reward_item_id IS NULL`).catch(() => {});
+  await pool.query(`UPDATE quests SET reward_item_id = (SELECT id FROM items WHERE grade IN ('희귀','영웅') ORDER BY RAND() LIMIT 1), reward_item_qty = 1 WHERE title = '기린 사냥 의뢰' AND category = 'bounty' AND reward_item_id IS NULL`).catch(() => {});
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS skills (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -648,6 +809,10 @@ async function initialize() {
   `);
   // ENUM 확장 (기존 DB 호환)
   await pool.query("ALTER TABLE summon_skills MODIFY COLUMN type ENUM('attack', 'heal', 'buff', 'debuff', 'aoe') NOT NULL").catch(() => {});
+  // 소환수 스킬 중복 방지
+  await pool.query(`DELETE ss1 FROM summon_skills ss1 INNER JOIN summon_skills ss2
+    ON ss1.name = ss2.name AND IFNULL(ss1.summon_type,'')=IFNULL(ss2.summon_type,'') AND ss1.id > ss2.id`).catch(() => {});
+  await pool.query("ALTER TABLE summon_skills ADD UNIQUE KEY unique_name_type (name, summon_type)").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS summon_learned_skills (
@@ -5302,6 +5467,12 @@ async function initialize() {
   `);
   // ENUM 확장 (기존 DB 호환)
   await pool.query("ALTER TABLE mercenary_skills MODIFY COLUMN type ENUM('attack', 'heal', 'buff', 'debuff', 'aoe') NOT NULL").catch(() => {});
+  // 등급 제한 스킬 컬럼 추가
+  await pool.query("ALTER TABLE mercenary_skills ADD COLUMN min_grade VARCHAR(10) DEFAULT NULL").catch(() => {});
+  // 중복 방지: name + class_type UNIQUE (기존 중복은 먼저 정리)
+  await pool.query(`DELETE ms1 FROM mercenary_skills ms1 INNER JOIN mercenary_skills ms2
+    ON ms1.name = ms2.name AND IFNULL(ms1.class_type,'')=IFNULL(ms2.class_type,'') AND ms1.id > ms2.id`).catch(() => {});
+  await pool.query("ALTER TABLE mercenary_skills ADD UNIQUE KEY unique_name_class (name, class_type)").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mercenary_learned_skills (
@@ -7158,7 +7329,9 @@ async function initialize() {
     await pool.query(`INSERT IGNORE INTO monster_skills (name, type, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
       VALUES ('위협 포효', 'buff', 'taunt', 1, 2, 8, 3, 0, 'diamond', '위협적인 포효로 적의 공격을 집중시킨다.', '🗣️')`).catch(() => {});
 
-    // ── 용병 스킬: 새 상태이상 추가 ──
+    // ── 용병 스킬: 새 상태이상 추가 (중복 방지) ──
+    const [[mercNewCheck]] = await pool.query("SELECT COUNT(*) as cnt FROM mercenary_skills WHERE name='분쇄 강타'").catch(() => [[{cnt:1}]]);
+    if (mercNewCheck.cnt === 0) {
     // 무사: 기절 (stun)
     await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
       VALUES ('분쇄 강타', '무사', 'attack', 2.5, 'stun', 0, 1, 14, 2, '강력한 일격으로 적을 기절시킨다.')`).catch(() => {});
@@ -7183,8 +7356,68 @@ async function initialize() {
     // 창병: 출혈 (bleed)
     await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
       VALUES ('관통 출혈', '창병', 'attack', 2.8, 'bleed', 6, 3, 16, 2, '창으로 관통하여 출혈을 일으킨다.')`).catch(() => {});
+    } // mercNewCheck
 
-    // ── 소환수 스킬: 새 상태이상 추가 ──
+    // 용병 스킬 레벨 재배분 (Lv1 몰림 방지)
+    await pool.query("UPDATE mercenary_skills SET required_level=25 WHERE name='분쇄 강타' AND class_type='무사' AND required_level<=1").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET required_level=35 WHERE name='전장의 위엄' AND class_type='무사' AND required_level<=1").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET required_level=20 WHERE name='출혈 난자' AND class_type='자객' AND required_level<=1").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET required_level=25 WHERE name='업화 소각' AND class_type='마법사' AND required_level<=1").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET required_level=35 WHERE name='마력 보호막' AND class_type='마법사' AND required_level<=1").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET required_level=30 WHERE name='영력 봉인' AND class_type='도사' AND required_level<=1").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET required_level=35 WHERE name='성스러운 보호막' AND class_type='치유사' AND required_level<=1").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET required_level=25 WHERE name='관통 출혈' AND class_type='창병' AND required_level<=1").catch(() => {});
+
+    // 등급별 스킬 접근 제한 (격차 벌리기)
+    // Lv15~20 클래스 스킬 → 고급+
+    await pool.query("UPDATE mercenary_skills SET min_grade='고급' WHERE min_grade IS NULL AND required_level BETWEEN 15 AND 20 AND class_type IS NOT NULL").catch(() => {});
+    // Lv25~35 → 희귀+
+    await pool.query("UPDATE mercenary_skills SET min_grade='희귀' WHERE min_grade IS NULL AND required_level BETWEEN 25 AND 35 AND class_type IS NOT NULL").catch(() => {});
+    // Lv40~55 → 영웅+
+    await pool.query("UPDATE mercenary_skills SET min_grade='영웅' WHERE min_grade IS NULL AND required_level BETWEEN 40 AND 55 AND class_type IS NOT NULL").catch(() => {});
+    // Lv60~80 → 전설+
+    await pool.query("UPDATE mercenary_skills SET min_grade='전설' WHERE min_grade IS NULL AND required_level BETWEEN 60 AND 80 AND class_type IS NOT NULL").catch(() => {});
+    // 공용 스킬 등급 제한
+    await pool.query("UPDATE mercenary_skills SET min_grade='고급' WHERE name='방어 태세' AND class_type IS NULL AND min_grade IS NULL").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET min_grade='희귀' WHERE name IN ('위협','방어 약화') AND class_type IS NULL AND min_grade IS NULL").catch(() => {});
+    await pool.query("UPDATE mercenary_skills SET min_grade='영웅' WHERE name IN ('기합','생명력 회복') AND class_type IS NULL AND min_grade IS NULL").catch(() => {});
+    // 방패 밀치기 → 창대 밀치기 (창병에 맞게)
+    await pool.query("UPDATE mercenary_skills SET name='창대 밀치기', description='창대로 적을 밀쳐 방어를 낮춘다.' WHERE name='방패 밀치기' AND class_type='창병'").catch(() => {});
+    // 등급 미달 습득 스킬 자동 정리
+    await pool.query(`DELETE mls FROM mercenary_learned_skills mls
+      JOIN character_mercenaries cm ON mls.mercenary_id = cm.id
+      JOIN mercenary_templates mt ON cm.template_id = mt.id
+      JOIN mercenary_skills ms ON mls.skill_id = ms.id
+      WHERE ms.min_grade IS NOT NULL
+      AND FIELD(mt.grade,'일반','고급','희귀','영웅','전설','신화','초월') < FIELD(ms.min_grade,'일반','고급','희귀','영웅','전설','신화','초월')`).catch(() => {});
+
+    // 고급 전용 스킬 추가 (클래스당 2개, Lv8/Lv12)
+    const advSkills = [
+      ['연격','검사','attack',2.0,null,0,0,10,1,8,'빠른 연속 공격을 가한다.'],
+      ['검기 집중','검사','buff',0,'attack',6,3,10,2,12,'검에 기를 모아 공격력을 높인다.'],
+      ['돌진 찌르기','창병','attack',2.2,null,0,0,10,1,8,'돌진하며 창으로 찌른다.'],
+      ['창방어 자세','창병','buff',0,'defense',8,3,8,2,12,'창으로 방어 자세를 취한다.'],
+      ['조준 사격','궁수','attack',2.2,null,0,0,10,1,8,'목표를 정밀 조준하여 사격한다.'],
+      ['속사 연습','궁수','buff',0,'attack',5,3,8,2,12,'빠른 연사 훈련으로 공격력을 높인다.'],
+      ['뇌전 부적','도사','attack',2.0,null,0,0,10,1,8,'번개를 담은 부적을 날린다.'],
+      ['오행 결계','도사','buff',0,'defense',7,3,10,2,12,'오행의 결계로 방어를 높인다.'],
+      ['어깨치기','무사','attack',2.0,null,0,0,8,1,8,'어깨로 적을 강하게 밀친다.'],
+      ['투지','무사','buff',0,'attack',7,3,10,2,12,'전투 의지를 불태워 공격력을 높인다.'],
+      ['치료 기도','치유사','heal',0,null,0,0,10,2,8,'기도로 아군을 치유한다.'],
+      ['보호의 빛','치유사','buff',0,'defense',6,3,8,2,12,'빛으로 아군을 보호한다.'],
+      ['독침 투척','자객','attack',1.8,'poison',4,2,8,1,8,'독침을 던져 공격한다.'],
+      ['은신 준비','자객','buff',0,'evasion',8,2,8,2,12,'그림자에 숨어 회피를 높인다.'],
+      ['화염 화살','마법사','attack',2.0,null,0,0,10,1,8,'불꽃 화살을 발사한다.'],
+      ['마력 집중','마법사','buff',0,'attack',6,3,10,2,12,'마력을 집중하여 공격력을 높인다.'],
+    ];
+    for (const [name,cls,type,dmg,bs,bv,bd,mp,cd,lv,desc] of advSkills) {
+      await pool.query(`INSERT IGNORE INTO mercenary_skills (name,class_type,type,damage_multiplier,buff_stat,buff_value,buff_duration,mp_cost,cooldown,required_level,description,min_grade)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,'고급')`, [name,cls,type,dmg,bs,bv,bd,mp,cd,lv,desc]).catch(() => {});
+    }
+
+    // ── 소환수 스킬: 새 상태이상 추가 (중복 방지) ──
+    const [[summonNewCheck]] = await pool.query("SELECT COUNT(*) as cnt FROM summon_skills WHERE name='야수의 이빨'").catch(() => [[{cnt:1}]]);
+    if (summonNewCheck.cnt === 0) {
     // 몬스터형: 출혈
     await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
       VALUES ('야수의 이빨', '몬스터', '날카로운 이빨로 출혈을 일으킨다.', 'attack', 8, 2.0, 'bleed', 6, 3, 2)`).catch(() => {});
@@ -7203,6 +7436,7 @@ async function initialize() {
     // 용형: 화상 AOE
     await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
       VALUES ('용염', '용', '용의 불꽃으로 전체를 태운다.', 'aoe', 30, 4.0, 'burn', 8, 2, 4)`).catch(() => {});
+    } // summonNewCheck
 
     // ── 몬스터에 새 스킬 할당 (ai_type/이름 기반) ──
     const skillAssignments = [
@@ -8314,7 +8548,7 @@ async function initialize() {
       ['천류검',     '검사', 'attack', 30, 5.0, 0, null, 0, 0, 60, 3, 0, '하늘의 흐름을 담은 궁극 검격.'],
       ['무영검',     '검사', 'attack', 40, 6.5, 0, null, 0, 0, 80, 4, 0, '그림자조차 보이지 않는 초고속 참격.'],
       // 창병
-      ['방패 밀치기','창병', 'debuff', 10, 0, 0, 'defense', -5, 3, 5, 1, 0, '방패로 적을 밀치고 방어를 흩뜨린다.'],
+      ['창대 밀치기','창병', 'debuff', 10, 0, 0, 'defense', -5, 3, 5, 1, 0, '창대로 적을 밀쳐 방어를 낮춘다.'],
       ['연환창',     '창병', 'attack', 14, 2.5, 0, null, 0, 0, 10, 1, 0, '창을 연속으로 세 번 찌른다.'],
       ['창벽',       '창병', 'buff',   12, 0, 0, 'defense', 12, 3, 20, 2, 0, '창으로 방어벽을 세운다.'],
       ['돌격 찌르기','창병', 'attack', 22, 3.2, 0, null, 0, 0, 40, 2, 0, '돌격하며 창으로 관통한다.'],
@@ -8819,6 +9053,209 @@ async function initialize() {
     }
   }
 
+  // === 패치노트 테이블 ===
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS patch_notes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      version VARCHAR(20) NOT NULL,
+      title VARCHAR(100) NOT NULL,
+      date DATE NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 패치노트 시드 데이터
+  const [existingNotes] = await pool.query('SELECT COUNT(*) as cnt FROM patch_notes');
+  if (existingNotes[0].cnt === 0) {
+    const patchNotesSeed = [
+      {
+        version: 'v1',
+        title: '패치 노트 v1 — 게임 출시',
+        date: '2026-03-08',
+        content: `<div class="patch-section"><h3>게임 출시</h3><ul><li><span class="patch-tag new">신규</span> 한국 판타지 RPG 웹 게임 정식 오픈</li><li><span class="patch-tag new">신규</span> 3개 클래스: 풍수사, 무당, 승려</li><li><span class="patch-tag new">신규</span> 스테이지 전투 시스템</li><li><span class="patch-tag new">신규</span> 장비 / 상점 / 퀘스트 기본 시스템</li></ul></div>`
+      },
+      {
+        version: 'v2',
+        title: '패치 노트 v2 — 던전 시스템',
+        date: '2026-03-09',
+        content: `<div class="patch-section"><h3>던전 시스템</h3><ul><li><span class="patch-tag new">신규</span> 11종 던전 추가 (어둠의 숲 ~ 용의 둥지)</li><li><span class="patch-tag new">신규</span> SRPG 아이소메트릭 전투 시스템</li><li><span class="patch-tag new">신규</span> 몬스터 AI 6종 (공격형/방어형/원거리/지원/보스/겁쟁이)</li><li><span class="patch-tag improve">개선</span> 전투 로그 시스템</li></ul></div>`
+      },
+      {
+        version: 'v3',
+        title: '패치 노트 v3 — 소환수 시스템',
+        date: '2026-03-10',
+        content: `<div class="patch-section"><h3>소환수 시스템</h3><ul><li><span class="patch-tag new">신규</span> 12종 소환수 추가</li><li><span class="patch-tag new">신규</span> 소환수 장비 시스템</li><li><span class="patch-tag new">신규</span> 소환수 스킬 시스템</li><li><span class="patch-tag new">신규</span> 가챠 소환 시스템</li></ul></div>`
+      },
+      {
+        version: 'v4',
+        title: '패치 노트 v4 — 스킬 트리',
+        date: '2026-03-11',
+        content: `<div class="patch-section"><h3>스킬 트리 시스템</h3><ul><li><span class="patch-tag new">신규</span> 클래스별 3갈래 스킬 트리 (7티어)</li><li><span class="patch-tag new">신규</span> 81개 스킬 노드</li><li><span class="patch-tag improve">개선</span> 전투 시 스킬 자동 적용</li></ul></div>`
+      },
+      {
+        version: 'v5',
+        title: '패치 노트 v5 — 용병 시스템',
+        date: '2026-03-12',
+        content: `<div class="patch-section"><h3>용병 시스템</h3><ul><li><span class="patch-tag new">신규</span> 8종 용병 템플릿</li><li><span class="patch-tag new">신규</span> 여관 시설 (용병 고용/해고)</li><li><span class="patch-tag new">신규</span> 진형 시스템 (3×3 그리드)</li><li><span class="patch-tag new">신규</span> 카드 배틀 + SRPG 용병 참전</li></ul></div>`
+      },
+      {
+        version: 'v6',
+        title: '패치 노트 v6 — 멀티 캐릭터',
+        date: '2026-03-13',
+        content: `<div class="patch-section"><h3>멀티 캐릭터</h3><ul><li><span class="patch-tag new">신규</span> 계정당 캐릭터 3개 생성 가능</li><li><span class="patch-tag new">신규</span> 캐릭터 선택 화면</li><li><span class="patch-tag new">신규</span> TopNav 캐릭터 전환 버튼</li><li><span class="patch-tag improve">개선</span> X-Char-Id 헤더 기반 캐릭터 분리</li></ul></div>`
+      },
+      {
+        version: 'v7',
+        title: '패치 노트 v7 — 특수 던전',
+        date: '2026-03-14',
+        content: `<div class="patch-section"><h3>특수 던전</h3><ul><li><span class="patch-tag new">신규</span> 무한의 탑 (50층, 주간 리셋)</li><li><span class="patch-tag new">신규</span> 정령의 시련 (일일 속성 로테이션)</li><li><span class="patch-tag new">신규</span> 보스 토벌전 (6종 보스, 일일 리셋)</li><li><span class="patch-tag new">신규</span> 2D 픽셀아트 SRPG 타워 배틀</li></ul></div>`
+      },
+      {
+        version: 'v8',
+        title: '패치 노트 v8 — 밸런스 패치',
+        date: '2026-03-15',
+        content: `<div class="patch-section"><h3>종합 밸런스 패치</h3><ul><li><span class="patch-tag improve">개선</span> 스테이지 레벨 1~100 재조정</li><li><span class="patch-tag improve">개선</span> 몬스터/용병/소환수 스탯 리밸런스</li><li><span class="patch-tag improve">개선</span> 티어별 몬스터 스탯 절대값 랜덤 범위</li><li><span class="patch-tag fix">수정</span> EXP 공식 조정: 120×Lv + 3×Lv²</li></ul></div>`
+      },
+      {
+        version: 'v9',
+        title: '패치 노트 v9 — 4번째 클래스 & 도감',
+        date: '2026-03-16',
+        content: `<div class="patch-section"><h3>저승사자 클래스</h3><ul><li><span class="patch-tag new">신규</span> 4번째 클래스: <b>저승사자</b> (근접 암살자)</li><li><span class="patch-tag new">신규</span> 중립 속성 전용, 30개 스킬 노드</li><li><span class="patch-tag new">신규</span> 출혈/화상 특화 스킬셋</li></ul></div><div class="patch-section"><h3>도감 시스템</h3><ul><li><span class="patch-tag new">신규</span> 몬스터 도감: 해금/처치 추적</li><li><span class="patch-tag new">신규</span> 오라 이펙트, 몬스터 스킬 탭</li><li><span class="patch-tag new">신규</span> 150종 신규 몬스터 (일본/중국 지역)</li></ul></div>`
+      },
+      {
+        version: 'v10',
+        title: '패치 노트 v10 — 컬렉션 & 성급 강화',
+        date: '2026-03-18',
+        content: `<div class="patch-section"><h3>컬렉션 시스템</h3><ul><li><span class="patch-tag new">신규</span> 용병/소환수 컬렉션 도감</li><li><span class="patch-tag new">신규</span> 도감 완성도에 따른 보상</li></ul></div><div class="patch-section"><h3>성급 강화</h3><ul><li><span class="patch-tag new">신규</span> 0성~6성 강화 시스템</li><li><span class="patch-tag new">신규</span> 등급별 차등 성공 확률</li><li><span class="patch-tag new">신규</span> 강화권 14종 (가챠 중복 시 획득)</li></ul></div><div class="patch-section"><h3>가챠 오버홀</h3><ul><li><span class="patch-tag improve">개선</span> AI 고품질 배경 16장</li><li><span class="patch-tag improve">개선</span> 소환 연출 대개편</li><li><span class="patch-tag improve">개선</span> 천장 시스템 추가</li></ul></div>`
+      },
+      {
+        version: 'v11',
+        title: '패치 노트 v11 — 도깨비 노름방',
+        date: '2026-03-19',
+        content: `<div class="patch-section"><h3>용병/소환수 성급 강화 시스템</h3><ul><li><span class="patch-tag new">신규</span> <b>0성 → 6성</b> 강화 시스템 (강화권 사용)</li><li><span class="patch-tag new">신규</span> 등급별 × 성급별 <b>차등 성공 확률</b> (일반 95%~25% / 초월 65%~5%)</li><li><span class="patch-tag new">신규</span> 성급별 <b>레벨 제한</b>: 2성(Lv10), 3성(Lv20), 4성(Lv35), 5성(Lv50), 6성(Lv70)</li><li><span class="patch-tag new">신규</span> 성급별 <b>스탯 보너스</b> 차등: 1성(+3%) ~ 6성(+10%), 총 36%</li><li><span class="patch-tag new">신규</span> <b>강화 팝업</b> 연출: AI 배경 이미지 + 마법진/대장간 이펙트 + 성공/실패 결과 화면</li><li><span class="patch-tag improve">개선</span> 용병/소환수별 다른 강화 배경 (용병: 대장간, 소환수: 크리스탈)</li></ul></div><div class="patch-section"><h3>강화권 시스템</h3><ul><li><span class="patch-tag new">신규</span> <b>14종 강화권</b>: 일반~초월 × 용병/소환수 (가챠 중복 시 획득)</li><li><span class="patch-tag new">신규</span> 가챠 중복 소환 시 골드 대신 <b>해당 등급 강화권</b> 지급</li><li><span class="patch-tag improve">개선</span> 강화권은 소모품 탭에 ⭐ 아이콘으로 표시</li></ul></div><div class="patch-section"><h3>가챠 연출 대개편</h3><ul><li><span class="patch-tag new">신규</span> <b>AI 고품질 배경</b> 16장 (ComfyUI + Flux.1-dev)</li><li><span class="patch-tag new">신규</span> 용병: <b>전장 봉화</b> 테마 / 소환수: <b>마법진 소환</b> 테마</li><li><span class="patch-tag new">신규</span> 고급 소환권: 2배 긴 연출 + 프리미엄 배경 + 금색 이펙트</li><li><span class="patch-tag new">신규</span> 소환 결과 시 유닛별 <b>고유 소개 멘트</b> (타이핑 효과)</li></ul></div><div class="patch-section"><h3>스킬 대폭 보강</h3><ul><li><span class="patch-tag new">신규</span> 용병 스킬 <b>38 → 86개</b> (+48)</li><li><span class="patch-tag new">신규</span> 소환수 스킬 <b>50 → 51개</b></li><li><span class="patch-tag new">신규</span> 몬스터 스킬 <b>33 → 40개</b> (+7)</li><li><span class="patch-tag new">신규</span> 스킬 아이콘 <b>78장</b> Pillow 자동 생성</li></ul></div><div class="patch-section"><h3>도깨비 노름방 (신규 시설)</h3><ul><li><span class="patch-tag new">신규</span> 마을에 <b>도깨비 노름방</b> 시설 추가</li><li><span class="patch-tag new">신규</span> <b>도깨비 주사위</b>: 3D 주사위 물리 시뮬레이션 (Three.js)</li><li><span class="patch-tag new">신규</span> <b>동전 던지기</b>: 3D 금화 뒤집기</li><li><span class="patch-tag new">신규</span> <b>하이로우</b>: 3D 카드 뒤집기 + 연승 보상 시스템</li><li><span class="patch-tag new">신규</span> 서버 기반 결과 계산 (조작 방지)</li></ul></div><div class="patch-section"><h3>기타 개선</h3><ul><li><span class="patch-tag improve">개선</span> 캐릭터 닉네임 <b>금지어 시스템</b> (350+ 차단)</li><li><span class="patch-tag improve">개선</span> 자동전투 중 정예 몬스터 팝업 2초 후 자동 닫힘</li><li><span class="patch-tag fix">수정</span> 상점에서 강화권/소환권 판매 차단</li><li><span class="patch-tag fix">수정</span> WebGL 컨텍스트 누수 수정</li></ul></div>`
+      },
+      {
+        version: 'v12',
+        title: '패치 노트 v12 — 무기 시스템 & 신규 클래스',
+        date: '2026-03-20',
+        content: `<div class="patch-section"><h3>무기 시스템 대개편</h3><ul><li><span class="patch-tag new">신규</span> <b>10종 무기 서브타입</b> 추가 (검, 도끼, 활, 창, 부적, 방울, 목탁, 낫, 법구, 거대방패, 신칼)</li><li><span class="patch-tag new">신규</span> 무기별 <b>특수 효과</b>: 관통(창), 횡베기(도끼), 연사(활), 흡혈(낫) 등</li><li><span class="patch-tag new">신규</span> <b>250개 무기</b> 데이터 추가 (등급별 차등)</li><li><span class="patch-tag improve">개선</span> 무기 서브타입별 전용 아이콘 및 설명</li></ul></div><div class="patch-section"><h3>신규 클래스: 북채비</h3><ul><li><span class="patch-tag new">신규</span> <b>북채비</b> — 물리 탱커 클래스</li><li><span class="patch-tag new">신규</span> 전용 무기: <b>거대방패</b></li><li><span class="patch-tag new">신규</span> 핵심 스킬: 도발, 보호막, 방어 강화</li><li><span class="patch-tag new">신규</span> 30개 스킬 노드 (3갈래 × 7티어)</li></ul></div><div class="patch-section"><h3>신규 클래스: 강신무</h3><ul><li><span class="patch-tag new">신규</span> <b>강신무</b> — 물리 밸런스 클래스</li><li><span class="patch-tag new">신규</span> 전용 무기: <b>신칼</b></li><li><span class="patch-tag new">신규</span> 핵심 스킬: 출혈, 화상, 연속 공격</li><li><span class="patch-tag new">신규</span> 30개 스킬 노드 (3갈래 × 7티어)</li></ul></div><div class="patch-section"><h3>승려 리워크</h3><ul><li><span class="patch-tag improve">개선</span> 승려 클래스 <b>물리 전사 → 법사형</b> 변경</li><li><span class="patch-tag improve">개선</span> 전용 무기: <b>목탁 → 법구</b> 변경</li><li><span class="patch-tag improve">개선</span> 스킬 계열: 진언술 / 결계술 / 선법</li></ul></div><div class="patch-section"><h3>신규 스킬 효과 6종</h3><ul><li><span class="patch-tag new">신규</span> <b>출혈</b>: 매 턴 HP 감소 (물리 계열)</li><li><span class="patch-tag new">신규</span> <b>화상</b>: 매 턴 HP 감소 (마법 계열)</li><li><span class="patch-tag new">신규</span> <b>기절</b>: 1턴 행동 불가</li><li><span class="patch-tag new">신규</span> <b>봉인</b>: 스킬 사용 불가</li><li><span class="patch-tag new">신규</span> <b>도발</b>: 강제 타겟 지정</li><li><span class="patch-tag new">신규</span> <b>보호막</b>: 피해 흡수 배리어</li></ul></div><div class="patch-section"><h3>장비 대확장</h3><ul><li><span class="patch-tag improve">개선</span> 방어구 <b>30개씩</b> 통일 (투구/갑옷/장갑/신발/목걸이/반지)</li><li><span class="patch-tag improve">개선</span> 공용 무기 라인업 추가</li><li><span class="patch-tag improve">개선</span> 등급별 강화 상한 조정</li></ul></div><div class="patch-section"><h3>하이로우 밸런스</h3><ul><li><span class="patch-tag improve">개선</span> 리스크 기반 배율 시스템</li><li><span class="patch-tag improve">개선</span> 서버 세션 기반 게임 진행</li><li><span class="patch-tag fix">수정</span> 치팅 방지 강화</li></ul></div><div class="patch-section"><h3>도감 개선</h3><ul><li><span class="patch-tag improve">개선</span> 신규 효과 라벨 표시</li><li><span class="patch-tag improve">개선</span> 소환수 타입 필터 확장</li></ul></div>`
+      },
+    ];
+
+    for (const note of patchNotesSeed) {
+      await pool.query(
+        'INSERT INTO patch_notes (version, title, date, content) VALUES (?, ?, ?, ?)',
+        [note.version, note.title, note.date, note.content]
+      );
+    }
+    console.log('Patch notes seeded (v1~v12)');
+  }
+
+  // ========== 등급 전용 용병 스킬 (64개: 8 classes × 8 skills) ==========
+  {
+    const [[gradeSkillCheck]] = await pool.query("SELECT COUNT(*) as cnt FROM mercenary_skills WHERE name='극한 검격'").catch(() => [[{cnt:1}]]);
+    if (gradeSkillCheck.cnt === 0) {
+      const gradeSkills = [
+        // ── 검사: 검술 극의 ──
+        // 희귀+ (Lv15, Lv25)
+        ['극한 검격',   '검사', 'attack', 18, 3.5, 0, null, 0, 0, 15, 1, '희귀', '극한까지 연마한 검격으로 적을 벤다.'],
+        ['만검풍',     '검사', 'aoe',   25, 3.0, 0, null, 0, 0, 25, 2, '희귀', '무수한 검기를 사방에 뿌린다.'],
+        // 영웅+ (Lv30, Lv45)
+        ['섬광참',     '검사', 'attack', 30, 5.0, 0, null, 0, 0, 30, 2, '영웅', '빛보다 빠른 참격을 날린다.'],
+        ['검왕의 기세', '검사', 'buff',   35, 0, 0, 'attack', 20, 4, 45, 3, '영웅', '검왕의 기세를 뿜어내어 공격력을 대폭 올린다.'],
+        // 전설+ (Lv50, Lv65)
+        ['천검무',     '검사', 'aoe',   50, 8.0, 0, null, 0, 0, 50, 4, '전설', '하늘에서 천 개의 검이 쏟아진다.'],
+        ['절검 일섬',   '검사', 'attack', 55, 9.0, 0, null, 0, 0, 65, 4, '전설', '모든 것을 끊어내는 궁극의 일섬.'],
+        // 신화+ (Lv70)
+        ['무아지검',   '검사', 'attack', 70, 11.0, 0, null, 0, 0, 70, 5, '신화', '무아의 경지에서 펼치는 신검.'],
+        // 초월 (Lv85)
+        ['만검귀일',   '검사', 'attack', 90, 15.0, 0, null, 0, 0, 85, 6, '초월', '만 개의 검이 하나로 수렴하는 궁극기.'],
+
+        // ── 창병: 창술 극의 ──
+        ['천공관통',   '창병', 'attack', 18, 3.2, 0, null, 0, 0, 15, 1, '희귀', '하늘을 찌르듯 관통하는 창격.'],
+        ['폭풍창격',   '창병', 'aoe',   22, 3.0, 0, null, 0, 0, 25, 2, '희귀', '폭풍을 일으키며 창을 휘두른다.'],
+        ['용아돌파',   '창병', 'attack', 28, 5.5, 0, null, 0, 0, 30, 2, '영웅', '용의 이빨처럼 적을 꿰뚫는다.'],
+        ['철벽진',     '창병', 'buff',   35, 0, 0, 'defense', 25, 4, 45, 3, '영웅', '무적의 철벽 방진을 펼친다.'],
+        ['파천창',     '창병', 'attack', 45, 7.5, 0, null, 0, 0, 50, 4, '전설', '하늘을 가르는 창격.'],
+        ['멸신창',     '창병', 'attack', 55, 8.5, 0, null, 0, 0, 65, 4, '전설', '신도 멸하는 창의 일격.'],
+        ['무쌍난무',   '창병', 'aoe',   75, 10.0, 0, null, 0, 0, 70, 5, '신화', '무쌍의 경지에서 펼치는 창술 난무.'],
+        ['천지개벽창', '창병', 'attack', 85, 14.0, 0, null, 0, 0, 85, 6, '초월', '천지를 개벽하는 궁극의 창격.'],
+
+        // ── 궁수: 신궁 극의 ──
+        ['관통연사',   '궁수', 'attack', 16, 3.3, 0, null, 0, 0, 15, 1, '희귀', '관통하는 화살을 연속으로 쏜다.'],
+        ['유성우',     '궁수', 'aoe',   24, 3.5, 0, null, 0, 0, 25, 2, '희귀', '유성처럼 화살비를 쏟아낸다.'],
+        ['파마궁',     '궁수', 'attack', 30, 5.0, 0, null, 0, 0, 30, 2, '영웅', '마물을 파멸시키는 파마의 화살.'],
+        ['매의 눈',    '궁수', 'buff',   25, 0, 0, 'attack', 18, 4, 45, 3, '영웅', '매의 시야로 급소를 간파한다.'],
+        ['천궁연쇄',   '궁수', 'aoe',   50, 7.0, 0, null, 0, 0, 50, 4, '전설', '하늘 가득 연쇄하는 빛의 화살.'],
+        ['신궁 일격',  '궁수', 'attack', 60, 9.0, 0, null, 0, 0, 65, 4, '전설', '백발백중의 신궁이 쏘는 치명의 일격.'],
+        ['만시지탄',   '궁수', 'attack', 70, 12.0, 0, null, 0, 0, 70, 5, '신화', '시간이 멈춘 듯 정확한 궁극의 사격.'],
+        ['성궁천벌',   '궁수', 'aoe',   95, 14.0, 0, null, 0, 0, 85, 6, '초월', '성스러운 빛의 화살이 천벌을 내린다.'],
+
+        // ── 도사: 도술 극의 ──
+        ['뇌격부',     '도사', 'attack', 20, 3.5, 0, null, 0, 0, 15, 1, '희귀', '번개를 담은 강력한 부적.'],
+        ['결계 확장',  '도사', 'buff',   22, 0, 0, 'defense', 15, 4, 25, 2, '희귀', '결계를 넓혀 아군 전체를 보호한다.'],
+        ['오뢰신장',   '도사', 'aoe',   35, 5.0, 0, null, 0, 0, 30, 2, '영웅', '다섯 줄기 뇌전을 불러 적을 강타한다.'],
+        ['봉신결계',   '도사', 'debuff', 30, 0, 0, 'attack', -15, 4, 45, 3, '영웅', '적의 힘을 봉인하는 강력한 결계.'],
+        ['만법귀일',   '도사', 'attack', 50, 8.0, 0, null, 0, 0, 50, 4, '전설', '만 가지 술법이 하나로 수렴한다.'],
+        ['천뢰',       '도사', 'aoe',   55, 7.5, 0, null, 0, 0, 65, 4, '전설', '하늘의 뇌전을 내려 적을 소멸시킨다.'],
+        ['태을선법',   '도사', 'attack', 75, 11.0, 0, null, 0, 0, 70, 5, '신화', '태을선인의 술법을 재현한다.'],
+        ['개천술',     '도사', 'aoe',   100, 13.0, 0, null, 0, 0, 85, 6, '초월', '하늘을 열어 신의 힘을 빌리는 궁극 도술.'],
+
+        // ── 무사: 무술 극의 ──
+        ['패왕격',     '무사', 'attack', 20, 3.8, 0, null, 0, 0, 15, 1, '희귀', '패왕의 힘을 담은 일격.'],
+        ['전장포효',   '무사', 'buff',   22, 0, 0, 'attack', 15, 4, 25, 2, '희귀', '전장의 포효로 아군 사기를 높인다.'],
+        ['멸진격',     '무사', 'attack', 32, 5.5, 0, null, 0, 0, 30, 2, '영웅', '모든 것을 멸하는 분쇄 일격.'],
+        ['불굴의 의지', '무사', 'buff',   35, 0, 0, 'defense', 20, 4, 45, 3, '영웅', '불굴의 의지로 방어력을 극대화한다.'],
+        ['천하무적',   '무사', 'attack', 50, 8.5, 0, null, 0, 0, 50, 4, '전설', '천하에 적이 없는 파괴적 일격.'],
+        ['파왕절권',   '무사', 'attack', 60, 9.0, 0, null, 0, 0, 65, 4, '전설', '패왕의 주먹이 모든 것을 파괴한다.'],
+        ['전신강림',   '무사', 'buff',   65, 0, 0, 'attack', 30, 5, 70, 5, '신화', '전쟁의 신이 강림하여 힘을 부여한다.'],
+        ['건곤일척',   '무사', 'attack', 95, 15.0, 0, null, 0, 0, 85, 6, '초월', '모든 것을 걸고 내려치는 궁극의 일격.'],
+
+        // ── 치유사: 신성 극의 ──
+        ['성광치유',   '치유사', 'heal',  20, 0, 60, null, 0, 0, 15, 1, '희귀', '성스러운 빛으로 깊은 상처를 치유한다.'],
+        ['정화의 빛',  '치유사', 'debuff', 22, 0, 0, 'attack', -12, 3, 25, 2, '희귀', '정화의 빛으로 적의 어둠을 제거한다.'],
+        ['신성 방벽',  '치유사', 'buff',  30, 0, 0, 'defense', 20, 4, 30, 2, '영웅', '신성한 방벽으로 아군을 보호한다.'],
+        ['부활의 빛',  '치유사', 'heal',  40, 0, 100, null, 0, 0, 45, 4, '영웅', '빛의 힘으로 전투 불능의 아군을 되살린다.'],
+        ['완전정화',   '치유사', 'heal',  50, 0, 150, null, 0, 0, 50, 4, '전설', '모든 상태이상과 상처를 완전히 정화한다.'],
+        ['축복의 비',  '치유사', 'heal',  55, 0, 120, null, 0, 0, 65, 4, '전설', '축복의 비가 내려 아군 전체를 치유한다.'],
+        ['천상의 은혜', '치유사', 'heal',  70, 0, 200, null, 0, 0, 70, 5, '신화', '천상의 은혜로 아군에게 기적의 치유를 내린다.'],
+        ['생명의 나무', '치유사', 'heal',  90, 0, 300, null, 0, 0, 85, 6, '초월', '생명의 나무가 자라나 모든 아군을 완전 회복시킨다.'],
+
+        // ── 자객: 암살 극의 ──
+        ['그림자 분신', '자객', 'buff',   18, 0, 0, 'attack', 12, 3, 15, 1, '희귀', '그림자 분신으로 공격 횟수를 늘린다.'],
+        ['맹독침',     '자객', 'debuff', 20, 0, 0, 'defense', -12, 4, 25, 2, '희귀', '맹독 침을 박아 적의 방어를 무력화한다.'],
+        ['사신의 낫',  '자객', 'attack', 30, 5.5, 0, null, 0, 0, 30, 2, '영웅', '사신의 낫처럼 적의 목을 노린다.'],
+        ['잔영난무',   '자객', 'aoe',   38, 4.5, 0, null, 0, 0, 45, 3, '영웅', '잔영을 남기며 적 전체를 베어낸다.'],
+        ['절명',       '자객', 'attack', 50, 8.0, 0, null, 0, 0, 50, 4, '전설', '반드시 죽이는 암살 기술.'],
+        ['허공답보',   '자객', 'attack', 55, 8.5, 0, null, 0, 0, 65, 4, '전설', '허공을 밟으며 연속 암살을 가한다.'],
+        ['무영살',     '자객', 'attack', 75, 11.0, 0, null, 0, 0, 70, 5, '신화', '그림자조차 없는 무영의 살의.'],
+        ['만살귀환',   '자객', 'attack', 85, 14.0, 0, null, 0, 0, 85, 6, '초월', '만 가지 죽음이 돌아오는 궁극의 암살기.'],
+
+        // ── 마법사: 마법 극의 ──
+        ['마력 폭발',  '마법사', 'aoe',   20, 3.5, 0, null, 0, 0, 15, 1, '희귀', '마력을 폭발시켜 주변을 강타한다.'],
+        ['빙결술',     '마법사', 'debuff', 22, 0, 0, 'defense', -15, 4, 25, 2, '희귀', '적을 얼려 방어력을 크게 낮춘다.'],
+        ['화염지옥',   '마법사', 'aoe',   35, 5.5, 0, null, 0, 0, 30, 2, '영웅', '지옥의 화염으로 적 전체를 불태운다.'],
+        ['마력 증폭',  '마법사', 'buff',  30, 0, 0, 'attack', 22, 4, 45, 3, '영웅', '마력을 극한까지 증폭시킨다.'],
+        ['절대영도',   '마법사', 'aoe',   50, 7.5, 0, null, 0, 0, 50, 4, '전설', '절대영도의 냉기로 모든 것을 얼린다.'],
+        ['대마법진',   '마법사', 'aoe',   60, 8.0, 0, null, 0, 0, 65, 4, '전설', '거대한 마법진을 펼쳐 적을 소멸시킨다.'],
+        ['차원붕괴',   '마법사', 'aoe',   80, 12.0, 0, null, 0, 0, 70, 5, '신화', '차원을 붕괴시켜 적을 다른 세계로 날린다.'],
+        ['세계멸망',   '마법사', 'aoe',   100, 14.0, 0, null, 0, 0, 85, 6, '초월', '세계를 멸망시키는 궁극의 마법.'],
+      ];
+
+      for (const [name, cls, type, mp, dmg, heal, bStat, bVal, bDur, reqLv, cd, minGrade, desc] of gradeSkills) {
+        const [exist] = await pool.query('SELECT id FROM mercenary_skills WHERE name = ? AND class_type = ?', [name, cls]);
+        if (exist.length > 0) continue;
+        await pool.query(
+          `INSERT INTO mercenary_skills (name, class_type, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown, is_common, min_grade)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+          [name, cls, desc, type, mp, dmg, heal, bStat, bVal, bDur, reqLv, cd, minGrade]
+        ).catch(e => console.error('Grade merc skill error:', name, e.message));
+      }
+      console.log('Grade-exclusive mercenary skills inserted (64 skills)');
+    }
+  }
+
   console.log('Database initialized (balance v10 applied)');
 }
 
@@ -8871,4 +9308,7 @@ async function refreshStamina(char, connOrPool) {
   return { stamina: curSt, maxStamina: maxSt };
 }
 
-module.exports = { get pool() { return getPool(); }, initialize, getSelectedChar, calcMaxStamina, refreshStamina };
+// ── 등급 전용 GRADE_ORDER (스킬 학습 시 사용) ──
+const GRADE_ORDER = ['일반','고급','희귀','영웅','전설','신화','초월'];
+
+module.exports = { get pool() { return getPool(); }, initialize, getSelectedChar, calcMaxStamina, refreshStamina, GRADE_ORDER };
