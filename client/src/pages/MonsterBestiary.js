@@ -859,6 +859,8 @@ const CLASS_INFO = {
   '무당':   { icon: '🪬', color: '#c084fc' },
   '승려':   { icon: '📿', color: '#fbbf24' },
   '저승사자': { icon: '💀', color: '#9b59b6' },
+  '북채비': { icon: '🛡️', color: '#a78bfa' },
+  '강신무': { icon: '🗡️', color: '#ef4444' },
 };
 
 const MERC_CLASS_INFO = {
@@ -878,6 +880,9 @@ const SUMMON_TYPE_INFO = {
   '몬스터': { icon: '🐺', color: '#ef4444' },
   '정령': { icon: '💧', color: '#60a5fa' },
   '언데드': { icon: '💀', color: '#9ca3af' },
+  '신수': { icon: '🐲', color: '#fbbf24' },
+  '용': { icon: '🐉', color: '#3b82f6' },
+  '마수': { icon: '🦄', color: '#ef4444' },
   '공용': { icon: '⭐', color: '#fbbf24' },
 };
 
@@ -892,10 +897,11 @@ const SKILL_NODE_TYPE_COLORS = { active: '#3b82f6', passive: '#f59e0b' };
 const SKILL_STAT_LABELS = {
   hp: 'HP', mp: 'MP', attack: 'ATK', defense: 'DEF',
   phys_attack: '물공', phys_defense: '물방', mag_attack: '마공', mag_defense: '마방',
-  crit_rate: '치명', evasion: '회피',
-  poison: '독', stun: '마비', revive: '부활', cleanse: '해독', selfdestruct: '자폭', charm: '매혹', seal: '봉인',
+  crit_rate: '치명', crit_damage: '크리뎀', evasion: '회피',
+  poison: '독', bleed: '출혈', burn: '화상', stun: '기절', seal: '봉인', charm: '매혹',
+  shield: '보호막', taunt: '도발', revive: '부활', cleanse: '정화', selfdestruct: '자폭',
 };
-const DEBUFF_STATS = new Set(['poison', 'stun', 'selfdestruct', 'charm', 'seal']);
+const DEBUFF_STATS = new Set(['poison', 'bleed', 'burn', 'stun', 'selfdestruct', 'charm', 'seal']);
 
 function SkillTab() {
   const [skills, setSkills] = useState([]);
@@ -949,9 +955,9 @@ function SkillTab() {
     }
   }
 
-  const charClasses = ['풍수사', '무당', '승려', '저승사자'];
+  const charClasses = ['풍수사', '무당', '승려', '저승사자', '북채비', '강신무'];
   const mercClasses = ['검사', '창병', '궁수', '도사', '무사', '치유사', '자객', '마법사', '공용'];
-  const summonTypes = ['귀신', '몬스터', '정령', '언데드', '공용'];
+  const summonTypes = ['귀신', '몬스터', '정령', '언데드', '신수', '용', '마수', '공용'];
 
   const tierLabel = (tier) => {
     if (tier === 7) return '신화';
@@ -1235,7 +1241,7 @@ function SkillTab() {
                       <div className="equip-stat-row"><span className="equip-stat-icon">💚</span><span className="equip-stat-label">치유량</span><span className="equip-stat-value equip-sv-hp">+{ss.heal_amount}</span></div>
                     )}
                     {ss.buff_stat && (
-                      <div className="equip-stat-row"><span className="equip-stat-icon">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '⬇️' : '⬆️'}</span><span className="equip-stat-label">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '디버프' : '버프'} ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value" style={{ color: DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '#ef4444' : '#22c55e' }}>{ss.buff_stat === 'poison' ? `-${ss.buff_value}%` : ss.buff_stat === 'stun' ? `${ss.buff_duration}턴` : `${ss.buff_value >= 0 ? '+' : ''}${ss.buff_value}`} ({ss.buff_duration}턴)</span></div>
+                      <div className="equip-stat-row"><span className="equip-stat-icon">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '⬇️' : '⬆️'}</span><span className="equip-stat-label">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '디버프' : '버프'} ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value" style={{ color: DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '#ef4444' : '#22c55e' }}>{['poison','bleed','burn'].includes(ss.buff_stat) ? `-${ss.buff_value}%/턴` : ['stun','seal','charm','taunt'].includes(ss.buff_stat) ? `${ss.buff_duration}턴` : ss.buff_stat === 'shield' ? `${ss.buff_value} 흡수` : `${ss.buff_value >= 0 ? '+' : ''}${ss.buff_value}`} ({ss.buff_duration}턴)</span></div>
                     )}
                     {ss.cooldown > 0 && (
                       <div className="equip-stat-row"><span className="equip-stat-icon">⏱️</span><span className="equip-stat-label">쿨타임</span><span className="equip-stat-value">{ss.cooldown}턴</span></div>
@@ -1283,7 +1289,7 @@ function SkillTab() {
                       <div className="equip-stat-row"><span className="equip-stat-icon">💚</span><span className="equip-stat-label">치유량</span><span className="equip-stat-value equip-sv-hp">+{ss.heal_amount}</span></div>
                     )}
                     {ss.buff_stat && (
-                      <div className="equip-stat-row"><span className="equip-stat-icon">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '⬇️' : '⬆️'}</span><span className="equip-stat-label">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '디버프' : '버프'} ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value" style={{ color: DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '#ef4444' : '#22c55e' }}>{ss.buff_stat === 'poison' ? `-${ss.buff_value}%` : ss.buff_stat === 'stun' ? `${ss.buff_duration}턴` : `${ss.buff_value >= 0 ? '+' : ''}${ss.buff_value}`} ({ss.buff_duration}턴)</span></div>
+                      <div className="equip-stat-row"><span className="equip-stat-icon">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '⬇️' : '⬆️'}</span><span className="equip-stat-label">{DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '디버프' : '버프'} ({SKILL_STAT_LABELS[ss.buff_stat] || ss.buff_stat})</span><span className="equip-stat-value" style={{ color: DEBUFF_STATS.has(ss.buff_stat) || ss.buff_value < 0 ? '#ef4444' : '#22c55e' }}>{['poison','bleed','burn'].includes(ss.buff_stat) ? `-${ss.buff_value}%/턴` : ['stun','seal','charm','taunt'].includes(ss.buff_stat) ? `${ss.buff_duration}턴` : ss.buff_stat === 'shield' ? `${ss.buff_value} 흡수` : `${ss.buff_value >= 0 ? '+' : ''}${ss.buff_value}`} ({ss.buff_duration}턴)</span></div>
                     )}
                     {ss.cooldown > 0 && (
                       <div className="equip-stat-row"><span className="equip-stat-icon">⏱️</span><span className="equip-stat-label">쿨타임</span><span className="equip-stat-value">{ss.cooldown}턴</span></div>

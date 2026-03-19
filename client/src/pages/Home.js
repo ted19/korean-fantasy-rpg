@@ -143,10 +143,10 @@ function Home({ user, character, onLogout, onCharacterDeleted, onGoToCharacterSe
     if (character.prologue_cleared === 1) checkBattleSession();
   }, []); // eslint-disable-line
 
-  // 입장 횟수 쿨타임 자동 갱신 (60초마다)
+  // 입장 횟수 쿨타임 자동 갱신 (60초마다, 최대가 아닌 항목이 있으면)
   useEffect(() => {
-    const hasCooldown = Object.values(contentCharges).some(c => c.charges === 0);
-    if (!hasCooldown || fighting || srpgBattle) return;
+    const needsRefresh = Object.values(contentCharges).some(c => c.charges < (c.maxCharges || 5));
+    if (!needsRefresh || fighting || srpgBattle) return;
     const interval = setInterval(loadContentCharges, 60000);
     return () => clearInterval(interval);
   }, [contentCharges, fighting, srpgBattle]); // eslint-disable-line

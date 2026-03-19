@@ -10,7 +10,7 @@ import { rollEliteTier, applyEliteStats } from './battleEngine';
 import api from '../api';
 import './CrawlerBattle.css';
 
-const CLASS_ELEMENT_MAP = { '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark' };
+const CLASS_ELEMENT_MAP = { '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark', '북채비': 'earth', '강신무': 'fire' };
 
 const MONSTER_BATTLE_LINES = [
   '크아아아!! 덤벼라!', '잡아주마!', '이 힘을 보여주겠다!',
@@ -177,13 +177,29 @@ export default function CrawlerBattle({
       let playerInFormation = true;
       let cosmeticMap = {};
       try {
-        const [summonRes, mercRes, fRes, cosRes] = await Promise.all([
+        const [summonRes, mercRes, fRes, cosRes, equipRes] = await Promise.all([
           api.get('/summon/my'),
           api.get('/mercenary/my'),
           api.get('/formation/list'),
           api.get('/shop/cosmetics/equipped').catch(() => ({ data: { cosmetics: {} } })),
+          api.get('/equipment/list').catch(() => ({ data: { equipped: {} } })),
         ]);
         cosmeticMap = cosRes.data.cosmetics || {};
+        // 장착 무기의 weapon_subtype → 플레이어 유닛에 설정
+        const equippedWeapon = equipRes.data?.equipped?.weapon;
+        if (equippedWeapon?.weapon_subtype) {
+          playerUnit.weaponType = equippedWeapon.weapon_subtype;
+          if (equippedWeapon.weapon_subtype === 'bow') {
+            playerUnit.rangeType = 'ranged';
+            playerUnit.row = 'back';
+          } else if (['staff', 'talisman', 'bell', 'moktak'].includes(equippedWeapon.weapon_subtype)) {
+            playerUnit.rangeType = 'magic';
+            playerUnit.row = 'back';
+          } else if (['sword', 'spear', 'axe', 'scythe', 'mace', 'greatshield', 'sinkal', 'dagger'].includes(equippedWeapon.weapon_subtype)) {
+            playerUnit.rangeType = 'melee';
+            playerUnit.row = 'front';
+          }
+        }
         const freshSummons = summonRes.data.summons || [];
         const freshMercs = mercRes.data.mercenaries || [];
         const mainFormation = fRes.data.formations?.find(f => f.slotIndex === 0);

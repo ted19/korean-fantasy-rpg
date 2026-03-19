@@ -3,8 +3,8 @@ import api from '../api';
 import ThreeFirstPersonView from './ThreeFirstPersonView';
 import './DungeonCrawler.css';
 
-const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
-const CLASS_ELEMENT_MAP = { '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark' };
+const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper', '북채비': 'bukchaebi', '강신무': 'gangsinmu' };
+const CLASS_ELEMENT_MAP = { '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark', '북채비': 'earth', '강신무': 'fire' };
 const ELEMENT_AURA_MAP = { fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy', light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison' };
 
 // ========== 미로 생성 (Recursive Backtracking) ==========

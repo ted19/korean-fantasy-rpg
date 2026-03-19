@@ -87,7 +87,7 @@ const PROLOGUE_DATA = {
     battleIntro: '원혼들이 덮쳐온다! 첫 번째 전투를 시작합니다.',
   },
   '승려': {
-    title: '금강의 수호자',
+    title: '깨달음의 수행자',
     scenes: [
       {
         bg: '/stages/silla_bg.png',
@@ -102,27 +102,27 @@ const PROLOGUE_DATA = {
       {
         bg: '/stages/silla_bg.png',
         speaker: '주지스님',
-        text: '수행자여, 네 금강의 힘은 이미 충분하다. 하지만 진정한 깨달음은 산 밖에서 얻는 법이지.',
+        text: '수행자여, 네 법력은 이미 산을 넘었다. 하지만 진정한 깨달음은 산 밖에서 얻는 법이지.',
       },
       {
         bg: '/stages/silla_bg.png',
         speaker: '승려',
-        text: '스님, 산 아래 마을에서 마물이 나타났다는 소식을 들었습니다. 제가 가겠습니다.',
+        text: '스님, 산 아래 마을에서 마물이 나타났다는 소식을 들었습니다. 제 진언과 결계로 물리치겠습니다.',
       },
       {
         bg: '/stages/silla_bg.png',
         speaker: '주지스님',
-        text: '좋다. 네 주먹과 경문이 마을 사람들을 지켜줄 것이다. 가거라, 그리고 돌아와 네가 본 것을 알려주거라.',
+        text: '좋다. 네 진언과 결계가 마을 사람들을 지켜줄 것이다. 가거라, 그리고 돌아와 네가 본 것을 알려주거라.',
       },
       {
         bg: '/dungeons/cave_bg.png',
         speaker: '나레이션',
-        text: '승려는 산을 내려와 동굴 입구에 도착했다. 동굴 안에서 으르렁거리는 소리가 울려퍼졌다.',
+        text: '승려는 산을 내려와 동굴 입구에 도착했다. 동굴 안에서 사악한 마기가 흘러나오고 있었다.',
       },
       {
         bg: '/dungeons/cave_bg.png',
         speaker: '승려',
-        text: '나무아미타불... 이 안에 마물이 숨어있구나. 금강의 힘으로 물리치겠다.',
+        text: '나무아미타불... 이 안에 마물이 숨어있구나. 파사진언으로 정화하겠다.',
       },
     ],
     battleIntro: '동굴에서 마물이 나타났다! 첫 번째 전투를 시작합니다.',
@@ -167,6 +167,88 @@ const PROLOGUE_DATA = {
       },
     ],
     battleIntro: '늪지대의 마물들이 나타났다! 첫 번째 전투를 시작합니다.',
+  },
+  '북채비': {
+    title: '대지의 수호신',
+    scenes: [
+      {
+        bg: '/stages/gojoseon_bg.png',
+        speaker: '???',
+        text: '...이 땅은 내가 지킨다.',
+      },
+      {
+        bg: '/stages/gojoseon_bg.png',
+        speaker: '나레이션',
+        text: '고조선 시대, 산성을 지키던 수호 전사가 있었다. 대지의 힘을 빌려 거대한 방패로 마을을 보호하는 자—북채비.',
+      },
+      {
+        bg: '/stages/gojoseon_bg.png',
+        speaker: '촌장',
+        text: '북채비여, 산 너머에서 마물 무리가 몰려오고 있소. 이 마을을 지켜줄 수 있는 건 그대의 방패뿐이오.',
+      },
+      {
+        bg: '/stages/gojoseon_bg.png',
+        speaker: '북채비',
+        text: '걱정 마십시오, 촌장님. 이 방패가 있는 한 마을에는 먼지 한 톨 들어오지 못합니다.',
+      },
+      {
+        bg: '/stages/gojoseon_bg.png',
+        speaker: '촌장',
+        text: '하지만 이번 마물들은 이전과 달라. 산성 밖 숲에 둥지를 틀었다고 하오. 직접 가서 소탕해야 할 것이오.',
+      },
+      {
+        bg: '/dungeons/forest_bg.png',
+        speaker: '나레이션',
+        text: '북채비는 거대한 방패를 등에 메고 숲으로 향했다. 나무 사이로 으르렁거리는 소리가 울려퍼졌다.',
+      },
+      {
+        bg: '/dungeons/forest_bg.png',
+        speaker: '북채비',
+        text: '오라, 마물들아. 이 방패를 뚫어볼 테면 뚫어봐라. 대지의 힘이 나와 함께한다.',
+      },
+    ],
+    battleIntro: '숲에서 마물이 나타났다! 첫 번째 전투를 시작합니다.',
+  },
+  '강신무': {
+    title: '신령을 내린 무인',
+    scenes: [
+      {
+        bg: '/stages/samhan_bg.png',
+        speaker: '???',
+        text: '...불꽃이 타오른다. 내 안의 신령이 눈을 뜨고 있어.',
+      },
+      {
+        bg: '/stages/samhan_bg.png',
+        speaker: '나레이션',
+        text: '삼한 시대, 신령의 힘을 몸에 내리는 무술이 전해지고 있었다. 강신무—신의 힘을 빌려 칼을 휘두르는 자.',
+      },
+      {
+        bg: '/stages/samhan_bg.png',
+        speaker: '사부',
+        text: '너의 몸에는 신령이 깃들 자질이 있다. 하지만 힘을 제어하지 못하면 신령에게 삼켜지게 된다.',
+      },
+      {
+        bg: '/stages/samhan_bg.png',
+        speaker: '강신무',
+        text: '사부님, 마을 밖에서 마물이 사람들을 해치고 있습니다. 제 칼로 베어내겠습니다.',
+      },
+      {
+        bg: '/stages/samhan_bg.png',
+        speaker: '사부',
+        text: '좋다. 이 신칼을 가져가거라. 신령의 불꽃을 담은 검이다. 그러나 힘에 취하지 마라.',
+      },
+      {
+        bg: '/dungeons/forest_bg.png',
+        speaker: '나레이션',
+        text: '강신무는 신칼을 허리에 차고 마을 밖으로 나섰다. 붉은 화염이 칼날을 감싸기 시작했다.',
+      },
+      {
+        bg: '/dungeons/forest_bg.png',
+        speaker: '강신무',
+        text: '불꽃이여, 내 칼에 깃들어라. 마물의 어둠을 이 화염으로 태워버리겠다!',
+      },
+    ],
+    battleIntro: '마물이 덮쳐온다! 첫 번째 전투를 시작합니다.',
   },
 };
 

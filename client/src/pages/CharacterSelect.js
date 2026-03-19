@@ -6,9 +6,11 @@ const CLASS_IMAGES = {
   '무당': '/characters/mudang_full.png',
   '승려': '/characters/monk_full.png',
   '저승사자': '/characters/reaper_full.png',
+  '북채비': '/characters/bukchaebi_full.png',
+  '강신무': '/characters/gangsinmu_full.png',
 };
 
-const CLASS_ICONS = { '풍수사': '⬥', '무당': '◈', '승려': '◆', '저승사자': '☠' };
+const CLASS_ICONS = { '풍수사': '⬥', '무당': '◈', '승려': '◆', '저승사자': '☠', '북채비': '⛨', '강신무': '⚔' };
 
 const ELEMENT_INFO = {
   fire:    { name: '화', icon: '◆', color: '#c87a4a' },

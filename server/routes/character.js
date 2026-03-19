@@ -24,8 +24,10 @@ function auth(req, res, next) {
 const CLASS_STATS = {
   '풍수사': { hp: 80, mp: 120, attack: 15, defense: 5, phys_attack: 5, phys_defense: 3, mag_attack: 14, mag_defense: 6, crit_rate: 5, evasion: 5 },
   '무당':   { hp: 100, mp: 100, attack: 12, defense: 7, phys_attack: 8, phys_defense: 5, mag_attack: 10, mag_defense: 5, crit_rate: 8, evasion: 8 },
-  '승려':   { hp: 130, mp: 70, attack: 10, defense: 12, phys_attack: 10, phys_defense: 11, mag_attack: 5, mag_defense: 8, crit_rate: 6, evasion: 3 },
+  '승려':   { hp: 100, mp: 110, attack: 10, defense: 8, phys_attack: 4, phys_defense: 5, mag_attack: 12, mag_defense: 10, crit_rate: 5, evasion: 4 },
   '저승사자': { hp: 90, mp: 90, attack: 18, defense: 4, phys_attack: 12, phys_defense: 2, mag_attack: 12, mag_defense: 4, crit_rate: 12, evasion: 10 },
+  '북채비': { hp: 140, mp: 50, attack: 12, defense: 14, phys_attack: 11, phys_defense: 13, mag_attack: 2, mag_defense: 6, crit_rate: 4, evasion: 2 },
+  '강신무': { hp: 110, mp: 80, attack: 14, defense: 8, phys_attack: 12, phys_defense: 7, mag_attack: 6, mag_defense: 5, crit_rate: 9, evasion: 7 },
 };
 
 // ── 닉네임 제한 규칙 ──
@@ -294,6 +296,8 @@ const PROLOGUE_MONSTERS = {
   '무당': ['떠도는 영혼', '야광귀', '봉사귀'],
   '승려': ['멧돼지', '회색 곰', '독거미'],
   '저승사자': ['떠도는 영혼', '독 슬라임', '원혼'],
+  '북채비': ['멧돼지', '초록 슬라임', '회색 곰'],
+  '강신무': ['빨강 슬라임', '독버섯', '야광귀'],
 };
 
 router.get('/prologue-battle', auth, async (req, res) => {

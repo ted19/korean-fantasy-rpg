@@ -23,9 +23,9 @@ const CLASS_INFO = {
     image: '/characters/mudang_full.png',
   },
   '승려': {
-    description: '수행을 통해 깨달음을 얻은 전사. 높은 체력과 방어력으로 전선을 지킨다.',
-    stats: { hp: 120, mp: 60, phys_attack: 7, mag_attack: 2, phys_defense: 11, mag_defense: 5, crit_rate: 10, evasion: 3 },
-    icon: '☸️',
+    description: '불법의 힘으로 아군을 치유하고 적을 제압하는 수행자. 높은 마공과 마방을 자랑한다.',
+    stats: { hp: 100, mp: 110, phys_attack: 4, mag_attack: 12, phys_defense: 5, mag_defense: 10, crit_rate: 5, evasion: 4 },
+    icon: '📿',
     image: '/characters/monk_full.png',
   },
   '저승사자': {
@@ -35,9 +35,21 @@ const CLASS_INFO = {
     image: '/characters/reaper_full.png',
     forceElement: 'neutral',
   },
+  '북채비': {
+    description: '대지의 힘을 빌린 수호신. 거대방패로 아군을 지키며 높은 체력과 방어력을 자랑한다.',
+    stats: { hp: 140, mp: 50, phys_attack: 11, mag_attack: 2, phys_defense: 13, mag_defense: 6, crit_rate: 4, evasion: 2 },
+    icon: '🛡️',
+    image: '/characters/bukchaebi_full.png',
+  },
+  '강신무': {
+    description: '신령의 힘을 몸에 내린 무인. 높은 공격력과 빠른 치명타로 적을 압도한다.',
+    stats: { hp: 110, mp: 80, phys_attack: 12, mag_attack: 6, phys_defense: 7, mag_defense: 5, crit_rate: 9, evasion: 7 },
+    icon: '🗡️',
+    image: '/characters/gangsinmu_full.png',
+  },
 };
 
-const statMax = { hp: 120, mp: 120, phys_attack: 12, mag_attack: 12, phys_defense: 11, mag_defense: 6, crit_rate: 12, evasion: 10 };
+const statMax = { hp: 140, mp: 120, phys_attack: 12, mag_attack: 12, phys_defense: 13, mag_defense: 6, crit_rate: 12, evasion: 10 };
 const statLabels = { hp: 'HP', mp: 'MP', phys_attack: '물공', mag_attack: '마공', phys_defense: '물방', mag_defense: '마방', crit_rate: '치명', evasion: '회피' };
 const statColors = { hp: '#4ade80', mp: '#60a5fa', phys_attack: '#f87171', mag_attack: '#818cf8', phys_defense: '#fbbf24', mag_defense: '#94a3b8', crit_rate: '#fb923c', evasion: '#2dd4bf' };
 

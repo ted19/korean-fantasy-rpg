@@ -20,9 +20,9 @@ function UnitImg({ src, fallbackSrc, fallback, className, style }) {
 /* ========== 유닛 스프라이트 이미지 URL ========== */
 function getUnitImage(unit) {
   if (unit.id === 'player') {
-    const classKey = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
+    const classKey = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper', '북채비': 'bukchaebi', '강신무': 'gangsinmu' };
     const key = classKey[unit.classType];
-    return { src: key ? `/tower_sprites/${key}.png` : null, fallbackSrc: key ? `/characters/${key}_icon.png` : null };
+    return { src: key ? `/characters/${key}_full.png` : null, fallbackSrc: key ? `/characters/${key}_icon.png` : null };
   }
   if (unit.id.startsWith('summon_')) {
     // imageUrl은 battleEngine에서 template_id 기반으로 설정됨

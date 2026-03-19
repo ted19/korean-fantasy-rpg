@@ -17,7 +17,7 @@ const ELEMENT_AURA_MAP = {
   light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
 };
 const CLASS_ELEMENT_MAP = {
-  '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark',
+  '풍수사': 'wind', '무당': 'dark', '승려': 'light', '저승사자': 'dark', '북채비': 'earth', '강신무': 'fire',
 };
 
 function StageBattle({ stage, character, charState, learnedSkills, passiveBonuses, activeSummons, activeMercenaries, monsters, groupKey, onBattleEnd, onLog, savedEnemySetup, savedRetreatFailed, isStageCleared }) {
@@ -267,15 +267,32 @@ function StageBattle({ stage, character, charState, learnedSkills, passiveBonuse
       let formationGrid = null;
       let cosmeticMap = {};
       try {
-        const [summonRes, mercRes, fRes, cosmeticRes] = await Promise.all([
+        const [summonRes, mercRes, fRes, cosmeticRes, equipRes] = await Promise.all([
           api.get('/summon/my'),
           api.get('/mercenary/my'),
           api.get('/formation/list'),
           api.get('/shop/cosmetics/equipped').catch(() => ({ data: { cosmetics: {} } })),
+          api.get('/equipment/list').catch(() => ({ data: { equipped: {} } })),
         ]);
         freshSummons = summonRes.data.summons || [];
         freshMercenaries = mercRes.data.mercenaries || [];
         cosmeticMap = cosmeticRes.data.cosmetics || {};
+        // 장착 무기의 weapon_subtype → weaponType, rangeType 결정
+        const equippedWeapon = equipRes.data?.equipped?.weapon;
+        if (equippedWeapon?.weapon_subtype) {
+          playerUnit.weaponType = equippedWeapon.weapon_subtype;
+          // 무기에 따라 rangeType 오버라이드
+          if (equippedWeapon.weapon_subtype === 'bow') {
+            playerUnit.rangeType = 'ranged';
+            playerUnit.row = 'back';
+          } else if (['staff', 'talisman', 'bell', 'moktak'].includes(equippedWeapon.weapon_subtype)) {
+            playerUnit.rangeType = 'magic';
+            playerUnit.row = 'back';
+          } else if (['sword', 'spear', 'axe', 'scythe', 'mace', 'greatshield', 'sinkal', 'dagger'].includes(equippedWeapon.weapon_subtype)) {
+            playerUnit.rangeType = 'melee';
+            playerUnit.row = 'front';
+          }
+        }
         const mainFormation = fRes.data.formations.find(f => f.slotIndex === 0);
         if (mainFormation && mainFormation.gridData) {
           const grid = mainFormation.gridData;

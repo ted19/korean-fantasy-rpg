@@ -75,12 +75,12 @@ const DUNGEON_INTRO_SCENES = {
     {
       bg: '/dungeons/mountain_bg.png',
       speaker: '나레이션',
-      text: '수정 동굴, 서리 산맥, 용의 둥지... 각 던전에는 승려의 금강역사로도 쉽지 않은 강적이 도사리고 있다.',
+      text: '수정 동굴, 서리 산맥, 용의 둥지... 각 던전에는 승려의 법력으로도 쉽지 않은 강적이 도사리고 있다.',
     },
     {
       bg: '/dungeons/mountain_bg.png',
       speaker: '승려',
-      text: '두려움은 없다. 주먹 하나로 동굴을 뚫고, 경문 하나로 마물을 교화하겠다.',
+      text: '두려움은 없다. 진언으로 마물을 정화하고, 결계로 동료를 지키겠다.',
     },
     {
       bg: '/dungeons/dungeon_map_bg.png',
@@ -113,6 +113,60 @@ const DUNGEON_INTRO_SCENES = {
       bg: '/dungeons/dungeon_map_bg.png',
       speaker: '나레이션',
       text: '저승사자는 명부를 펼쳤다. 각 던전의 마물을 하나씩 처리하며 이승의 질서를 바로잡아야 한다.',
+    },
+  ],
+  '북채비': [
+    {
+      bg: '/dungeons/cave_bg.png',
+      speaker: '나레이션',
+      text: '마을을 지키던 북채비의 시선이 멀리 향했다. 산 너머에서 마물이 쏟아져 나오는 곳—던전이 형성되고 있었다.',
+    },
+    {
+      bg: '/dungeons/cave_bg.png',
+      speaker: '북채비',
+      text: '마을 주변만 지켜서는 한계가 있어. 마물의 소굴을 직접 부수러 가야 한다.',
+    },
+    {
+      bg: '/dungeons/mountain_bg.png',
+      speaker: '나레이션',
+      text: '어둠의 동굴, 수정 광산, 용의 둥지... 각 던전에는 방패로도 막기 어려운 강력한 마물이 도사리고 있다.',
+    },
+    {
+      bg: '/dungeons/mountain_bg.png',
+      speaker: '북채비',
+      text: '좋아. 이 방패로 앞장서서 돌파하겠다. 동료들은 내 뒤에서 안전하게 따라오면 돼.',
+    },
+    {
+      bg: '/dungeons/dungeon_map_bg.png',
+      speaker: '나레이션',
+      text: '북채비는 방패를 단단히 쥐고 첫 번째 던전으로 향했다. 입장 티켓을 모아 심층부를 정복해야 한다.',
+    },
+  ],
+  '강신무': [
+    {
+      bg: '/dungeons/forest_bg.png',
+      speaker: '나레이션',
+      text: '신령의 불꽃이 이끄는 곳. 던전—마물의 어둠이 가장 짙게 응축된 장소들이다.',
+    },
+    {
+      bg: '/dungeons/forest_bg.png',
+      speaker: '강신무',
+      text: '신령이 속삭이고 있어. 이 안에 강력한 마기가 있다고... 내 칼이 불타오르고 있다.',
+    },
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '나레이션',
+      text: '독안개 늪, 마왕성, 심해 유적... 각 던전의 마물은 신령의 힘을 가진 강신무조차 긴장하게 만든다.',
+    },
+    {
+      bg: '/dungeons/demon_bg.png',
+      speaker: '강신무',
+      text: '좋아, 불꽃이여! 더 뜨겁게 타올라라. 이 어둠을 전부 태워버리겠다!',
+    },
+    {
+      bg: '/dungeons/dungeon_map_bg.png',
+      speaker: '나레이션',
+      text: '강신무는 화염을 두른 신칼을 들고 던전으로 뛰어들었다. 티켓을 모아 각 던전의 최심부까지 도전해야 한다.',
     },
   ],
 };

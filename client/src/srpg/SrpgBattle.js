@@ -25,7 +25,7 @@ const PHASE = {
   BATTLE_END: 'battle_end',
 };
 
-const CLASS_KEY = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
+const CLASS_KEY = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper', '북채비': 'bukchaebi', '강신무': 'gangsinmu' };
 
 function getUnitPortrait(unit) {
   if (unit.id === 'player') {
@@ -142,7 +142,7 @@ export default function SrpgBattle({
       return { effectType: 'magic', color: '#aa66ff' };
     }
     const wt = unit.weaponType || 'default';
-    if (['bow', 'talisman', 'staff', 'bell'].includes(wt)) {
+    if (['bow', 'talisman', 'staff', 'bell', 'moktak'].includes(wt)) {
       return { effectType: 'ranged', color: '#44aaff' };
     }
     return { effectType: 'melee', color: '#ff6644' };

@@ -137,7 +137,7 @@ router.get('/my', auth, async (req, res) => {
               cs.template_id, cs.star_level,
               st.name, st.type, st.icon, st.base_hp, st.base_mp, st.base_attack, st.base_defense,
               st.base_phys_attack, st.base_phys_defense, st.base_mag_attack, st.base_mag_defense, st.base_crit_rate, st.base_evasion,
-              st.sell_price, st.range_type, st.element, st.grade, st.growth_mult
+              st.sell_price, st.range_type, st.element, st.grade, st.growth_mult, st.weapon_type
        FROM character_summons cs
        JOIN summon_templates st ON cs.template_id = st.id
        WHERE cs.character_id = ?
@@ -177,6 +177,14 @@ router.get('/my', auth, async (req, res) => {
         [s.id]
       );
       s.equipped_count = cnt;
+      // 장착 무기의 weapon_subtype 조회
+      const [weaponRows] = await pool.query(
+        `SELECT it.weapon_subtype FROM summon_equipment se
+         JOIN items it ON se.item_id = it.id
+         WHERE se.summon_id = ? AND se.slot = 'weapon' LIMIT 1`,
+        [s.id]
+      );
+      s.weapon_subtype = weaponRows.length > 0 ? weaponRows[0].weapon_subtype : null;
     }
 
     const slotInfo = getSummonSlotInfo(chars[0].level, summons.length);

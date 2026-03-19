@@ -8,12 +8,18 @@
 
 // ========== 유닛 생성 ==========
 
-const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' };
+const CLASS_IMAGE_MAP = { '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper', '북채비': 'bukchaebi', '강신무': 'gangsinmu' };
 
 const ELEMENT_AURA = {
   fire: 'flame', water: 'ice', earth: 'aura_gold', wind: 'wind', neutral: 'holy',
   light: 'holy', dark: 'shadow', lightning: 'lightning', poison: 'poison',
 };
+
+// 무기 타입별 특수 효과 정의
+// spear: 관통 (타겟 뒤쪽 유닛에 30% 데미지) — 종방향(앞→뒤)
+// axe: 횡베기 (타겟 위/아래 유닛에 30% 데미지, 메인 타겟은 70%) — 횡방향(위↔아래)
+const WEAPON_PIERCING_TYPES = ['spear'];
+const WEAPON_CLEAVE_TYPES = ['axe', 'scythe', 'greatshield'];
 
 export function createCardPlayerUnit(char, skills, passiveBonuses) {
   const classInfo = getClassInfo(char.class_type);
@@ -54,6 +60,7 @@ export function createCardPlayerUnit(char, skills, passiveBonuses) {
     skills: (skills || []).map(s => ({ ...s, currentCooldown: 0, iconUrl: `/skills/${s.id}_icon.png` })),
     row: classInfo.defaultRow,
     rangeType: classInfo.rangeType,
+    weaponType: char.weaponType || null, // StageBattle에서 장착 무기 subtype 설정
     icon: classInfo.icon,
     imageUrl: `/characters/${classKey}_full.png`,
     color: '#4fc3f7',
@@ -70,7 +77,11 @@ export function createCardPlayerUnit(char, skills, passiveBonuses) {
 
 export function createCardSummonUnit(summon) {
   const skills = summon.learned_skills || summon.skills || [];
-  const rangeType = summon.range_type || detectRangeType(skills, summon.type);
+  // 장착 무기 > 템플릿 weapon_type > 자동 감지
+  const wst = summon.weapon_subtype || summon.weapon_type || null;
+  const rangeType = wst === 'bow' ? 'ranged'
+    : ['staff', 'talisman', 'bell', 'moktak'].includes(wst) ? 'magic'
+    : (summon.range_type || detectRangeType(skills, summon.type));
   return {
     id: `summon_${summon.id}`,
     summonId: summon.id,
@@ -95,6 +106,7 @@ export function createCardSummonUnit(summon) {
     skills: skills.map(s => ({ ...s, currentCooldown: 0, iconUrl: `/summon_skills/${s.id}_icon.png` })),
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
+    weaponType: summon.weapon_subtype || summon.weaponType || null,
     icon: summon.icon || '👻',
     imageUrl: `/summons_nobg/${summon.template_id}_full.png`,
     color: '#81c784',
@@ -138,6 +150,7 @@ export function createCardMercenaryUnit(merc) {
     skills: (merc.learned_skills || merc.skills || []).map(s => ({ ...s, currentCooldown: 0, iconUrl: `/merc_skills/${s.id}_icon.png` })),
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
+    weaponType,
     icon: '🗡️',
     imageUrl: `/mercenaries_nobg/${merc.template_id}_full.png`,
     color: '#ffb347',
@@ -178,6 +191,7 @@ export function createCardMonsterUnit(monster, index) {
     skills: (monster.skills || []).map(s => ({ ...s, currentCooldown: 0, iconUrl: `/monster_skills/${s.id}_icon.png` })),
     row: (rangeType === 'ranged' || rangeType === 'magic') ? 'back' : 'front',
     rangeType,
+    weaponType: monster.weapon_type || monster.weaponType || null,
     icon: monster.icon || '👹',
     imageUrl: `/monsters_nobg/${monster.id}_full.png`,
     color: '#ef5350',
@@ -235,8 +249,10 @@ function getClassInfo(classType) {
   switch (classType) {
     case '풍수사': return { defaultRow: 'back', rangeType: 'magic', icon: '🧙' };
     case '무당':  return { defaultRow: 'back', rangeType: 'magic', icon: '🔮' };
-    case '승려':  return { defaultRow: 'front', rangeType: 'melee', icon: '📿' };
+    case '승려':  return { defaultRow: 'back', rangeType: 'magic', icon: '📿' };
     case '저승사자': return { defaultRow: 'front', rangeType: 'melee', icon: '💀' };
+    case '북채비': return { defaultRow: 'front', rangeType: 'melee', icon: '🛡️' };
+    case '강신무': return { defaultRow: 'front', rangeType: 'melee', icon: '🗡️' };
     default:      return { defaultRow: 'front', rangeType: 'melee', icon: '⚔️' };
   }
 }
@@ -474,12 +490,9 @@ export function executeSkill(caster, skill, target, allUnits) {
           caster.hp += healAmt;
           logs.push({ text: `${caster.name} HP +${healAmt} 흡수`, type: 'heal', targetId: caster.id });
         }
-        // 독 부여
-        if (skill.buff_stat === 'poison' && actualTarget.hp > 0) {
-          const existing = actualTarget.debuffs.findIndex(d => d.stat === 'poison');
-          if (existing >= 0) actualTarget.debuffs.splice(existing, 1);
-          actualTarget.debuffs.push({ stat: 'poison', value: skill.buff_value || 5, duration: skill.buff_duration || 3, source: caster.id, name: skill.name });
-          logs.push({ text: `${actualTarget.name}에게 독 부여! (${skill.buff_duration || 3}턴)`, type: 'debuff', targetId: actualTarget.id });
+        // 상태이상 부여 (attack 스킬에서)
+        if (actualTarget.hp > 0 && skill.buff_stat) {
+          applySkillDebuff(skill, actualTarget, caster, logs);
         }
       }
 
@@ -506,11 +519,8 @@ export function executeSkill(caster, skill, target, allUnits) {
           logs.push({ text: aoeText, type: 'damage', isCrit: result.isCrit, targetId: enemy.id, elementMult: result.elementMult, elementLabel: result.elementLabel });
           if (enemy.hp <= 0 && !checkAutoRevive(enemy, logs)) {
             logs.push({ text: `  ${enemy.name} 쓰러짐!`, type: 'kill', targetId: enemy.id });
-          } else if (enemy.hp > 0 && skill.buff_stat === 'poison') {
-            const existing = enemy.debuffs.findIndex(d => d.stat === 'poison');
-            if (existing >= 0) enemy.debuffs.splice(existing, 1);
-            enemy.debuffs.push({ stat: 'poison', value: skill.buff_value || 5, duration: skill.buff_duration || 2, source: caster.id, name: skill.name });
-            logs.push({ text: `  ${enemy.name}에게 독 부여! (${skill.buff_duration || 2}턴)`, type: 'debuff', targetId: enemy.id });
+          } else if (enemy.hp > 0 && skill.buff_stat) {
+            applySkillDebuff(skill, enemy, caster, logs);
           }
         }
       }
@@ -574,6 +584,18 @@ export function executeSkill(caster, skill, target, allUnits) {
         const actual = Math.min(bVal, buffTarget.maxHp - buffTarget.hp);
         buffTarget.hp += actual;
         logs.push({ text: `${caster.name}의 ${skill.name} → ${buffTarget.name} HP +${actual}`, type: 'heal', targetId: buffTarget.id });
+      } else if (bStat === 'shield') {
+        // 보호막: value만큼의 데미지를 흡수 (기존 보호막 교체)
+        const existing = buffTarget.buffs.findIndex(b => b.stat === 'shield');
+        if (existing >= 0) buffTarget.buffs.splice(existing, 1);
+        buffTarget.buffs.push({ stat: 'shield', value: bVal, duration: bDur, source: caster.id, name: skill.name });
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${buffTarget.name}에게 보호막 ${bVal} 부여! (${bDur}턴)`, type: 'buff', targetId: buffTarget.id });
+      } else if (bStat === 'taunt') {
+        // 도발: 적이 이 유닛만 공격하도록
+        const existing = buffTarget.buffs.findIndex(b => b.stat === 'taunt');
+        if (existing >= 0) buffTarget.buffs.splice(existing, 1);
+        buffTarget.buffs.push({ stat: 'taunt', value: 1, duration: bDur, source: caster.id, name: skill.name });
+        logs.push({ text: `${caster.name}의 ${skill.name} → ${buffTarget.name} 도발! (${bDur}턴)`, type: 'buff', targetId: buffTarget.id });
       } else {
         const existing = buffTarget.buffs.findIndex(b => b.stat === bStat && b.source === caster.id);
         if (existing >= 0) buffTarget.buffs.splice(existing, 1);
@@ -626,15 +648,41 @@ export function executeAttack(attacker, target, allUnits) {
   if (result.isEvade) {
     logs.push({ text: `${attacker.name} → ${actualTarget.name} 회피!`, type: 'evade', isEvade: true, targetId: actualTarget.id });
   } else {
-    actualTarget.hp = Math.max(0, actualTarget.hp - result.damage);
-    // 불멸 부적: HP 1 이하로 안 떨어짐
+    const isAxe = WEAPON_CLEAVE_TYPES.includes(attacker.weaponType);
+    // 도끼: 메인 타겟 70%, 나머지 무기: 100%
+    const mainDmg = isAxe ? Math.max(1, Math.floor(result.damage * 0.7)) : result.damage;
+
+    // 보호막 흡수
+    const actualDmg = applyShieldDamage(actualTarget, mainDmg);
+    if (actualDmg < mainDmg) {
+      logs.push({ text: `${actualTarget.name}의 보호막이 ${mainDmg - actualDmg} 흡수!`, type: 'system' });
+    }
+    actualTarget.hp = Math.max(0, actualTarget.hp - actualDmg);
     if (actualTarget.hp <= 0 && (actualTarget.buffs || []).some(b => b.stat === 'immortal')) {
       actualTarget.hp = 1;
     }
-    let dmgText = `${attacker.name} → ${actualTarget.name}에게 ${result.damage} 피해`;
+    let dmgText = `${attacker.name} → ${actualTarget.name}에게 ${actualDmg} 피해`;
     if (result.isCrit) dmgText += ' (치명타!)';
     if (result.elementLabel) dmgText += ` [${result.elementLabel}]`;
     logs.push({ text: dmgText, type: 'damage', targetId: actualTarget.id, isCrit: result.isCrit, elementMult: result.elementMult, elementLabel: result.elementLabel });
+
+    // 창 관통: 같은 gridRow 뒷열 유닛에 30% 스플래시 데미지
+    if (WEAPON_PIERCING_TYPES.includes(attacker.weaponType)) {
+      const pierceTarget = findPierceTarget(actualTarget, allUnits);
+      if (pierceTarget) {
+        const pierceDmg = Math.max(1, Math.floor(result.damage * 0.3));
+        applyDamageToUnit(pierceTarget, pierceDmg, logs, `  ↪ 관통! ${pierceTarget.name}에게 ${pierceDmg} 피해`, allUnits, true);
+      }
+    }
+
+    // 도끼 횡베기: 같은 gridCol 위/아래(gridRow±1) 유닛에 30% 스플래시 데미지
+    if (isAxe) {
+      const cleaveTargets = findCleaveTargets(actualTarget, allUnits);
+      for (const ct of cleaveTargets) {
+        const cleaveDmg = Math.max(1, Math.floor(result.damage * 0.3));
+        applyDamageToUnit(ct, cleaveDmg, logs, `  ↪ 횡베기! ${ct.name}에게 ${cleaveDmg} 피해`, allUnits, true);
+      }
+    }
   }
 
   if (actualTarget.hp <= 0 && !checkAutoRevive(actualTarget, logs)) {
@@ -643,6 +691,96 @@ export function executeAttack(attacker, target, allUnits) {
   }
 
   return logs;
+}
+
+// 스플래시 데미지 적용 헬퍼
+function applyDamageToUnit(unit, damage, logs, text, allUnits, isSplash = false) {
+  unit.hp = Math.max(0, unit.hp - damage);
+  if (unit.hp <= 0 && (unit.buffs || []).some(b => b.stat === 'immortal')) {
+    unit.hp = 1;
+  }
+  logs.push({ text, type: 'damage', targetId: unit.id, isPierce: isSplash });
+  if (unit.hp <= 0 && !checkAutoRevive(unit, logs)) {
+    logs.push({ text: `${unit.name} 쓰러짐!`, type: 'kill', targetId: unit.id });
+    promoteBackRow(unit.team, allUnits);
+  }
+}
+
+// 횡베기 대상 찾기: 같은 gridCol에서 gridRow±1인 유닛
+function findCleaveTargets(target, allUnits) {
+  if (!target) return [];
+  return allUnits.filter(u =>
+    u.hp > 0 &&
+    u.team === target.team &&
+    u.id !== target.id &&
+    u.gridCol === target.gridCol &&
+    Math.abs(u.gridRow - target.gridRow) === 1
+  );
+}
+
+// 관통 대상 찾기: 같은 gridRow에서 타겟보다 뒷열에 있는 유닛
+function findPierceTarget(target, allUnits) {
+  if (!target) return null;
+  const isPlayerTeam = target.team === 'player';
+  // 같은 팀, 같은 행(gridRow), 살아있고, 타겟보다 뒤에 있는 유닛
+  const candidates = allUnits.filter(u =>
+    u.hp > 0 &&
+    u.team === target.team &&
+    u.id !== target.id &&
+    u.gridRow === target.gridRow
+  );
+  if (candidates.length === 0) return null;
+  // 플레이어팀: gridCol 작은 쪽이 뒷열, 적팀: gridCol 큰 쪽이 뒷열
+  const behind = candidates.filter(u =>
+    isPlayerTeam ? u.gridCol < target.gridCol : u.gridCol > target.gridCol
+  );
+  if (behind.length === 0) return null;
+  // 가장 가까운 뒷열 유닛
+  behind.sort((a, b) => isPlayerTeam ? b.gridCol - a.gridCol : a.gridCol - b.gridCol);
+  return behind[0];
+}
+
+// ========== 상태이상 부여 헬퍼 ==========
+
+const DOT_DEBUFFS = ['poison', 'bleed', 'burn'];
+const CC_DEBUFFS = ['stun', 'seal', 'charm'];
+const DEBUFF_LABELS = {
+  poison: '독', bleed: '출혈', burn: '화상',
+  stun: '기절', seal: '봉인', charm: '매혹',
+};
+
+function applySkillDebuff(skill, target, caster, logs) {
+  const stat = skill.buff_stat;
+  if (!stat || !DEBUFF_LABELS[stat]) return;
+  // 기존 같은 소스 디버프 교체
+  const existing = target.debuffs.findIndex(d => d.stat === stat && d.source === caster.id);
+  if (existing >= 0) target.debuffs.splice(existing, 1);
+  target.debuffs.push({
+    stat,
+    value: skill.buff_value || (DOT_DEBUFFS.includes(stat) ? 5 : 0),
+    duration: skill.buff_duration || (CC_DEBUFFS.includes(stat) ? 1 : 3),
+    source: caster.id,
+    name: skill.name,
+  });
+  const label = DEBUFF_LABELS[stat];
+  const dur = skill.buff_duration || (CC_DEBUFFS.includes(stat) ? 1 : 3);
+  logs.push({ text: `${target.name}에게 ${label} 부여! (${dur}턴)`, type: 'debuff', targetId: target.id });
+}
+
+// ========== 보호막 (shield) ==========
+
+function applyShieldDamage(target, damage) {
+  // shield 버프가 있으면 데미지를 흡수
+  const shield = (target.buffs || []).find(b => b.stat === 'shield');
+  if (!shield) return damage;
+  if (shield.value >= damage) {
+    shield.value -= damage;
+    return 0; // 전부 흡수
+  }
+  const remaining = damage - shield.value;
+  // 보호막 파괴
+  target.buffs = target.buffs.filter(b => b !== shield);
+  return remaining;
 }
 
 // ========== 방어 (수호) ==========
@@ -655,6 +793,9 @@ export function executeGuard(guarder, target) {
 
 function findGuardian(target, allUnits) {
   if (!target) return null;
+  // 1) 도발(taunt) 체크: 공격자 팀에서 taunt 버프를 가진 적이 있으면 그쪽으로 유도
+  // (이 함수는 방어자 측이므로 taunt는 별도 처리)
+  // 2) 수호 체크
   const guardian = allUnits.find(u =>
     u.hp > 0 &&
     u.team === target.team &&
@@ -691,12 +832,15 @@ export function onTurnStart(unit) {
     if (skill.currentCooldown > 0) skill.currentCooldown--;
   }
 
-  // 독 데미지 (지속시간 감소 전에 처리)
-  const poison = (unit.debuffs || []).find(d => d.stat === 'poison');
-  if (poison && unit.hp > 0) {
-    const poisonDmg = Math.max(1, Math.floor(unit.maxHp * (poison.value || 5) / 100));
-    unit.hp = Math.max(0, unit.hp - poisonDmg);
-    logs.push({ text: `${unit.name}이(가) 독으로 ${poisonDmg} 피해! (HP: ${unit.hp})`, type: 'poison', targetId: unit.id, damage: poisonDmg });
+  // 지속 피해 (독/출혈/화상)
+  for (const dot of ['poison', 'bleed', 'burn']) {
+    const debuff = (unit.debuffs || []).find(d => d.stat === dot);
+    if (debuff && unit.hp > 0) {
+      const dmg = Math.max(1, Math.floor(unit.maxHp * (debuff.value || 5) / 100));
+      unit.hp = Math.max(0, unit.hp - dmg);
+      const labels = { poison: '독', bleed: '출혈', burn: '화상' };
+      logs.push({ text: `${unit.name}이(가) ${labels[dot]}으로 ${dmg} 피해! (HP: ${unit.hp})`, type: dot, targetId: unit.id, damage: dmg });
+    }
   }
 
   // 재생 버프 (HP 회복)
@@ -777,6 +921,9 @@ export function decideAIAction(unit, allUnits) {
 
   const attackType = (unit.rangeType === 'ranged' || unit.rangeType === 'magic') ? unit.rangeType : 'melee';
   const validTargets = getValidTargets(unit, enemies, attackType);
+
+  // 도발(taunt) 체크: 적 중 taunt 버프를 가진 유닛이 있으면 그 유닛을 우선 공격
+  const tauntTarget = validTargets.find(t => (t.buffs || []).some(b => b.stat === 'taunt'));
 
   // 스킬 사거리에 맞는 타겟 반환
   const getSkillTargets = (skill) => {
@@ -922,10 +1069,11 @@ export function decideAIAction(unit, allUnits) {
   {
     const cleanseSkill = usableSkills.find(s => s.buff_stat === 'cleanse');
     if (cleanseSkill) {
-      const debuffedAlly = allies.find(u => u.hp > 0 && (u.debuffs || []).some(d => d.stat === 'poison' || d.stat === 'stun'));
+      const cleanseTargets = ['poison', 'bleed', 'burn', 'stun', 'seal'];
+      const debuffedAlly = allies.find(u => u.hp > 0 && (u.debuffs || []).some(d => cleanseTargets.includes(d.stat)));
       if (debuffedAlly) return { action: 'skill', skill: cleanseSkill, target: debuffedAlly };
       // 자기 자신 체크
-      if ((unit.debuffs || []).some(d => d.stat === 'poison' || d.stat === 'stun')) {
+      if ((unit.debuffs || []).some(d => cleanseTargets.includes(d.stat))) {
         return { action: 'skill', skill: cleanseSkill, target: unit };
       }
     }
@@ -974,6 +1122,8 @@ export function decideAIAction(unit, allUnits) {
 
   // --- 기본 공격 ---
   if (validTargets.length > 0) {
+    // 도발 대상 우선
+    if (tauntTarget) return { action: 'attack', target: tauntTarget };
     const target = unit.aiType === 'aggressive'
       ? validTargets.reduce((a, b) => a.hp < b.hp ? a : b)
       : validTargets[Math.floor(Math.random() * validTargets.length)];

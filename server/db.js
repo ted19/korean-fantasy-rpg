@@ -65,7 +65,7 @@ async function initialize() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
       name VARCHAR(50) NOT NULL UNIQUE,
-      class_type ENUM('풍수사', '무당', '승려', '저승사자') NOT NULL,
+      class_type ENUM('풍수사', '무당', '승려', '저승사자', '북채비', '강신무') NOT NULL,
       level INT DEFAULT 1,
       hp INT DEFAULT 100,
       mp INT DEFAULT 50,
@@ -91,8 +91,8 @@ async function initialize() {
   // 기존 레벨 2 이상 캐릭터는 프롤로그 자동 완료
   await pool.query("UPDATE characters SET prologue_cleared = 1 WHERE level >= 2 AND (prologue_cleared IS NULL OR prologue_cleared = 0)").catch(() => {});
 
-  // 저승사자 직업 추가
-  await pool.query("ALTER TABLE characters MODIFY COLUMN class_type ENUM('풍수사', '무당', '승려', '저승사자') NOT NULL").catch(() => {});
+  // 직업 추가 (저승사자, 북채비, 강신무)
+  await pool.query("ALTER TABLE characters MODIFY COLUMN class_type ENUM('풍수사', '무당', '승려', '저승사자', '북채비', '강신무') NOT NULL").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS battle_logs (
@@ -143,6 +143,21 @@ async function initialize() {
   await pool.query("ALTER TABLE items ADD COLUMN effect_mag_defense INT DEFAULT 0").catch(() => {});
   await pool.query("ALTER TABLE items ADD COLUMN effect_crit_rate INT DEFAULT 0").catch(() => {});
   await pool.query("ALTER TABLE items ADD COLUMN effect_evasion INT DEFAULT 0").catch(() => {});
+  // 무기 세부 타입 (sword, spear, bow, staff, talisman, bell, scythe 등)
+  await pool.query("ALTER TABLE items ADD COLUMN weapon_subtype VARCHAR(20) DEFAULT NULL").catch(() => {});
+  // 기존 무기에 weapon_subtype 설정 (순서 중요: 구체적인 것부터)
+  await pool.query("UPDATE items SET weapon_subtype='talisman' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%부적%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='bell' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%방울%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='moktak' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%목탁%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='spear' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%금강장%' OR name LIKE '%창%' OR name LIKE '%뿔창%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='bow' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%활%' OR name LIKE '%궁%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='staff' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%지팡이%' OR name LIKE '%마장%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='scythe' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%낫%' OR name LIKE '%수확자%' OR name LIKE '%심판자%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='mace' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%법륜%' OR name LIKE '%법구%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='axe' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%도끼%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='greatshield' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%거대방패%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='sinkal' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%신칼%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='sword' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%검%' OR name LIKE '%도%' OR name = '하늘의 의지')").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS inventory (
@@ -219,7 +234,13 @@ async function initialize() {
       ('용살 검', 'weapon', 'weapon', '1h', '용을 베는 전설의 검. 범위1 마름모.', 1100, 550, 0, 0, 24, 0, 6, NULL),
       ('사혼의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 영혼을 거두는 낫.', 50, 25, 0, 5, 6, 0, 1, '저승사자'),
       ('명계의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 명계의 기운이 깃든 낫.', 200, 100, 0, 15, 13, 0, 3, '저승사자'),
-      ('황천의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 황천의 어둠이 깃든 대낫.', 800, 400, 0, 30, 26, 0, 6, '저승사자')
+      ('황천의 대낫', 'weapon', 'weapon', '2h', '저승사자 전용. 황천의 어둠이 깃든 대낫.', 800, 400, 0, 30, 26, 0, 6, '저승사자'),
+      ('나무 창', 'weapon', 'weapon', '2h', '기본적인 나무 창. 관통 공격.', 110, 55, 0, 0, 7, 2, 1, NULL),
+      ('강철 창', 'weapon', 'weapon', '2h', '강철로 만든 창. 관통 공격.', 380, 190, 0, 0, 14, 4, 3, NULL),
+      ('용아 창', 'weapon', 'weapon', '2h', '용의 이빨로 만든 창. 관통 공격.', 1150, 575, 0, 0, 22, 6, 6, NULL),
+      ('나무 도끼', 'weapon', 'weapon', '2h', '기본적인 나무 도끼. 횡베기.', 115, 57, 0, 0, 8, 0, 1, NULL),
+      ('강철 도끼', 'weapon', 'weapon', '2h', '강철로 만든 도끼. 횡베기.', 390, 195, 0, 0, 16, 0, 3, NULL),
+      ('용아 도끼', 'weapon', 'weapon', '2h', '용의 이빨로 만든 도끼. 횡베기.', 1180, 590, 0, 0, 25, 0, 6, NULL)
     `);
   } else {
     // 기존 DB에 slot/weapon_hand 값 업데이트
@@ -550,6 +571,28 @@ async function initialize() {
   await pool.query("ALTER TABLE summon_templates ADD COLUMN range_type ENUM('melee','ranged','magic') DEFAULT 'melee'").catch(() => {});
   await pool.query("ALTER TABLE summon_templates MODIFY COLUMN range_type ENUM('melee','ranged','magic') DEFAULT 'melee'").catch(() => {});
   await pool.query("ALTER TABLE summon_templates ADD COLUMN element ENUM('fire','water','earth','wind','neutral') DEFAULT 'neutral'").catch(() => {});
+  // 소환수 기본 무기 타입 (용병과 통일)
+  await pool.query("ALTER TABLE summon_templates ADD COLUMN weapon_type VARCHAR(20) DEFAULT NULL").catch(() => {});
+  // 소환수 개별 weapon_type 설정 (성격/외형 기반)
+  // 기본 12종
+  await pool.query("UPDATE summon_templates SET weapon_type='scythe' WHERE weapon_type IS NULL AND name IN ('떠도는 원혼','묘지 귀신')").catch(() => {});  // 귀신 → 낫
+  await pool.query("UPDATE summon_templates SET weapon_type='staff' WHERE weapon_type IS NULL AND name IN ('구미호 영혼')").catch(() => {});  // 구미호 → 마법
+  await pool.query("UPDATE summon_templates SET weapon_type='sword' WHERE weapon_type IS NULL AND name IN ('들쥐 소환수','야생 늑대','독거미 여왕')").catch(() => {});  // 몬스터형 → 근접
+  await pool.query("UPDATE summon_templates SET weapon_type='mace' WHERE weapon_type IS NULL AND name IN ('골렘 파편')").catch(() => {});  // 골렘 → 둔기
+  await pool.query("UPDATE summon_templates SET weapon_type='staff' WHERE weapon_type IS NULL AND name IN ('물의 정령','불의 정령','바람의 정령')").catch(() => {});  // 정령 → 마법
+  await pool.query("UPDATE summon_templates SET weapon_type='spear' WHERE weapon_type IS NULL AND name IN ('해골 전사')").catch(() => {});  // 해골 전사 → 창
+  await pool.query("UPDATE summon_templates SET weapon_type='staff' WHERE weapon_type IS NULL AND name IN ('리치')").catch(() => {});  // 리치 → 마법
+  // 확장 소환수 (타입별 기본)
+  await pool.query("UPDATE summon_templates SET weapon_type='axe' WHERE weapon_type IS NULL AND name IN ('도깨비','야차','해태','천마')").catch(() => {});  // 힘형 → 도끼
+  await pool.query("UPDATE summon_templates SET weapon_type='sword' WHERE weapon_type IS NULL AND name IN ('들고양이','산토끼','강시','백호','현무')").catch(() => {});  // 물리 근접
+  await pool.query("UPDATE summon_templates SET weapon_type='staff' WHERE weapon_type IS NULL AND name IN ('도깨비불','반딧불 정령','나무 정령','부유령','어린 구미호','뇌전 정령','청룡','주작','봉황','삼족오','용왕')").catch(() => {});  // 마법
+  await pool.query("UPDATE summon_templates SET weapon_type='bow' WHERE weapon_type IS NULL AND name IN ('독사')").catch(() => {});  // 원거리
+  await pool.query("UPDATE summon_templates SET weapon_type='spear' WHERE weapon_type IS NULL AND name IN ('해골병사')").catch(() => {});  // 해골 → 창
+  await pool.query("UPDATE summon_templates SET weapon_type='mace' WHERE weapon_type IS NULL AND name IN ('흙 인형')").catch(() => {});  // 흙 인형 → 둔기
+  // 나머지 미지정 → range_type 기반 폴백
+  await pool.query("UPDATE summon_templates SET weapon_type='staff' WHERE weapon_type IS NULL AND range_type='magic'").catch(() => {});
+  await pool.query("UPDATE summon_templates SET weapon_type='bow' WHERE weapon_type IS NULL AND range_type='ranged'").catch(() => {});
+  await pool.query("UPDATE summon_templates SET weapon_type='sword' WHERE weapon_type IS NULL AND range_type='melee'").catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS character_summons (
@@ -751,8 +794,10 @@ async function initialize() {
       VALUES
       ('풍수사', 8, 8, 2.0, 1.2, 0.8, 0.7, 2.8, 2.2, 0.15, 0.15),
       ('무당',  10, 6, 2.0, 1.5, 1.8, 1.2, 2.2, 1.8, 0.2, 0.2),
-      ('승려', 14, 4, 2.5, 2.5, 2.5, 2.5, 1.0, 1.5, 0.15, 0.08),
-      ('저승사자', 9, 5, 2.5, 1.0, 2.2, 0.5, 2.2, 0.8, 0.3, 0.25)
+      ('승려', 10, 7, 2.0, 1.8, 0.6, 1.0, 2.5, 2.0, 0.12, 0.1),
+      ('저승사자', 9, 5, 2.5, 1.0, 2.2, 0.5, 2.2, 0.8, 0.3, 0.25),
+      ('북채비', 15, 3, 2.5, 2.8, 2.2, 2.8, 0.3, 0.8, 0.1, 0.05),
+      ('강신무', 11, 5, 2.5, 1.5, 2.3, 1.5, 0.8, 0.8, 0.2, 0.18)
     `);
   }
   // 저승사자 성장률 패치 (기존 DB에 없으면 추가)
@@ -761,6 +806,20 @@ async function initialize() {
      phys_attack_per_level, phys_defense_per_level, mag_attack_per_level, mag_defense_per_level,
      crit_rate_per_10level, evasion_per_10level)
     VALUES ('저승사자', 9, 5, 2.5, 1.0, 2.2, 0.5, 2.2, 0.8, 0.3, 0.25)
+  `).catch(() => {});
+  // 북채비 성장률 패치 (기존 DB에 없으면 추가)
+  await pool.query(`INSERT IGNORE INTO class_growth_rates
+    (class_type, hp_per_level, mp_per_level, attack_per_level, defense_per_level,
+     phys_attack_per_level, phys_defense_per_level, mag_attack_per_level, mag_defense_per_level,
+     crit_rate_per_10level, evasion_per_10level)
+    VALUES ('북채비', 15, 3, 2.5, 2.8, 2.2, 2.8, 0.3, 0.8, 0.1, 0.05)
+  `).catch(() => {});
+  // 강신무 성장률 패치 (기존 DB에 없으면 추가)
+  await pool.query(`INSERT IGNORE INTO class_growth_rates
+    (class_type, hp_per_level, mp_per_level, attack_per_level, defense_per_level,
+     phys_attack_per_level, phys_defense_per_level, mag_attack_per_level, mag_defense_per_level,
+     crit_rate_per_10level, evasion_per_10level)
+    VALUES ('강신무', 11, 5, 2.5, 1.5, 2.3, 1.5, 0.8, 0.8, 0.2, 0.18)
   `).catch(() => {});
 
   // 소환수 타입별 성장률
@@ -2017,6 +2076,8 @@ async function initialize() {
   await pool.query("ALTER TABLE monsters ADD COLUMN ai_type ENUM('aggressive','defensive','ranged','support','boss','coward') DEFAULT 'aggressive'").catch(() => {});
   await pool.query("ALTER TABLE monsters ADD COLUMN mp INT DEFAULT 0").catch(() => {});
   await pool.query("ALTER TABLE monsters ADD COLUMN range_type ENUM('melee','ranged','magic') DEFAULT 'melee'").catch(() => {});
+  // 몬스터 무기 타입 (소환수/용병과 통일)
+  await pool.query("ALTER TABLE monsters ADD COLUMN weapon_type VARCHAR(20) DEFAULT NULL").catch(() => {});
   // range_type에 magic 추가 (기존 ENUM 확장)
   await pool.query("ALTER TABLE monsters MODIFY COLUMN range_type ENUM('melee','ranged','magic') DEFAULT 'melee'").catch(() => {});
   // 속성 컬럼 추가
@@ -2125,6 +2186,23 @@ async function initialize() {
     "UPDATE monsters SET ai_type='boss' WHERE name IN ('어둠의 수호자','정령왕','깨비대왕','마왕','용왕','리치왕','크라켄','바다 용','암흑룡','이무기','히드라','화룡','빙룡','발록','세계수의 파편','점액 군주','균류 군주','킹 슬라임','다크 세라핌','뇌룡')",
     "UPDATE monsters SET ai_type='coward' WHERE name IN ('초록 슬라임','파랑 슬라임','꼬마 도깨비','떠도는 영혼','독버섯','포자 군체','봉사귀','숲 도깨비','금속 슬라임','크리스탈 슬라임')",
     "UPDATE monsters SET ai_type='aggressive' WHERE name IN ('용암 슬라임','포식 슬라임')",
+    // 몬스터 weapon_type 설정 (ai_type/이름 기반)
+    // 마법형: staff (마법사, 정령, 리치 등)
+    "UPDATE monsters SET weapon_type='staff' WHERE weapon_type IS NULL AND ai_type='ranged' AND (name LIKE '%마법사%' OR name LIKE '%정령%' OR name LIKE '%서큐버스%' OR name LIKE '%네크로맨서%' OR name LIKE '%리치%' OR name LIKE '%세라핌%')",
+    "UPDATE monsters SET weapon_type='staff' WHERE weapon_type IS NULL AND ai_type='support' AND (name LIKE '%정령%' OR name LIKE '%유니콘%' OR name LIKE '%인어%')",
+    "UPDATE monsters SET weapon_type='staff' WHERE weapon_type IS NULL AND ai_type='boss' AND (name LIKE '%정령왕%' OR name LIKE '%마왕%' OR name LIKE '%리치왕%' OR name LIKE '%세라핌%')",
+    // 활/원거리: bow (독사, 해마 기사 등 투사체 사용)
+    "UPDATE monsters SET weapon_type='bow' WHERE weapon_type IS NULL AND (name LIKE '%독사%' OR name LIKE '%해마%' OR name LIKE '%전갈%')",
+    // 창: spear (기사, 가드, 전사형)
+    "UPDATE monsters SET weapon_type='spear' WHERE weapon_type IS NULL AND (name LIKE '%기사%' OR name LIKE '%가디언%' OR name LIKE '%가고일%' OR name LIKE '%갑옷%')",
+    // 낫: scythe (원혼, 처녀귀신, 봉사귀 등 귀신류)
+    "UPDATE monsters SET weapon_type='scythe' WHERE weapon_type IS NULL AND (name LIKE '%원혼%' OR name LIKE '%귀신%' OR name LIKE '%영혼%' OR name LIKE '%봉사귀%')",
+    // 철퇴/둔기: mace (골렘, 트렌트 등 방어형)
+    "UPDATE monsters SET weapon_type='mace' WHERE weapon_type IS NULL AND ai_type='defensive' AND (name LIKE '%골렘%' OR name LIKE '%트렌트%' OR name LIKE '%불가사리%' OR name LIKE '%도깨비%')",
+    // 도끼: axe (멧돼지, 흑곰, 코뿔소, 미노타우르스 등 힘형)
+    "UPDATE monsters SET weapon_type='axe' WHERE weapon_type IS NULL AND (name LIKE '%멧돼지%' OR name LIKE '%흑곰%' OR name LIKE '%코뿔소%' OR name LIKE '%설표%' OR name LIKE '%트렌트%' OR name LIKE '%깨비대왕%' OR name LIKE '%히드라%' OR name LIKE '%발록%' OR name LIKE '%크라켄%')",
+    // 나머지: 공격형/도주형/보스 중 미지정 → sword
+    "UPDATE monsters SET weapon_type='sword' WHERE weapon_type IS NULL AND ai_type IN ('aggressive','coward','boss','defensive','support','ranged')",
     // MP 설정: tier 기반 세분화 (마법형 > 지원형 > 원거리 > 방어형 > 공격형 > 도주형)
     // 공격형: 기본 스킬 1~2회 사용 가능
     "UPDATE monsters SET mp=15 WHERE ai_type='aggressive' AND tier <= 3",
@@ -4689,6 +4767,8 @@ async function initialize() {
   if (rareCheck.length === 0) {
     const rareItems = [
       "('비전 활', 'weapon', 'weapon', '2h', '비전의 힘이 깃든 활. 범위4 직선.', 700, 350, 0, 0, 18, 0, 4, NULL)",
+      "('뇌전 창', 'weapon', 'weapon', '2h', '번개의 힘이 깃든 창. 관통 공격.', 680, 340, 0, 0, 19, 5, 4, NULL)",
+      "('뇌전 도끼', 'weapon', 'weapon', '2h', '번개의 힘이 깃든 도끼. 횡베기.', 700, 350, 0, 0, 21, 0, 4, NULL)",
       "('뇌신 검', 'weapon', 'weapon', '1h', '번개의 힘이 깃든 검. 범위1 마름모.', 650, 325, 0, 0, 20, 0, 5, NULL)",
       "('영혼 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 영혼의 힘이 깃든 부적.', 650, 325, 0, 35, 14, 0, 5, '풍수사')",
       "('무녀 방울', 'weapon', 'weapon', '1h', '무당 전용. 무녀의 축복을 받은 방울.', 600, 300, 0, 20, 12, 5, 4, '무당')",
@@ -4766,6 +4846,8 @@ async function initialize() {
       // 무기 - 공용
       "('천마검', 'weapon', 'weapon', '1h', '천마의 기운이 깃든 마검. 범위1 마름모.', 5000, 2500, 0, 0, 45, 0, 8, NULL)",
       "('파천궁', 'weapon', 'weapon', '2h', '하늘을 꿰뚫는 활. 범위4 직선.', 5500, 2750, 0, 0, 42, 0, 8, NULL)",
+      "('용린 창', 'weapon', 'weapon', '2h', '용의 비늘로 강화된 창. 관통 공격.', 5200, 2600, 0, 0, 43, 10, 8, NULL)",
+      "('용린 도끼', 'weapon', 'weapon', '2h', '용의 비늘로 강화된 도끼. 횡베기.', 5300, 2650, 0, 0, 46, 0, 8, NULL)",
       // 무기 - 클래스
       "('태극 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 태극의 힘이 깃든 부적.', 5000, 2500, 0, 80, 40, 0, 8, '풍수사')",
       "('만신 방울', 'weapon', 'weapon', '2h', '무당 전용. 만신의 축복을 받은 방울.', 5000, 2500, 0, 50, 35, 15, 8, '무당')",
@@ -4786,6 +4868,8 @@ async function initialize() {
       // 무기 - 공용
       "('천제의 신검', 'weapon', 'weapon', '1h', '하늘의 제왕이 사용하던 신검. 범위1 마름모.', 15000, 7500, 0, 0, 80, 0, 13, NULL)",
       "('신궁 해모수', 'weapon', 'weapon', '2h', '태양신의 활. 범위4 직선.', 16000, 8000, 0, 0, 75, 0, 13, NULL)",
+      "('단군의 신창', 'weapon', 'weapon', '2h', '단군이 사용하던 신창. 관통 공격.', 15500, 7750, 0, 0, 77, 18, 13, NULL)",
+      "('천마 도끼', 'weapon', 'weapon', '2h', '천마의 기운이 깃든 도끼. 횡베기.', 16000, 8000, 0, 0, 82, 0, 13, NULL)",
       // 무기 - 클래스
       "('천부인 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 천부인의 힘이 깃든 신물.', 15000, 7500, 0, 150, 70, 0, 13, '풍수사')",
       "('무녀신의 방울', 'weapon', 'weapon', '2h', '무당 전용. 무녀신이 사용하던 방울.', 15000, 7500, 0, 90, 60, 30, 13, '무당')",
@@ -6067,6 +6151,8 @@ async function initialize() {
     // 공용 무기
     "('청동 장검', 'weapon', 'weapon', '1h', '청동으로 제련한 장검. 범위1 마름모.', 1200, 600, 0, 0, 24, 0, 7, NULL)",
     "('청동 장궁', 'weapon', 'weapon', '2h', '청동으로 만든 활. 범위4 직선.', 1300, 650, 0, 0, 22, 0, 7, NULL)",
+    "('청동 창', 'weapon', 'weapon', '2h', '청동으로 만든 창. 관통 공격.', 1250, 625, 0, 0, 23, 6, 7, NULL)",
+    "('청동 도끼', 'weapon', 'weapon', '2h', '청동으로 만든 도끼. 횡베기.', 1280, 640, 0, 0, 25, 0, 7, NULL)",
     // 클래스 무기
     "('풍운 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 풍운의 기운이 깃든 부적.', 1200, 600, 0, 45, 20, 0, 7, '풍수사')",
     "('귀신 방울', 'weapon', 'weapon', '2h', '무당 전용. 귀신을 다스리는 방울.', 1100, 550, 0, 28, 18, 8, 7, '무당')",
@@ -6085,6 +6171,8 @@ async function initialize() {
     // 공용 무기
     "('백은 검', 'weapon', 'weapon', '1h', '백은으로 벼린 검. 범위1 마름모.', 2500, 1250, 0, 0, 32, 0, 10, NULL)",
     "('백은 궁', 'weapon', 'weapon', '2h', '백은으로 만든 활. 범위4 직선.', 2700, 1350, 0, 0, 30, 0, 10, NULL)",
+    "('백은 창', 'weapon', 'weapon', '2h', '백은으로 만든 창. 관통 공격.', 2600, 1300, 0, 0, 31, 8, 10, NULL)",
+    "('백은 도끼', 'weapon', 'weapon', '2h', '백은으로 만든 도끼. 횡베기.', 2650, 1325, 0, 0, 33, 0, 10, NULL)",
     // 클래스 무기
     "('천문 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 별의 기운이 담긴 부적.', 2500, 1250, 0, 55, 28, 0, 10, '풍수사')",
     "('영매 방울', 'weapon', 'weapon', '2h', '무당 전용. 영혼과 소통하는 방울.', 2500, 1250, 0, 35, 25, 10, 10, '무당')",
@@ -6103,6 +6191,8 @@ async function initialize() {
     // 공용 무기
     "('황금 검', 'weapon', 'weapon', '1h', '황금빛 검. 범위1 마름모.', 3500, 1750, 0, 0, 38, 0, 15, NULL)",
     "('황금 궁', 'weapon', 'weapon', '2h', '황금빛 활. 범위4 직선.', 3800, 1900, 0, 0, 35, 0, 15, NULL)",
+    "('황금 창', 'weapon', 'weapon', '2h', '황금빛 창. 관통 공격.', 3650, 1825, 0, 0, 36, 10, 15, NULL)",
+    "('황금 도끼', 'weapon', 'weapon', '2h', '황금빛 도끼. 횡베기.', 3700, 1850, 0, 0, 39, 0, 15, NULL)",
     // 클래스 무기
     "('도참 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 도참의 비밀이 담긴 부적.', 3500, 1750, 0, 68, 35, 0, 15, '풍수사')",
     "('접신 방울', 'weapon', 'weapon', '2h', '무당 전용. 신령이 접신한 방울.', 3500, 1750, 0, 45, 32, 12, 15, '무당')",
@@ -6121,6 +6211,8 @@ async function initialize() {
     // 공용 무기
     "('명월도', 'weapon', 'weapon', '1h', '달빛이 깃든 검. 범위1 마름모.', 2000, 1000, 0, 0, 30, 0, 20, NULL)",
     "('폭풍궁', 'weapon', 'weapon', '2h', '바람을 가르는 활. 범위4 직선.', 2200, 1100, 0, 0, 28, 0, 20, NULL)",
+    "('월아 창', 'weapon', 'weapon', '2h', '달빛을 머금은 창. 관통 공격.', 2100, 1050, 0, 0, 29, 8, 20, NULL)",
+    "('월아 도끼', 'weapon', 'weapon', '2h', '달빛을 머금은 도끼. 횡베기.', 2150, 1075, 0, 0, 31, 0, 20, NULL)",
     // 클래스 무기
     "('영기 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 영혼의 기운이 깃든 부적.', 2000, 1000, 0, 60, 30, 0, 20, '풍수사')",
     "('신명 방울', 'weapon', 'weapon', '2h', '무당 전용. 신명의 축복이 깃든 방울.', 2000, 1000, 0, 40, 28, 10, 20, '무당')",
@@ -6137,6 +6229,8 @@ async function initialize() {
     // ===== Lv28 고급+ (T5) =====
     "('뇌광검', 'weapon', 'weapon', '1h', '번개가 깃든 검. 범위1 마름모.', 3500, 1750, 0, 0, 38, 0, 28, NULL)",
     "('현무궁', 'weapon', 'weapon', '2h', '현무의 기운이 깃든 활. 범위4 직선.', 3800, 1900, 0, 0, 35, 0, 28, NULL)",
+    "('현무 창', 'weapon', 'weapon', '2h', '현무의 기운이 깃든 창. 관통 공격.', 3650, 1825, 0, 0, 36, 10, 28, NULL)",
+    "('현무 도끼', 'weapon', 'weapon', '2h', '현무의 기운이 깃든 도끼. 횡베기.', 3700, 1850, 0, 0, 39, 0, 28, NULL)",
     "('혼백 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 혼백의 힘이 깃든 부적.', 3500, 1750, 0, 70, 36, 0, 28, '풍수사')",
     "('태을 방울', 'weapon', 'weapon', '2h', '무당 전용. 태을성의 축복을 받은 방울.', 3500, 1750, 0, 50, 33, 13, 28, '무당')",
     "('열반 목탁', 'weapon', 'weapon', '2h', '승려 전용. 열반의 경지에 이른 목탁.', 3500, 1750, 70, 0, 28, 30, 28, '승려')",
@@ -6151,6 +6245,8 @@ async function initialize() {
     // ===== Lv38 희귀 (T6) =====
     "('주작도', 'weapon', 'weapon', '1h', '주작의 불꽃이 깃든 도. 범위1 마름모.', 6000, 3000, 0, 0, 50, 0, 38, NULL)",
     "('청룡궁', 'weapon', 'weapon', '2h', '청룡의 바람이 깃든 활. 범위4 직선.', 6500, 3250, 0, 0, 47, 0, 38, NULL)",
+    "('백호 창', 'weapon', 'weapon', '2h', '백호의 기운이 깃든 창. 관통 공격.', 6250, 3125, 0, 0, 48, 14, 38, NULL)",
+    "('백호 도끼', 'weapon', 'weapon', '2h', '백호의 기운이 깃든 도끼. 횡베기.', 6300, 3150, 0, 0, 51, 0, 38, NULL)",
     "('천기 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 천기의 비밀이 담긴 부적.', 6000, 3000, 0, 90, 48, 0, 38, '풍수사')",
     "('강신 방울', 'weapon', 'weapon', '2h', '무당 전용. 강력한 신령이 깃든 방울.', 6000, 3000, 0, 65, 43, 18, 38, '무당')",
     "('금강 법구', 'weapon', 'weapon', '2h', '승려 전용. 금강의 힘이 깃든 법구.', 6000, 3000, 90, 0, 35, 40, 38, '승려')",
@@ -6165,6 +6261,8 @@ async function initialize() {
     // ===== Lv50 영웅 (T7) =====
     "('사신검', 'weapon', 'weapon', '1h', '사신의 기운이 감도는 검. 범위1 마름모.', 10000, 5000, 0, 0, 65, 0, 50, NULL)",
     "('신수궁', 'weapon', 'weapon', '2h', '신수의 가호가 깃든 활. 범위4 직선.', 11000, 5500, 0, 0, 60, 0, 50, NULL)",
+    "('봉황 창', 'weapon', 'weapon', '2h', '봉황의 깃으로 장식된 창. 관통 공격.', 10500, 5250, 0, 0, 62, 18, 50, NULL)",
+    "('봉황 도끼', 'weapon', 'weapon', '2h', '봉황의 불꽃이 깃든 도끼. 횡베기.', 10800, 5400, 0, 0, 66, 0, 50, NULL)",
     "('태허 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 우주의 기운이 담긴 부적.', 10000, 5000, 0, 120, 62, 0, 50, '풍수사')",
     "('천무 방울', 'weapon', 'weapon', '2h', '무당 전용. 천상의 춤이 깃든 방울.', 10000, 5000, 0, 80, 55, 24, 50, '무당')",
     "('대각 목탁', 'weapon', 'weapon', '2h', '승려 전용. 대각의 경지에 이른 목탁.', 10000, 5000, 120, 0, 45, 52, 50, '승려')",
@@ -6179,6 +6277,8 @@ async function initialize() {
     // ===== Lv65 전설 (T8) =====
     "('하늘의 의지', 'weapon', 'weapon', '1h', '하늘의 의지가 담긴 신검. 범위1 마름모.', 18000, 9000, 0, 0, 88, 0, 65, NULL)",
     "('태양의 활', 'weapon', 'weapon', '2h', '태양의 빛이 깃든 신궁. 범위4 직선.', 19000, 9500, 0, 0, 82, 0, 65, NULL)",
+    "('기린의 뿔창', 'weapon', 'weapon', '2h', '기린의 뿔로 만든 창. 관통 공격.', 18500, 9250, 0, 0, 85, 24, 65, NULL)",
+    "('기린 도끼', 'weapon', 'weapon', '2h', '기린의 뿔로 만든 도끼. 횡베기.', 19000, 9500, 0, 0, 90, 0, 65, NULL)",
     "('구천 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 구천의 신령이 깃든 부적.', 18000, 9000, 0, 160, 85, 0, 65, '풍수사')",
     "('무극 방울', 'weapon', 'weapon', '2h', '무당 전용. 무극의 경지에 이른 방울.', 18000, 9000, 0, 110, 75, 32, 65, '무당')",
     "('보리 법구', 'weapon', 'weapon', '2h', '승려 전용. 깨달음의 법구.', 18000, 9000, 160, 0, 60, 68, 65, '승려')",
@@ -6193,6 +6293,8 @@ async function initialize() {
     // ===== Lv80 신화 (T9) =====
     "('천상의 검', 'weapon', 'weapon', '1h', '천상에서 내린 불멸의 검. 범위1 마름모.', 30000, 15000, 0, 0, 115, 0, 80, NULL)",
     "('별의 활', 'weapon', 'weapon', '2h', '별빛을 발사하는 신궁. 범위4 직선.', 32000, 16000, 0, 0, 108, 0, 80, NULL)",
+    "('이무기의 창', 'weapon', 'weapon', '2h', '이무기의 뿔로 만든 창. 관통 공격.', 31000, 15500, 0, 0, 111, 30, 80, NULL)",
+    "('이무기 도끼', 'weapon', 'weapon', '2h', '이무기의 뿔로 만든 도끼. 횡베기.', 31500, 15750, 0, 0, 117, 0, 80, NULL)",
     "('천지 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 천지의 이치가 담긴 부적.', 30000, 15000, 0, 200, 110, 0, 80, '풍수사')",
     "('만신전 방울', 'weapon', 'weapon', '2h', '무당 전용. 만 신령의 축복을 받은 방울.', 30000, 15000, 0, 140, 95, 42, 80, '무당')",
     "('해탈 법구', 'weapon', 'weapon', '2h', '승려 전용. 해탈의 경지에 이른 법구.', 30000, 15000, 200, 0, 78, 85, 80, '승려')",
@@ -6207,6 +6309,8 @@ async function initialize() {
     // ===== Lv95 초월 (T10) =====
     "('개벽의 검', 'weapon', 'weapon', '1h', '세상을 개벽하는 신검. 범위1 마름모.', 50000, 25000, 0, 0, 150, 0, 95, NULL)",
     "('천궁', 'weapon', 'weapon', '2h', '천상의 활. 별을 쏜다. 범위4 직선.', 55000, 27500, 0, 0, 140, 0, 95, NULL)",
+    "('천제의 창', 'weapon', 'weapon', '2h', '천제가 휘두른 신창. 관통 공격.', 52000, 26000, 0, 0, 145, 38, 95, NULL)",
+    "('천제 도끼', 'weapon', 'weapon', '2h', '천제가 휘두른 신도끼. 횡베기.', 53000, 26500, 0, 0, 152, 0, 95, NULL)",
     "('만물 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 만물의 이치가 담긴 부적.', 50000, 25000, 0, 250, 145, 0, 95, '풍수사')",
     "('창세 방울', 'weapon', 'weapon', '2h', '무당 전용. 창세의 진동이 깃든 방울.', 50000, 25000, 0, 180, 125, 55, 95, '무당')",
     "('열반 법륜', 'weapon', 'weapon', '2h', '승려 전용. 완전한 깨달음의 법륜.', 50000, 25000, 250, 0, 100, 110, 95, '승려')",
@@ -6222,28 +6326,114 @@ async function initialize() {
     await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
   }
 
+  // -- 공용 창/도끼 무기 추가 (기존 DB에도 적용) --
+  const newCommonWeapons = [
+    // 공용 창
+    "('나무 창', 'weapon', 'weapon', '2h', '기본적인 나무 창. 관통 공격.', 110, 55, 0, 0, 7, 2, 1, NULL)",
+    "('강철 창', 'weapon', 'weapon', '2h', '강철로 만든 창. 관통 공격.', 380, 190, 0, 0, 14, 4, 3, NULL)",
+    "('용아 창', 'weapon', 'weapon', '2h', '용의 이빨로 만든 창. 관통 공격.', 1150, 575, 0, 0, 22, 6, 6, NULL)",
+    "('뇌전 창', 'weapon', 'weapon', '2h', '번개의 힘이 깃든 창. 관통 공격.', 680, 340, 0, 0, 19, 5, 4, NULL)",
+    "('용린 창', 'weapon', 'weapon', '2h', '용의 비늘로 강화된 창. 관통 공격.', 5200, 2600, 0, 0, 43, 10, 8, NULL)",
+    "('단군의 신창', 'weapon', 'weapon', '2h', '단군이 사용하던 신창. 관통 공격.', 15500, 7750, 0, 0, 77, 18, 13, NULL)",
+    "('청동 창', 'weapon', 'weapon', '2h', '청동으로 만든 창. 관통 공격.', 1250, 625, 0, 0, 23, 6, 7, NULL)",
+    "('백은 창', 'weapon', 'weapon', '2h', '백은으로 만든 창. 관통 공격.', 2600, 1300, 0, 0, 31, 8, 10, NULL)",
+    "('황금 창', 'weapon', 'weapon', '2h', '황금빛 창. 관통 공격.', 3650, 1825, 0, 0, 36, 10, 15, NULL)",
+    "('월아 창', 'weapon', 'weapon', '2h', '달빛을 머금은 창. 관통 공격.', 2100, 1050, 0, 0, 29, 8, 20, NULL)",
+    "('현무 창', 'weapon', 'weapon', '2h', '현무의 기운이 깃든 창. 관통 공격.', 3650, 1825, 0, 0, 36, 10, 28, NULL)",
+    "('백호 창', 'weapon', 'weapon', '2h', '백호의 기운이 깃든 창. 관통 공격.', 6250, 3125, 0, 0, 48, 14, 38, NULL)",
+    "('봉황 창', 'weapon', 'weapon', '2h', '봉황의 깃으로 장식된 창. 관통 공격.', 10500, 5250, 0, 0, 62, 18, 50, NULL)",
+    "('기린의 뿔창', 'weapon', 'weapon', '2h', '기린의 뿔로 만든 창. 관통 공격.', 18500, 9250, 0, 0, 85, 24, 65, NULL)",
+    "('이무기의 창', 'weapon', 'weapon', '2h', '이무기의 뿔로 만든 창. 관통 공격.', 31000, 15500, 0, 0, 111, 30, 80, NULL)",
+    "('천제의 창', 'weapon', 'weapon', '2h', '천제가 휘두른 신창. 관통 공격.', 52000, 26000, 0, 0, 145, 38, 95, NULL)",
+    // 공용 도끼
+    "('나무 도끼', 'weapon', 'weapon', '2h', '기본적인 나무 도끼. 횡베기.', 115, 57, 0, 0, 8, 0, 1, NULL)",
+    "('강철 도끼', 'weapon', 'weapon', '2h', '강철로 만든 도끼. 횡베기.', 390, 195, 0, 0, 16, 0, 3, NULL)",
+    "('용아 도끼', 'weapon', 'weapon', '2h', '용의 이빨로 만든 도끼. 횡베기.', 1180, 590, 0, 0, 25, 0, 6, NULL)",
+    "('뇌전 도끼', 'weapon', 'weapon', '2h', '번개의 힘이 깃든 도끼. 횡베기.', 700, 350, 0, 0, 21, 0, 4, NULL)",
+    "('용린 도끼', 'weapon', 'weapon', '2h', '용의 비늘로 강화된 도끼. 횡베기.', 5300, 2650, 0, 0, 46, 0, 8, NULL)",
+    "('천마 도끼', 'weapon', 'weapon', '2h', '천마의 기운이 깃든 도끼. 횡베기.', 16000, 8000, 0, 0, 82, 0, 13, NULL)",
+    "('청동 도끼', 'weapon', 'weapon', '2h', '청동으로 만든 도끼. 횡베기.', 1280, 640, 0, 0, 25, 0, 7, NULL)",
+    "('백은 도끼', 'weapon', 'weapon', '2h', '백은으로 만든 도끼. 횡베기.', 2650, 1325, 0, 0, 33, 0, 10, NULL)",
+    "('황금 도끼', 'weapon', 'weapon', '2h', '황금빛 도끼. 횡베기.', 3700, 1850, 0, 0, 39, 0, 15, NULL)",
+    "('월아 도끼', 'weapon', 'weapon', '2h', '달빛을 머금은 도끼. 횡베기.', 2150, 1075, 0, 0, 31, 0, 20, NULL)",
+    "('현무 도끼', 'weapon', 'weapon', '2h', '현무의 기운이 깃든 도끼. 횡베기.', 3700, 1850, 0, 0, 39, 0, 28, NULL)",
+    "('백호 도끼', 'weapon', 'weapon', '2h', '백호의 기운이 깃든 도끼. 횡베기.', 6300, 3150, 0, 0, 51, 0, 38, NULL)",
+    "('봉황 도끼', 'weapon', 'weapon', '2h', '봉황의 불꽃이 깃든 도끼. 횡베기.', 10800, 5400, 0, 0, 66, 0, 50, NULL)",
+    "('기린 도끼', 'weapon', 'weapon', '2h', '기린의 뿔로 만든 도끼. 횡베기.', 19000, 9500, 0, 0, 90, 0, 65, NULL)",
+    "('이무기 도끼', 'weapon', 'weapon', '2h', '이무기의 뿔로 만든 도끼. 횡베기.', 31500, 15750, 0, 0, 117, 0, 80, NULL)",
+    "('천제 도끼', 'weapon', 'weapon', '2h', '천제가 휘두른 신도끼. 횡베기.', 53000, 26500, 0, 0, 152, 0, 95, NULL)",
+  ];
+  for (const v of newCommonWeapons) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+  // 풍수사 전용 지팡이 → 공용으로 변경
+  const pungsuStaffs = [
+    "('영맥 지팡이', 'weapon', 'weapon', '2h', '땅의 영맥이 깃든 지팡이.', 1300, 650, 0, 48, 22, 0, 7, NULL)",
+    "('천기 지팡이', 'weapon', 'weapon', '2h', '천체의 기운이 흐르는 지팡이.', 2700, 1350, 0, 58, 30, 0, 10, NULL)",
+    "('용맥 지팡이', 'weapon', 'weapon', '2h', '용맥의 기운이 깃든 지팡이.', 3800, 1900, 0, 72, 37, 0, 15, NULL)",
+    "('산신 지팡이', 'weapon', 'weapon', '2h', '산신의 축복이 깃든 지팡이.', 2200, 1100, 0, 64, 32, 0, 20, NULL)",
+    "('지맥 지팡이', 'weapon', 'weapon', '2h', '대지의 맥이 흐르는 지팡이.', 3800, 1900, 0, 75, 38, 0, 28, NULL)",
+    "('태을 지팡이', 'weapon', 'weapon', '2h', '태을성의 기운이 깃든 지팡이.', 6500, 3250, 0, 92, 50, 0, 38, NULL)",
+    "('선계 지팡이', 'weapon', 'weapon', '2h', '선계의 기운이 흐르는 지팡이.', 11000, 5500, 0, 125, 65, 0, 50, NULL)",
+    "('천문 지팡이', 'weapon', 'weapon', '2h', '별자리의 힘이 깃든 지팡이.', 19000, 9500, 0, 165, 88, 0, 65, NULL)",
+    "('조화 지팡이', 'weapon', 'weapon', '2h', '만물의 조화가 깃든 지팡이.', 32000, 16000, 0, 205, 115, 0, 80, NULL)",
+    "('개천 지팡이', 'weapon', 'weapon', '2h', '하늘을 연 개천의 힘이 깃든 궁극의 지팡이.', 52000, 26000, 0, 255, 148, 0, 95, NULL)",
+  ];
+  for (const v of pungsuStaffs) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+  // 기존 풍수사 전용 지팡이 → 공용
+  await pool.query("UPDATE items SET class_restriction = NULL, description = REPLACE(description, '풍수사 전용. ', '') WHERE type='weapon' AND weapon_subtype='staff' AND class_restriction='풍수사'").catch(() => {});
+  // 승려 전용 mace, spear → 공용
+  await pool.query("UPDATE items SET class_restriction = NULL, description = REPLACE(description, '승려 전용. ', '') WHERE type='weapon' AND weapon_subtype='mace' AND class_restriction='승려'").catch(() => {});
+  await pool.query("UPDATE items SET class_restriction = NULL, description = REPLACE(description, '승려 전용. ', '') WHERE type='weapon' AND weapon_subtype='spear' AND class_restriction='승려'").catch(() => {});
+
+  // 승려 전용 목탁 5종 추가 (Lv4/38/65/80/95)
+  const newMoktaks = [
+    "('백운 목탁', 'weapon', 'weapon', '2h', '승려 전용. 백운산의 기운이 깃든 목탁.', 700, 350, 35, 0, 15, 12, 4, '승려')",
+    "('금강산 목탁', 'weapon', 'weapon', '2h', '승려 전용. 금강산의 영험한 기운이 깃든 목탁.', 6500, 3250, 90, 0, 35, 40, 38, '승려')",
+    "('반야 목탁', 'weapon', 'weapon', '2h', '승려 전용. 반야의 지혜가 깃든 목탁.', 19000, 9500, 160, 0, 60, 68, 65, '승려')",
+    "('만다라 목탁', 'weapon', 'weapon', '2h', '승려 전용. 만다라의 진리가 깃든 목탁.', 32000, 16000, 200, 0, 78, 85, 80, '승려')",
+    "('니르바나 목탁', 'weapon', 'weapon', '2h', '승려 전용. 열반의 궁극에 이른 목탁.', 52000, 26000, 250, 0, 100, 110, 95, '승려')",
+  ];
+  for (const v of newMoktaks) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+
+  // 신규 무기 weapon_subtype 설정 (INSERT 직후)
+  await pool.query("UPDATE items SET weapon_subtype='spear' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%창%' OR name LIKE '%뿔창%' OR name LIKE '%금강장%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='axe' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%도끼%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='staff' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%지팡이%')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='moktak' WHERE type='weapon' AND weapon_subtype IS NULL AND (name LIKE '%목탁%')").catch(() => {});
+  // 기존 bell→moktak 분리 (목탁은 승려 전용)
+  await pool.query("UPDATE items SET weapon_subtype='moktak' WHERE type='weapon' AND weapon_subtype='bell' AND name LIKE '%목탁%'").catch(() => {});
+
   // 등급 설정 (고급/영웅/전설/신화/초월)
   const gradeMap = {
-    '고급': ['청동 장검','청동 장궁','풍운 부적','귀신 방울','참선 목탁','업보의 낫',
+    '고급': ['청동 장검','청동 장궁','청동 창','청동 도끼','영맥 지팡이','풍운 부적','귀신 방울','참선 목탁','업보의 낫',
              '청동 갑옷','청동 투구','청동 장화','청동 방패','옥 반지','은빛 목걸이',
              '비룡 갑옷','비룡 투구','비룡 장화','비룡 방패','비취 반지','호박석 목걸이',
-             '명월도','폭풍궁','영기 부적','신명 방울','파사 목탁','망자의 낫',
+             '명월도','폭풍궁','월아 창','월아 도끼','영기 부적','산신 지팡이','신명 방울','파사 목탁','망자의 낫',
              '백호 갑옷','백호 투구','백호 장화','백호 방패','사파이어 반지','월광석 목걸이',
-             '뇌광검','현무궁','혼백 부적','태을 방울','열반 목탁','원혼의 낫'],
-    '희귀': ['백은 검','백은 궁','천문 부적','영매 방울','법력 목탁','명부의 낫',
+             '뇌광검','현무궁','현무 창','현무 도끼','혼백 부적','지맥 지팡이','태을 방울','열반 목탁','원혼의 낫'],
+    '희귀': ['백은 검','백은 궁','백은 창','백은 도끼','천문 부적','천기 지팡이','영매 방울','법력 목탁','명부의 낫',
              '백은 갑옷','백은 투구','백은 장화','백은 방패','자수정 반지','수정 목걸이',
              '현무 갑옷','현무 투구','현무 장화','현무 방패','루비 반지','천계석 목걸이',
-             '주작도','청룡궁','천기 부적','강신 방울','금강 법구','나락의 대낫'],
-    '영웅': ['황금 검','황금 궁','도참 부적','접신 방울','범종 목탁','삼도천의 낫',
+             '주작도','청룡궁','백호 창','백호 도끼','천기 부적','태을 지팡이','강신 방울','금강산 목탁','금강 법구','나락의 대낫'],
+    '영웅': ['황금 검','황금 궁','황금 창','황금 도끼','도참 부적','용맥 지팡이','접신 방울','범종 목탁','삼도천의 낫',
              '황금 갑옷','황금 투구','황금 장화','황금 방패','홍옥 반지','금 목걸이',
              '봉황 갑옷','봉황 투구','봉황 장화','봉황 방패','에메랄드 반지','용의 인장 목걸이',
-             '사신검','신수궁','태허 부적','천무 방울','대각 목탁','저승 심판자'],
+             '사신검','신수궁','봉황 창','봉황 도끼','태허 부적','선계 지팡이','천무 방울','대각 목탁','저승 심판자',
+             '대각 거대방패','대각 신칼'],
     '전설': ['기린 갑옷','기린 투구','기린 장화','기린 방패','다이아몬드 반지','삼족오 목걸이',
-             '하늘의 의지','태양의 활','구천 부적','무극 방울','보리 법구','윤회의 낫'],
+             '하늘의 의지','태양의 활','기린의 뿔창','기린 도끼','구천 부적','천문 지팡이','무극 방울','반야 목탁','보리 법구','윤회의 낫',
+             '보리 거대방패','보리 신칼'],
     '신화': ['이무기 갑옷','이무기 투구','이무기 장화','이무기 방패','천의 반지','태극 목걸이',
-             '천상의 검','별의 활','천지 부적','만신전 방울','해탈 법구','무상의 대낫'],
+             '천상의 검','별의 활','이무기의 창','이무기 도끼','천지 부적','조화 지팡이','만신전 방울','만다라 목탁','해탈 법구','무상의 대낫',
+             '해탈 거대방패','이무기 거대방패','해탈 신칼','이무기 신칼'],
     '초월': ['천제 갑옷','천제 투구','천제 장화','천제 방패','무한의 반지','단군의 목걸이',
-             '개벽의 검','천궁','만물 부적','창세 방울','열반 법륜','영멸의 낫'],
+             '개벽의 검','천궁','천제의 창','천제 도끼','만물 부적','개천 지팡이','창세 방울','니르바나 목탁','열반 법륜','영멸의 낫',
+             '천제 거대방패','천제 신칼'],
   };
   for (const [grade, names] of Object.entries(gradeMap)) {
     const maxEnhance = grade === '초월' ? 25 : grade === '신화' ? 20 : grade === '전설' ? 15 : grade === '영웅' ? 12 : 10;
@@ -6459,6 +6649,65 @@ async function initialize() {
     }
   }
 
+  // -- 방어구 30종 확장 (helmet/chest/boots/shield 각 30개 맞추기) --
+  const newArmorExpansion = [
+    // ===== helmet +1 (Lv100 추가) =====
+    "('태초 투구', 'helmet', 'helmet', NULL, '태초의 기운이 응축된 궁극의 투구.', 35000, 17500, 185, 35, 0, 58, 100, NULL)",
+
+    // ===== chest +1 (Lv100 추가) =====
+    "('태초 갑옷', 'chest', 'chest', NULL, '태초의 기운이 응축된 궁극의 갑옷.', 50000, 25000, 320, 70, 0, 92, 100, NULL)",
+
+    // ===== boots +14 (Lv 2,5,18,22,24,32,35,42,45,55,60,72,88,100) =====
+    "('짚신', 'boots', 'boots', NULL, '볏짚으로 엮은 기본 신발.', 55, 27, 4, 0, 1, 1, 2, NULL)",
+    "('무명 장화', 'boots', 'boots', NULL, '무명천으로 만든 장화.', 280, 140, 14, 0, 2, 5, 5, NULL)",
+    "('풍백 장화', 'boots', 'boots', NULL, '바람의 신 풍백의 기운이 깃든 장화.', 1500, 750, 30, 0, 5, 10, 18, NULL)",
+    "('산령 장화', 'boots', 'boots', NULL, '산의 정령이 축복한 장화.', 1100, 550, 29, 0, 4, 9, 22, NULL)",
+    "('태극 장화', 'boots', 'boots', NULL, '태극의 문양이 새겨진 장화.', 1300, 650, 30, 0, 5, 10, 24, NULL)",
+    "('주작 장화', 'boots', 'boots', NULL, '주작의 불꽃이 깃든 장화.', 2200, 1100, 38, 0, 6, 13, 32, NULL)",
+    "('청룡 장화', 'boots', 'boots', NULL, '청룡의 바람이 깃든 장화.', 2500, 1250, 40, 0, 6, 14, 35, NULL)",
+    "('삼족오 장화', 'boots', 'boots', NULL, '삼족오의 발톱이 달린 장화.', 3500, 1750, 48, 0, 8, 16, 42, NULL)",
+    "('사신 장화', 'boots', 'boots', NULL, '사신의 기운이 깃든 장화.', 4000, 2000, 52, 0, 8, 17, 45, NULL)",
+    "('용왕 장화', 'boots', 'boots', NULL, '용왕이 하사한 장화.', 6000, 3000, 62, 0, 10, 20, 55, NULL)",
+    "('선계 장화', 'boots', 'boots', NULL, '선계의 기운이 흐르는 장화.', 7500, 3750, 68, 0, 11, 22, 60, NULL)",
+    "('천마 장화', 'boots', 'boots', NULL, '천마의 발굽이 달린 장화.', 11000, 5500, 78, 0, 13, 25, 72, NULL)",
+    "('신수 장화', 'boots', 'boots', NULL, '신수의 축복이 깃든 장화.', 18000, 9000, 95, 0, 17, 30, 88, NULL)",
+    "('태초 장화', 'boots', 'boots', NULL, '태초의 기운이 응축된 궁극의 장화.', 28000, 14000, 125, 0, 22, 40, 100, NULL)",
+
+    // ===== shield +14 (Lv 2,4,18,22,24,32,35,42,45,55,60,72,88,100) =====
+    "('짚방패', 'shield', 'shield', NULL, '볏짚과 나무로 엮은 방패.', 65, 32, 6, 0, 0, 5, 2, NULL)",
+    "('무쇠 방패', 'shield', 'shield', NULL, '무쇠로 만든 방패.', 220, 110, 18, 0, 0, 12, 4, NULL)",
+    "('풍백 방패', 'shield', 'shield', NULL, '바람의 신 풍백의 기운이 깃든 방패.', 1800, 900, 42, 0, 0, 20, 18, NULL)",
+    "('산령 방패', 'shield', 'shield', NULL, '산의 정령이 축복한 방패.', 1300, 650, 38, 0, 0, 19, 22, NULL)",
+    "('태극 방패', 'shield', 'shield', NULL, '태극의 문양이 새겨진 방패.', 1500, 750, 42, 0, 0, 21, 24, NULL)",
+    "('주작 방패', 'shield', 'shield', NULL, '주작의 불꽃으로 단련된 방패.', 2600, 1300, 55, 0, 0, 26, 32, NULL)",
+    "('청룡 방패', 'shield', 'shield', NULL, '청룡의 비늘로 만든 방패.', 3000, 1500, 58, 0, 0, 28, 35, NULL)",
+    "('삼족오 방패', 'shield', 'shield', NULL, '삼족오의 깃으로 강화된 방패.', 4200, 2100, 70, 0, 0, 32, 42, NULL)",
+    "('사신 방패', 'shield', 'shield', NULL, '사신의 기운이 서린 방패.', 5000, 2500, 75, 0, 0, 34, 45, NULL)",
+    "('용왕 방패', 'shield', 'shield', NULL, '용왕이 하사한 방패.', 7500, 3750, 88, 0, 0, 40, 55, NULL)",
+    "('선계 방패', 'shield', 'shield', NULL, '선계의 기운이 흐르는 방패.', 9500, 4750, 95, 0, 0, 42, 60, NULL)",
+    "('천마 방패', 'shield', 'shield', NULL, '천마의 비늘로 만든 방패.', 15000, 7500, 115, 0, 0, 50, 72, NULL)",
+    "('신수 방패', 'shield', 'shield', NULL, '신수의 축복이 깃든 방패.', 22000, 11000, 140, 0, 0, 60, 88, NULL)",
+    "('태초 방패', 'shield', 'shield', NULL, '태초의 기운이 응축된 궁극의 방패.', 38000, 19000, 180, 0, 0, 78, 100, NULL)",
+  ];
+  for (const v of newArmorExpansion) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+  // 신규 방어구 등급 설정
+  const newArmorGrades = {
+    '고급': ['짚신','짚방패','무명 장화','무쇠 방패','풍백 장화','풍백 방패','산령 장화','산령 방패','태극 장화','태극 방패'],
+    '희귀': ['주작 장화','주작 방패','청룡 장화','청룡 방패'],
+    '영웅': ['삼족오 장화','삼족오 방패','사신 장화','사신 방패','용왕 장화','용왕 방패'],
+    '전설': ['선계 장화','선계 방패','천마 장화','천마 방패'],
+    '신화': ['신수 장화','신수 방패'],
+    '초월': ['태초 투구','태초 갑옷','태초 장화','태초 방패'],
+  };
+  for (const [grade, names] of Object.entries(newArmorGrades)) {
+    const maxEnh = grade === '초월' ? 25 : grade === '신화' ? 20 : grade === '전설' ? 15 : grade === '영웅' ? 12 : 10;
+    for (const nm of names) {
+      await pool.query("UPDATE items SET grade = ?, max_enhance = ? WHERE name = ?", [grade, maxEnh, nm]).catch(() => {});
+    }
+  }
+
   // -- 스태미나 공식 개선: 기본 15, Lv당 1/3 증가 --
   // (calcMaxStamina 함수에서 처리 - 코드 변경 필요)
 
@@ -6620,6 +6869,370 @@ async function initialize() {
         await pool.query('INSERT IGNORE INTO skill_tree_edges (parent_node_id, child_node_id) VALUES (?, ?)', [rpMap[pKey], rpMap[cKey]]);
       }
     }
+  }
+
+  // ========== 북채비 스킬 트리 (Physical Tank) ==========
+  const [existBukchebi] = await pool.query("SELECT COUNT(*) as cnt FROM skill_tree_nodes WHERE class_type = '북채비'");
+  if (existBukchebi[0].cnt === 0) {
+    await pool.query(`INSERT INTO skill_tree_nodes (class_type, branch, branch_name, tier, node_key, name, description, icon, node_type, skill_type, mp_cost, damage_multiplier, damage_type, heal_amount, buff_stat, buff_value, buff_duration, cooldown, skill_range, passive_stat, passive_value, passive_is_percent, pos_x, pos_y, point_cost, required_level) VALUES
+      -- ===== 방패술 (bk_shield) 브랜치: 방패 기반 물리 공격 =====
+      ('북채비','bk_shield','방패술',1,'bk_shield_1','방패 강타','방패로 적을 강타하여 물리 피해를 준다.','🛡️','active','attack',8,1.8,'physical',0,NULL,0,0,0,1,NULL,0,0, 0,0, 1,1),
+      ('북채비','bk_shield','방패술',2,'bk_shield_2a','산성 타격','산성의 힘을 실은 방패 타격.','🏔️','active','attack',14,2.4,'physical',0,NULL,0,0,1,1,NULL,0,0, 0,1, 2,8),
+      ('북채비','bk_shield','방패술',2,'bk_shield_2b','대지 분쇄','대지를 분쇄하는 방패 내려치기.','⛰️','active','attack',16,2.6,'physical',0,NULL,0,0,1,1,NULL,0,0, 0,2, 2,8),
+      ('북채비','bk_shield','방패술',3,'bk_shield_3a','방패의 달인','방패 다루기에 능숙해져 공격력 증가.','💪','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_attack',5,0, 0,3, 3,18),
+      ('북채비','bk_shield','방패술',3,'bk_shield_3b','쇄도','방패를 앞세워 적에게 돌진한다.','🐗','active','attack',22,3.2,'physical',0,NULL,0,0,2,2,NULL,0,0, 0,4, 3,18),
+      ('북채비','bk_shield','방패술',3,'bk_shield_3c','금강 타격','금강석처럼 단단한 방패로 강타.','💎','active','attack',25,3.5,'physical',0,NULL,0,0,1,2,NULL,0,0, 0,5, 3,18),
+      ('북채비','bk_shield','방패술',4,'bk_shield_4','산사태','방패로 대지를 내리쳐 산사태를 일으킨다.','🌋','active','aoe',40,4.5,'physical',0,NULL,0,0,3,2,NULL,0,0, 0,6, 4,30),
+      ('북채비','bk_shield','방패술',5,'bk_shield_5','대지의 분노','대지의 분노를 담은 방패 연타.','🔥','active','attack',55,6.5,'physical',0,NULL,0,0,4,3,NULL,0,0, 0,7, 5,35),
+      ('북채비','bk_shield','방패술',6,'bk_shield_6','산성 붕괴','산성을 붕괴시키는 광역 방패술.','💥','active','aoe',75,8.5,'physical',0,'defense',-15,3,5,3,NULL,0,0, 0,8, 7,55),
+      ('북채비','bk_shield','방패술',7,'bk_shield_7','천하무적','천하무적의 방패술. 모든 것을 부순다.','👑','active','aoe',100,12.0,'physical',0,NULL,0,0,7,4,NULL,0,0, 0,9, 10,80),
+
+      -- ===== 철벽술 (bk_wall) 브랜치: 방어/HP 버프 + 패시브 =====
+      ('북채비','bk_wall','철벽술',1,'bk_wall_1','철벽 방어','몸을 철벽처럼 단단하게 만든다.','🧱','active','buff',8,0,'physical',0,'defense',6,3,2,0,NULL,0,0, 1,0, 1,1),
+      ('북채비','bk_wall','철벽술',2,'bk_wall_2a','강철 피부','피부가 강철처럼 단단해진다.','🔩','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_defense',4,0, 1,1, 2,8),
+      ('북채비','bk_wall','철벽술',2,'bk_wall_2b','대지의 축복','대지의 축복으로 최대 HP 증가.','🌿','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'hp',12,0, 1,2, 2,8),
+      ('북채비','bk_wall','철벽술',3,'bk_wall_3a','금강불괴','금강불괴의 경지로 방어력 대폭 증가.','🛡️','active','buff',20,0,'physical',0,'defense',12,4,3,0,NULL,0,0, 1,3, 3,18),
+      ('북채비','bk_wall','철벽술',3,'bk_wall_3b','산의 인내','산처럼 인내하여 피해를 줄인다.','⛰️','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_defense',6,0, 1,4, 3,18),
+      ('북채비','bk_wall','철벽술',3,'bk_wall_3c','대지의 갑옷','대지의 기운으로 갑옷을 형성한다.','🪨','active','buff',22,0,'physical',20,'defense',10,4,3,0,NULL,0,0, 1,5, 3,18),
+      ('북채비','bk_wall','철벽술',4,'bk_wall_4','산성 결계','산성의 결계를 펼쳐 아군을 보호한다.','🏯','active','buff',38,0,'physical',0,'defense',18,5,4,0,NULL,0,0, 1,6, 4,30),
+      ('북채비','bk_wall','철벽술',5,'bk_wall_5','불멸의 방벽','불멸의 방벽을 세워 피해를 차단한다.','🏰','active','buff',55,0,'physical',30,'defense',25,5,5,0,NULL,0,0, 1,7, 5,35),
+      ('북채비','bk_wall','철벽술',6,'bk_wall_6','천하 철벽','천하 철벽의 경지. 모든 공격을 막는다.','🗿','active','buff',75,0,'physical',50,'defense',35,6,6,0,'phys_defense',10,0, 1,8, 7,55),
+      ('북채비','bk_wall','철벽술',7,'bk_wall_7','태산 같은 방어','태산처럼 흔들리지 않는 궁극 방어.','🏔️','active','buff',100,0,'physical',80,'defense',50,7,8,0,'hp',60,0, 1,9, 10,80),
+
+      -- ===== 수호술 (bk_guard) 브랜치: 도발/수호/반격/힐 =====
+      ('북채비','bk_guard','수호술',1,'bk_guard_1','도발','적의 주의를 끌어 자신에게 공격을 집중시킨다.','😤','active','buff',6,0,'physical',0,'defense',4,2,1,0,NULL,0,0, 2,0, 1,1),
+      ('북채비','bk_guard','수호술',2,'bk_guard_2a','수호의 기운','수호의 기운으로 HP를 회복한다.','💚','active','heal',12,0,'physical',25,NULL,0,0,2,0,NULL,0,0, 2,1, 2,8),
+      ('북채비','bk_guard','수호술',2,'bk_guard_2b','반격 자세','반격 자세를 취하여 피해 반사.','⚔️','active','buff',10,0,'physical',0,'attack',5,3,2,0,NULL,0,0, 2,2, 2,8),
+      ('북채비','bk_guard','수호술',3,'bk_guard_3a','생명력 회복','대지의 힘으로 생명력을 회복한다.','🌱','active','heal',18,0,'physical',40,NULL,0,0,2,0,NULL,0,0, 2,3, 3,18),
+      ('북채비','bk_guard','수호술',3,'bk_guard_3b','수호의 맹세','수호의 맹세로 아군 방어력 증가.','🤝','active','buff',20,0,'physical',0,'defense',8,4,3,0,NULL,0,0, 2,4, 3,18),
+      ('북채비','bk_guard','수호술',3,'bk_guard_3c','보복의 일격','공격받을 때 반격하여 물리 피해.','🔄','active','attack',22,2.8,'physical',0,NULL,0,0,2,1,NULL,0,0, 2,5, 3,18),
+      ('북채비','bk_guard','수호술',4,'bk_guard_4','대지의 수호자','대지의 수호자가 되어 아군을 보호.','🌍','active','buff',35,0,'physical',30,'defense',15,5,4,0,NULL,0,0, 2,6, 4,30),
+      ('북채비','bk_guard','수호술',5,'bk_guard_5','생명의 대지','대지의 생명력으로 대량 회복.','🌳','active','heal',50,0,'physical',70,NULL,0,0,5,0,NULL,0,0, 2,7, 5,35),
+      ('북채비','bk_guard','수호술',6,'bk_guard_6','철옹성 수호','철옹성 수호로 아군 전체를 보호.','🏯','active','buff',70,0,'physical',50,'defense',30,6,6,0,'phys_defense',8,0, 2,8, 7,55),
+      ('북채비','bk_guard','수호술',7,'bk_guard_7','산신의 가호','산신의 가호로 아군 전체를 치유하고 수호.','⛩️','active','heal',95,0,'physical',120,'defense',40,7,8,0,'hp',50,0, 2,9, 10,80)
+    `);
+
+    // 북채비 스킬 트리 엣지 연결
+    const bkEdges = [
+      ['bk_shield_1','bk_shield_2a'], ['bk_shield_1','bk_shield_2b'],
+      ['bk_shield_2a','bk_shield_3a'], ['bk_shield_2a','bk_shield_3b'], ['bk_shield_2b','bk_shield_3b'], ['bk_shield_2b','bk_shield_3c'],
+      ['bk_shield_3b','bk_shield_4'],
+      ['bk_shield_4','bk_shield_5'], ['bk_shield_5','bk_shield_6'], ['bk_shield_6','bk_shield_7'],
+      ['bk_wall_1','bk_wall_2a'], ['bk_wall_1','bk_wall_2b'],
+      ['bk_wall_2a','bk_wall_3a'], ['bk_wall_2a','bk_wall_3b'], ['bk_wall_2b','bk_wall_3b'], ['bk_wall_2b','bk_wall_3c'],
+      ['bk_wall_3b','bk_wall_4'],
+      ['bk_wall_4','bk_wall_5'], ['bk_wall_5','bk_wall_6'], ['bk_wall_6','bk_wall_7'],
+      ['bk_guard_1','bk_guard_2a'], ['bk_guard_1','bk_guard_2b'],
+      ['bk_guard_2a','bk_guard_3a'], ['bk_guard_2a','bk_guard_3b'], ['bk_guard_2b','bk_guard_3b'], ['bk_guard_2b','bk_guard_3c'],
+      ['bk_guard_3b','bk_guard_4'],
+      ['bk_guard_4','bk_guard_5'], ['bk_guard_5','bk_guard_6'], ['bk_guard_6','bk_guard_7'],
+    ];
+    const [bkNodes] = await pool.query("SELECT id, node_key FROM skill_tree_nodes WHERE class_type = '북채비'");
+    const bkMap = {};
+    for (const n of bkNodes) bkMap[n.node_key] = n.id;
+    for (const [pKey, cKey] of bkEdges) {
+      if (bkMap[pKey] && bkMap[cKey]) {
+        await pool.query('INSERT IGNORE INTO skill_tree_edges (parent_node_id, child_node_id) VALUES (?, ?)', [bkMap[pKey], bkMap[cKey]]);
+      }
+    }
+  }
+
+  // ========== 강신무 스킬 트리 (Physical Balanced) ==========
+  const [existGangshin] = await pool.query("SELECT COUNT(*) as cnt FROM skill_tree_nodes WHERE class_type = '강신무'");
+  if (existGangshin[0].cnt === 0) {
+    await pool.query(`INSERT INTO skill_tree_nodes (class_type, branch, branch_name, tier, node_key, name, description, icon, node_type, skill_type, mp_cost, damage_multiplier, damage_type, heal_amount, buff_stat, buff_value, buff_duration, cooldown, skill_range, passive_stat, passive_value, passive_is_percent, pos_x, pos_y, point_cost, required_level) VALUES
+      -- ===== 신검술 (gs_blade) 브랜치: 신칼 기반 물리 공격 =====
+      ('강신무','gs_blade','신검술',1,'gs_blade_1','신검 일섬','신령의 칼로 적을 빠르게 벤다.','⚔️','active','attack',8,2.0,'physical',0,NULL,0,0,0,1,NULL,0,0, 0,0, 1,1),
+      ('강신무','gs_blade','신검술',2,'gs_blade_2a','질풍검','바람처럼 빠른 검격을 날린다.','💨','active','attack',14,2.5,'physical',0,NULL,0,0,1,1,NULL,0,0, 0,1, 2,8),
+      ('강신무','gs_blade','신검술',2,'gs_blade_2b','검술 수련','검술 수련으로 물리 공격력 증가.','🗡️','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_attack',4,0, 0,2, 2,8),
+      ('강신무','gs_blade','신검술',3,'gs_blade_3a','뇌전 검격','번개를 담은 검격으로 적을 벤다.','⚡','active','attack',22,3.2,'physical',0,NULL,0,0,1,2,NULL,0,0, 0,3, 3,18),
+      ('강신무','gs_blade','신검술',3,'gs_blade_3b','회전 베기','회전하며 주변의 적을 벤다.','🌀','active','attack',24,2.8,'physical',0,NULL,0,0,2,2,NULL,0,0, 0,4, 3,18),
+      ('강신무','gs_blade','신검술',3,'gs_blade_3c','신검의 달인','신검 다루기의 달인이 되어 치명타 증가.','✨','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'crit_rate',5,0, 0,5, 3,18),
+      ('강신무','gs_blade','신검술',4,'gs_blade_4','화염검무','화염을 두른 검무로 적을 베어낸다.','🔥','active','attack',40,5.0,'physical',0,NULL,0,0,3,2,NULL,0,0, 0,6, 4,30),
+      ('강신무','gs_blade','신검술',5,'gs_blade_5','뇌전 쌍검','양손에 뇌전을 담아 연속으로 벤다.','⚡','active','attack',55,7.0,'physical',0,NULL,0,0,4,3,NULL,0,0, 0,7, 5,35),
+      ('강신무','gs_blade','신검술',6,'gs_blade_6','신령 검무','신령의 힘을 담은 검무로 광역 공격.','🌟','active','aoe',75,9.0,'physical',0,'defense',-15,3,5,3,NULL,0,0, 0,8, 7,55),
+      ('강신무','gs_blade','신검술',7,'gs_blade_7','천신검','천신의 검술. 만물을 베어 가른다.','⭐','active','aoe',100,13.0,'physical',0,NULL,0,0,7,4,NULL,0,0, 0,9, 10,80),
+
+      -- ===== 강신술 (gs_spirit) 브랜치: 신령 강림 버프 + 마법 하이브리드 =====
+      ('강신무','gs_spirit','강신술',1,'gs_spirit_1','신령 소환','신령을 소환하여 공격력을 높인다.','👻','active','buff',8,0,'magical',0,'attack',5,3,2,0,NULL,0,0, 1,0, 1,1),
+      ('강신무','gs_spirit','강신술',2,'gs_spirit_2a','신령의 불꽃','신령의 불꽃으로 마법 피해를 준다.','🔥','active','attack',14,2.2,'magical',0,NULL,0,0,1,2,NULL,0,0, 1,1, 2,8),
+      ('강신무','gs_spirit','강신술',2,'gs_spirit_2b','강신의 축복','강신의 축복으로 치명타율 증가.','🙏','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'crit_rate',3,0, 1,2, 2,8),
+      ('강신무','gs_spirit','강신술',3,'gs_spirit_3a','신령 강림','신령이 강림하여 공격력 대폭 증가.','✨','active','buff',20,0,'magical',0,'attack',12,4,3,0,NULL,0,0, 1,3, 3,18),
+      ('강신무','gs_spirit','강신술',3,'gs_spirit_3b','화염 신령','화염 신령을 불러 마법 피해를 준다.','🌋','active','attack',24,3.0,'magical',0,NULL,0,0,2,2,NULL,0,0, 1,4, 3,18),
+      ('강신무','gs_spirit','강신술',3,'gs_spirit_3c','신령의 가호','신령의 가호로 마법 공격력 증가.','🌸','passive',NULL,0,1.0,'magical',0,NULL,0,0,0,0,'mag_attack',5,0, 1,5, 3,18),
+      ('강신무','gs_spirit','강신술',4,'gs_spirit_4','대신령 소환','대신령을 소환하여 적에게 마법 폭격.','💫','active','attack',42,5.5,'magical',0,'attack',10,4,4,3,NULL,0,0, 1,6, 4,30),
+      ('강신무','gs_spirit','강신술',5,'gs_spirit_5','천신 강림','천신이 강림하여 전투력 극대화.','🌅','active','buff',55,0,'magical',0,'attack',22,5,5,0,'crit_rate',8,0, 1,7, 5,35),
+      ('강신무','gs_spirit','강신술',6,'gs_spirit_6','신령 폭풍','신령의 폭풍으로 광역 마법 피해.','🌪️','active','aoe',78,8.0,'magical',0,'defense',-18,4,6,4,NULL,0,0, 1,8, 7,55),
+      ('강신무','gs_spirit','강신술',7,'gs_spirit_7','만신의 힘','만신의 힘을 빌려 궁극의 강신.','🔱','active','buff',100,0,'magical',0,'attack',40,7,8,0,'mag_attack',20,0, 1,9, 10,80),
+
+      -- ===== 광전투 (gs_fury) 브랜치: 연속공격/치명타 특화 =====
+      ('강신무','gs_fury','광전투',1,'gs_fury_1','연속 타격','빠른 연속 타격으로 적을 공격한다.','👊','active','attack',6,1.6,'physical',0,NULL,0,0,0,1,NULL,0,0, 2,0, 1,1),
+      ('강신무','gs_fury','광전투',2,'gs_fury_2a','치명의 본능','치명타 확률이 크게 증가한다.','🎯','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'crit_rate',5,0, 2,1, 2,8),
+      ('강신무','gs_fury','광전투',2,'gs_fury_2b','질풍 연타','질풍처럼 빠른 연속 타격.','💨','active','attack',12,2.2,'physical',0,NULL,0,0,1,1,NULL,0,0, 2,2, 2,8),
+      ('강신무','gs_fury','광전투',3,'gs_fury_3a','광전사의 혈기','광전사의 혈기로 공격력 증가.','🩸','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'phys_attack',6,0, 2,3, 3,18),
+      ('강신무','gs_fury','광전투',3,'gs_fury_3b','삼연격','세 번 연속으로 적을 가격한다.','🔱','active','attack',22,3.5,'physical',0,NULL,0,0,2,2,NULL,0,0, 2,4, 3,18),
+      ('강신무','gs_fury','광전투',3,'gs_fury_3c','급소 공격','적의 급소를 노려 치명타 피해 증가.','💀','passive',NULL,0,1.0,'physical',0,NULL,0,0,0,0,'crit_damage',8,0, 2,5, 3,18),
+      ('강신무','gs_fury','광전투',4,'gs_fury_4','광풍 난무','광풍처럼 미친 듯이 난무한다.','🌪️','active','attack',38,5.5,'physical',0,NULL,0,0,3,2,NULL,0,0, 2,6, 4,30),
+      ('강신무','gs_fury','광전투',5,'gs_fury_5','폭풍 연격','폭풍 같은 연속 공격을 퍼붓는다.','⛈️','active','attack',52,7.5,'physical',0,NULL,0,0,4,3,NULL,0,0, 2,7, 5,35),
+      ('강신무','gs_fury','광전투',6,'gs_fury_6','뇌신 일격','뇌신의 힘을 담은 치명적 일격.','⚡','active','attack',72,10.0,'physical',0,NULL,0,0,5,3,NULL,0,0, 2,8, 7,55),
+      ('강신무','gs_fury','광전투',7,'gs_fury_7','천하무쌍','천하무쌍의 연격. 모든 것을 쓰러뜨린다.','🐉','active','aoe',98,14.0,'physical',0,NULL,0,0,8,4,NULL,0,0, 2,9, 10,80)
+    `);
+
+    // 강신무 스킬 트리 엣지 연결
+    const gsEdges = [
+      ['gs_blade_1','gs_blade_2a'], ['gs_blade_1','gs_blade_2b'],
+      ['gs_blade_2a','gs_blade_3a'], ['gs_blade_2a','gs_blade_3b'], ['gs_blade_2b','gs_blade_3b'], ['gs_blade_2b','gs_blade_3c'],
+      ['gs_blade_3b','gs_blade_4'],
+      ['gs_blade_4','gs_blade_5'], ['gs_blade_5','gs_blade_6'], ['gs_blade_6','gs_blade_7'],
+      ['gs_spirit_1','gs_spirit_2a'], ['gs_spirit_1','gs_spirit_2b'],
+      ['gs_spirit_2a','gs_spirit_3a'], ['gs_spirit_2a','gs_spirit_3b'], ['gs_spirit_2b','gs_spirit_3b'], ['gs_spirit_2b','gs_spirit_3c'],
+      ['gs_spirit_3b','gs_spirit_4'],
+      ['gs_spirit_4','gs_spirit_5'], ['gs_spirit_5','gs_spirit_6'], ['gs_spirit_6','gs_spirit_7'],
+      ['gs_fury_1','gs_fury_2a'], ['gs_fury_1','gs_fury_2b'],
+      ['gs_fury_2a','gs_fury_3a'], ['gs_fury_2a','gs_fury_3b'], ['gs_fury_2b','gs_fury_3b'], ['gs_fury_2b','gs_fury_3c'],
+      ['gs_fury_3b','gs_fury_4'],
+      ['gs_fury_4','gs_fury_5'], ['gs_fury_5','gs_fury_6'], ['gs_fury_6','gs_fury_7'],
+    ];
+    const [gsNodes] = await pool.query("SELECT id, node_key FROM skill_tree_nodes WHERE class_type = '강신무'");
+    const gsMap = {};
+    for (const n of gsNodes) gsMap[n.node_key] = n.id;
+    for (const [pKey, cKey] of gsEdges) {
+      if (gsMap[pKey] && gsMap[cKey]) {
+        await pool.query('INSERT IGNORE INTO skill_tree_edges (parent_node_id, child_node_id) VALUES (?, ?)', [gsMap[pKey], gsMap[cKey]]);
+      }
+    }
+  }
+
+  // ========== 북채비 / 강신무 기본 스킬 (skills 테이블) ==========
+  await pool.query(`INSERT IGNORE INTO skills (name, class_type, description, type, mp_cost, damage_multiplier, heal_amount, buff_stat, buff_value, buff_duration, required_level, cooldown) VALUES
+    ('방패 강타', '북채비', '방패로 적을 강하게 내리친다.', 'attack', 8, 1.8, 0, NULL, 0, 0, 1, 0),
+    ('대지 분쇄', '북채비', '대지의 힘을 실어 방패로 분쇄한다.', 'attack', 18, 2.4, 0, NULL, 0, 0, 3, 1),
+    ('철벽 방어', '북채비', '철벽 방어 자세로 방어력을 크게 높인다.', 'buff', 12, 0, 0, 'defense', 12, 3, 2, 2),
+    ('대지의 치유', '북채비', '대지의 기운을 흡수하여 체력을 회복한다.', 'heal', 20, 0, 70, NULL, 0, 0, 4, 2),
+    ('산성 붕괴', '북채비', '산성을 무너뜨리는 강력한 일격을 가한다.', 'attack', 35, 3.2, 0, NULL, 0, 0, 6, 3),
+
+    ('신검 일섬', '강신무', '신령의 칼로 적을 빠르게 벤다.', 'attack', 8, 2.0, 0, NULL, 0, 0, 1, 0),
+    ('질풍 연타', '강신무', '질풍처럼 빠른 연속 공격을 가한다.', 'attack', 18, 2.5, 0, NULL, 0, 0, 3, 1),
+    ('강신 강림', '강신무', '신령의 힘을 빌려 공격력을 높인다.', 'buff', 15, 0, 0, 'attack', 10, 3, 2, 2),
+    ('신령의 치유', '강신무', '신령의 가호로 체력을 회복한다.', 'heal', 20, 0, 50, NULL, 0, 0, 4, 2),
+    ('화염검무', '강신무', '화염을 두른 검무로 적에게 큰 피해를 입힌다.', 'attack', 35, 3.5, 0, NULL, 0, 0, 6, 3)
+  `).catch(() => {});
+
+  // ========== 승려 스킬 트리 리워크 (물리→법사형) ==========
+  // 기존 승려 스킬 노드/엣지 삭제 후 재생성
+  const [monkReworkCheck] = await pool.query("SELECT COUNT(*) as cnt FROM skill_tree_nodes WHERE node_key='mk_mantra_1'").catch(() => [[{cnt:0}]]);
+  if (monkReworkCheck[0].cnt === 0) {
+    // 기존 승려 엣지 삭제 (노드 삭제 전에)
+    await pool.query(`DELETE FROM skill_tree_edges WHERE parent_node_id IN (SELECT id FROM skill_tree_nodes WHERE class_type='승려') OR child_node_id IN (SELECT id FROM skill_tree_nodes WHERE class_type='승려')`).catch(() => {});
+    // 기존 승려 습득 스킬 초기화
+    await pool.query(`DELETE FROM character_skill_nodes WHERE node_id IN (SELECT id FROM skill_tree_nodes WHERE class_type='승려')`).catch(() => {});
+    // 기존 승려 노드 삭제
+    await pool.query(`DELETE FROM skill_tree_nodes WHERE class_type='승려'`).catch(() => {});
+
+    // 새 승려 스킬 (법사형: 진언술=마법공격, 결계술=마법방어/보호, 선법=힐/서포트)
+    await pool.query(`INSERT INTO skill_tree_nodes (class_type, branch, branch_name, tier, node_key, name, description, icon, node_type, skill_type, mp_cost, damage_multiplier, damage_type, heal_amount, buff_stat, buff_value, buff_duration, cooldown, skill_range, passive_stat, passive_value, passive_is_percent, pos_x, pos_y, point_cost, required_level) VALUES
+      -- 진언술 (마법 공격 브랜치)
+      ('승려','mantra','진언술',1,'mk_mantra_1','파사진언','사악한 기운을 물리치는 진언을 외운다.','📿','active','attack',10,1.8,'magical',0,NULL,0,0,0,2,NULL,0,0, 0,0, 1,1),
+      ('승려','mantra','진언술',2,'mk_mantra_2a','법력 수련','수행으로 마공이 증가한다.','✨','passive',NULL,0,1,'magical',0,NULL,0,0,0,0,'mag_attack',5,0, 0,1, 2,8),
+      ('승려','mantra','진언술',2,'mk_mantra_2b','뇌음진언','천둥소리 같은 진언으로 적을 공격한다.','⚡','active','attack',16,2.5,'magical',0,NULL,0,0,1,2,NULL,0,0, 0,2, 2,8),
+      ('승려','mantra','진언술',3,'mk_mantra_3a','광명진언','빛의 진언으로 강한 일격을 가한다.','☀️','active','attack',22,3.2,'magical',0,NULL,0,0,1,2,NULL,0,0, 0,3, 3,18),
+      ('승려','mantra','진언술',3,'mk_mantra_3b','법안','법력의 눈으로 적의 약점을 꿰뚫는다.','👁️','passive',NULL,0,1,'magical',0,NULL,0,0,0,0,'mag_attack',8,0, 0,4, 3,18),
+      ('승려','mantra','진언술',3,'mk_mantra_3c','항마진언','마물을 굴복시키는 진언.','🔥','active','attack',20,3.0,'magical',0,NULL,0,0,1,3,NULL,0,0, 0,5, 3,18),
+      ('승려','mantra','진언술',4,'mk_mantra_4','대일여래광','대일여래의 빛으로 적을 소멸시킨다.','🌅','active','attack',48,6.5,'magical',0,NULL,0,0,3,3,NULL,0,0, 0,6, 4,30),
+      ('승려','mantra','진언술',5,'mk_mantra_5','천수진언','천 개의 손이 동시에 공격한다.','🙏','active','aoe',58,7.5,'magical',0,NULL,0,0,3,3,NULL,0,0, 0,7, 5,35),
+      ('승려','mantra','진언술',6,'mk_mantra_6','비로자나광','비로자나불의 광명을 내린다.','💫','active','aoe',78,10.0,'magical',0,NULL,0,0,4,4,NULL,0,0, 0,8, 7,55),
+      ('승려','mantra','진언술',7,'mk_mantra_7','멸마진언','일체 마물을 소멸하는 궁극의 진언.','🔱','active','aoe',105,13.5,'magical',0,NULL,0,0,5,4,NULL,0,0, 0,9, 10,80),
+
+      -- 결계술 (마법 방어/보호 브랜치)
+      ('승려','barrier','결계술',1,'mk_barrier_1','호신결계','자신을 보호하는 결계를 친다.','🔰','active','buff',10,0,'magical',0,'defense',10,3,2,0,NULL,0,0, 1,0, 1,1),
+      ('승려','barrier','결계술',2,'mk_barrier_2a','법력 갑옷','법력으로 마법 방어가 증가한다.','🛡️','passive',NULL,0,1,'magical',0,NULL,0,0,0,0,'mag_defense',6,0, 1,1, 2,8),
+      ('승려','barrier','결계술',2,'mk_barrier_2b','정신 수양','수양으로 최대 MP가 증가한다.','📖','passive',NULL,0,1,'magical',0,NULL,0,0,0,0,'mp',20,0, 1,2, 2,8),
+      ('승려','barrier','결계술',3,'mk_barrier_3a','법력 증폭','결계의 힘이 강해져 HP가 증가한다.','💠','passive',NULL,0,1,'magical',0,NULL,0,0,0,0,'hp',25,0, 1,3, 3,18),
+      ('승려','barrier','결계술',3,'mk_barrier_3b','반사결계','공격을 반사하는 결계를 친다.','🪞','active','buff',18,0,'magical',0,'defense',15,3,2,0,NULL,0,0, 1,4, 3,18),
+      ('승려','barrier','결계술',3,'mk_barrier_3c','정화','독과 저주를 정화한다.','🌊','active','heal',15,0,'magical',20,'cleanse',0,0,2,0,NULL,0,0, 1,5, 3,18),
+      ('승려','barrier','결계술',4,'mk_barrier_4','금강결계','금강석처럼 단단한 결계를 친다.','💎','active','buff',48,0,'magical',0,'defense',25,4,3,0,NULL,0,0, 1,6, 4,30),
+      ('승려','barrier','결계술',5,'mk_barrier_5','불멸결계','파괴할 수 없는 결계를 친다.','⭐','active','buff',55,0,'magical',0,'defense',30,4,4,0,'mag_defense',12,0, 1,7, 5,35),
+      ('승려','barrier','결계술',6,'mk_barrier_6','만다라결계','만다라의 신비한 결계를 편다.','🔮','active','buff',75,0,'magical',0,'defense',40,5,4,0,'hp',50,0, 1,8, 7,55),
+      ('승려','barrier','결계술',7,'mk_barrier_7','부처의 가호','부처의 힘으로 아군 전체를 보호한다.','☸️','active','buff',100,0,'magical',0,'defense',50,5,5,0,'mag_defense',30,0, 1,9, 10,80),
+
+      -- 선법 (힐/서포트 브랜치) - 기존 유지하되 물리 패시브 제거
+      ('승려','zen','선법',1,'mk_zen_1','선정','깊은 선정에 들어 HP를 회복한다.','🧘','active','heal',10,0,'magical',30,NULL,0,0,1,0,NULL,0,0, 2,0, 1,1),
+      ('승려','zen','선법',2,'mk_zen_2a','명상','명상으로 최대 MP가 증가한다.','🌙','passive',NULL,0,1,'magical',0,NULL,0,0,0,0,'mp',20,0, 2,1, 2,8),
+      ('승려','zen','선법',2,'mk_zen_2b','자비의 손길','아군의 HP를 회복한다.','💚','active','heal',14,0,'magical',45,NULL,0,0,1,2,NULL,0,0, 2,2, 2,8),
+      ('승려','zen','선법',3,'mk_zen_3a','기공파','기공의 힘으로 적을 공격한다.','💨','active','attack',20,3.0,'magical',0,NULL,0,0,1,2,NULL,0,0, 2,3, 3,18),
+      ('승려','zen','선법',3,'mk_zen_3b','선정의 경지','깊은 선정으로 회피가 증가한다.','🍃','passive',NULL,0,1,'magical',0,NULL,0,0,0,0,'evasion',5,0, 2,4, 3,18),
+      ('승려','zen','선법',3,'mk_zen_3c','만병통치','모든 상태이상을 치유한다.','🌿','active','heal',28,0,'magical',60,'cleanse',0,0,2,0,NULL,0,0, 2,5, 3,18),
+      ('승려','zen','선법',4,'mk_zen_4','대자대비','자비로운 힘으로 크게 회복한다.','💖','active','heal',50,0,'magical',120,NULL,0,0,3,3,NULL,0,0, 2,6, 4,30),
+      ('승려','zen','선법',5,'mk_zen_5','무아지경','무아의 경지에서 아군을 치유한다.','🌟','active','heal',55,0,'magical',150,'evasion',15,2,3,0,NULL,0,0, 2,7, 5,35),
+      ('승려','zen','선법',6,'mk_zen_6','열반적정','열반에 이르는 치유. 아군 전체 회복.','✨','active','heal',75,0,'magical',200,'defense',20,3,4,0,NULL,0,0, 2,8, 7,55),
+      ('승려','zen','선법',7,'mk_zen_7','성불','성불의 경지. 아군 전체를 대규모 회복한다.','☸️','active','heal',100,0,'magical',300,'attack',30,3,5,0,'mag_attack',20,0, 2,9, 10,80)
+    `);
+
+    // 승려 스킬 트리 엣지
+    const monkEdges = [
+      ['mk_mantra_1','mk_mantra_2a'], ['mk_mantra_1','mk_mantra_2b'],
+      ['mk_mantra_2a','mk_mantra_3a'], ['mk_mantra_2a','mk_mantra_3b'], ['mk_mantra_2b','mk_mantra_3b'], ['mk_mantra_2b','mk_mantra_3c'],
+      ['mk_mantra_3b','mk_mantra_4'], ['mk_mantra_4','mk_mantra_5'], ['mk_mantra_5','mk_mantra_6'], ['mk_mantra_6','mk_mantra_7'],
+      ['mk_barrier_1','mk_barrier_2a'], ['mk_barrier_1','mk_barrier_2b'],
+      ['mk_barrier_2a','mk_barrier_3a'], ['mk_barrier_2a','mk_barrier_3b'], ['mk_barrier_2b','mk_barrier_3b'], ['mk_barrier_2b','mk_barrier_3c'],
+      ['mk_barrier_3b','mk_barrier_4'], ['mk_barrier_4','mk_barrier_5'], ['mk_barrier_5','mk_barrier_6'], ['mk_barrier_6','mk_barrier_7'],
+      ['mk_zen_1','mk_zen_2a'], ['mk_zen_1','mk_zen_2b'],
+      ['mk_zen_2a','mk_zen_3a'], ['mk_zen_2a','mk_zen_3b'], ['mk_zen_2b','mk_zen_3b'], ['mk_zen_2b','mk_zen_3c'],
+      ['mk_zen_3b','mk_zen_4'], ['mk_zen_4','mk_zen_5'], ['mk_zen_5','mk_zen_6'], ['mk_zen_6','mk_zen_7'],
+    ];
+    for (const [p, c] of monkEdges) {
+      const [[pNode]] = await pool.query("SELECT id FROM skill_tree_nodes WHERE node_key=?", [p]);
+      const [[cNode]] = await pool.query("SELECT id FROM skill_tree_nodes WHERE node_key=?", [c]);
+      if (pNode && cNode) {
+        await pool.query("INSERT IGNORE INTO skill_tree_edges (parent_node_id, child_node_id) VALUES (?,?)", [pNode.id, cNode.id]).catch(() => {});
+      }
+    }
+    console.log('승려 스킬 트리 리워크 완료 (법사형)');
+  }
+
+  // 승려 기본 스킬(skills 테이블)도 법사형으로 업데이트
+  await pool.query("UPDATE skills SET name='파사진언', description='사악한 기운을 물리치는 진언.', damage_multiplier=1.8 WHERE class_type='승려' AND name='금강권'").catch(() => {});
+  await pool.query("UPDATE skills SET name='뇌음진언', description='천둥 같은 진언으로 적을 공격한다.', damage_multiplier=2.4 WHERE class_type='승려' AND name='파사권'").catch(() => {});
+  await pool.query("UPDATE skills SET name='호신결계', description='법력으로 결계를 쳐 방어력을 높인다.', buff_stat='defense', buff_value=10 WHERE class_type='승려' AND name='철벽수호'").catch(() => {});
+  await pool.query("UPDATE skills SET name='대자대비', description='자비로운 힘으로 크게 회복한다.', heal_amount=100 WHERE class_type='승려' AND name='선정치유'").catch(() => {});
+  await pool.query("UPDATE skills SET name='비로자나광', description='비로자나불의 광명으로 적을 소멸한다.', damage_multiplier=3.5 WHERE class_type='승려' AND name='나한신권'").catch(() => {});
+
+  // ========== 새 상태이상 스킬 추가 (stun/seal/bleed/burn/taunt/shield) ==========
+  const [newEffectCheck] = await pool.query("SELECT COUNT(*) as cnt FROM skill_tree_nodes WHERE node_key='bk_guard_stun'").catch(() => [[{cnt:0}]]);
+  if (newEffectCheck[0].cnt === 0) {
+    // 북채비: 방패 강타 → stun (방패술 T3c 교체)
+    await pool.query("UPDATE skill_tree_nodes SET node_key='bk_shield_3c_stun', name='방패 강타', description='방패로 강타하여 적을 기절시킨다.', skill_type='attack', damage_multiplier=2.5, buff_stat='stun', buff_value=0, buff_duration=1 WHERE node_key='bk_shield_3c' AND class_type='북채비'").catch(() => {});
+    // 북채비: 도발 스킬 추가 (수호술 T1 교체)
+    await pool.query("UPDATE skill_tree_nodes SET node_key='bk_guard_taunt', name='위압', description='적의 시선을 자신에게 집중시킨다.', skill_type='buff', buff_stat='taunt', buff_value=1, buff_duration=2 WHERE node_key='bk_guard_1' AND class_type='북채비'").catch(() => {});
+    // 북채비: 보호막 스킬 (철벽술 T5 교체)
+    await pool.query("UPDATE skill_tree_nodes SET node_key='bk_wall_shield', name='대지의 방벽', description='대지의 힘으로 보호막을 생성한다.', skill_type='buff', buff_stat='shield', buff_value=80, buff_duration=3 WHERE node_key='bk_wall_5' AND class_type='북채비'").catch(() => {});
+
+    // 승려: 봉인 스킬 (진언술 T3c 교체)
+    await pool.query("UPDATE skill_tree_nodes SET node_key='mk_mantra_seal', name='봉인진언', description='진언으로 적의 스킬을 봉인한다.', skill_type='debuff', damage_multiplier=0, buff_stat='seal', buff_value=0, buff_duration=2 WHERE node_key='mk_mantra_3c' AND class_type='승려'").catch(() => {});
+    // 승려: 보호막 스킬 (결계술 T5 교체)
+    await pool.query("UPDATE skill_tree_nodes SET node_key='mk_barrier_shield', name='법력 보호막', description='법력으로 보호막을 생성한다.', skill_type='buff', buff_stat='shield', buff_value=100, buff_duration=3 WHERE node_key='mk_barrier_5' AND class_type='승려'").catch(() => {});
+
+    // 풍수사: 화상 스킬 (화염술 T3 교체)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='burn', buff_value=6, buff_duration=3 WHERE node_key='ps_fire_3c' AND class_type='풍수사'").catch(() => {});
+    // 풍수사 화염 AOE에도 화상
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='burn', buff_value=5, buff_duration=2 WHERE node_key='ps_fire_4' AND class_type='풍수사'").catch(() => {});
+
+    // 저승사자: 출혈 스킬 (사신술 T3c 교체)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='bleed', buff_value=7, buff_duration=3 WHERE node_key='rp_reaper_3c' AND class_type='저승사자'").catch(() => {});
+    // 저승사자: 기절 (저주술 T3 교체)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='stun', buff_value=0, buff_duration=1 WHERE node_key='rp_curse_3c' AND class_type='저승사자'").catch(() => {});
+    // 저승사자: 봉인 (저주술 T5 교체)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='seal', buff_value=0, buff_duration=2 WHERE node_key='rp_curse_5' AND class_type='저승사자'").catch(() => {});
+
+    // 강신무: 출혈 스킬 (광전투 T3 교체)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='bleed', buff_value=6, buff_duration=3 WHERE node_key='gs_fury_3b' AND class_type='강신무'").catch(() => {});
+    // 강신무: 화상 (신검술 T3a 뇌전 검격에 burn — active attack)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='burn', buff_value=5, buff_duration=2 WHERE node_key='gs_blade_3a' AND class_type='강신무'").catch(() => {});
+
+    // 무당: 기절 (저주술 T3 혼란의 주문 → stun으로 대체 옵션)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='stun', buff_value=0, buff_duration=1 WHERE node_key='md_curse_3c' AND class_type='무당'").catch(() => {});
+    // 무당: 봉인 (저주술 T5)
+    await pool.query("UPDATE skill_tree_nodes SET buff_stat='seal', buff_value=0, buff_duration=2 WHERE node_key='md_curse_5' AND class_type='무당'").catch(() => {});
+
+    // ── 몬스터 스킬: 새 상태이상 추가 ──
+    // 출혈 (bleed) - 물리 공격 몬스터
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('출혈 할퀴기', 'attack', 1.6, 'bleed', 6, 3, 6, 1, 1, 'diamond', '날카로운 발톱으로 출혈을 일으킨다.', '🩸')`).catch(() => {});
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('출혈 돌진', 'attack', 2.0, 'bleed', 7, 3, 10, 2, 1, 'diamond', '몸통 박치기로 출혈을 일으킨다.', '🩸')`).catch(() => {});
+    // 화상 (burn) - 마법 공격 몬스터
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('화염 폭주', 'attack', 1.8, 'burn', 6, 3, 8, 1, 2, 'diamond', '불꽃을 터뜨려 화상을 입힌다.', '🔥')`).catch(() => {});
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('지옥불', 'aoe', 2.0, 'burn', 8, 2, 18, 3, 1, 'diamond', '지옥의 불꽃으로 전체를 태운다.', '🔥')`).catch(() => {});
+    // 기절 (stun) - 보스/방어형
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('충격파', 'debuff', 0, 'stun', 0, 1, 12, 3, 1, 'diamond', '강력한 충격파로 적을 기절시킨다.', '💫')`).catch(() => {});
+    // 봉인 (seal) - 마법형 보스
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('마력 봉인', 'debuff', 0, 'seal', 0, 2, 15, 4, 2, 'diamond', '적의 마력을 봉인하여 스킬을 막는다.', '🔒')`).catch(() => {});
+    // 보호막 (shield) - 방어형 몬스터
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('마력 방벽', 'buff', 'shield', 50, 3, 10, 3, 0, 'diamond', '마력으로 보호막을 생성한다.', '🔰')`).catch(() => {});
+    // 도발 (taunt) - 방어형 몬스터
+    await pool.query(`INSERT IGNORE INTO monster_skills (name, type, buff_stat, buff_value, buff_duration, mp_cost, cooldown, range_val, pattern, description, icon)
+      VALUES ('위협 포효', 'buff', 'taunt', 1, 2, 8, 3, 0, 'diamond', '위협적인 포효로 적의 공격을 집중시킨다.', '🗣️')`).catch(() => {});
+
+    // ── 용병 스킬: 새 상태이상 추가 ──
+    // 무사: 기절 (stun)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('분쇄 강타', '무사', 'attack', 2.5, 'stun', 0, 1, 14, 2, '강력한 일격으로 적을 기절시킨다.')`).catch(() => {});
+    // 무사: 도발 (taunt)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('전장의 위엄', '무사', 'buff', 0, 'taunt', 1, 2, 12, 3, '적의 시선을 자신에게 집중시킨다.')`).catch(() => {});
+    // 자객: 출혈 (bleed)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('출혈 난자', '자객', 'attack', 2.0, 'bleed', 7, 3, 10, 2, '연속 베기로 출혈을 일으킨다.')`).catch(() => {});
+    // 마법사: 화상 (burn)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('업화 소각', '마법사', 'attack', 2.5, 'burn', 6, 3, 14, 2, '업화로 적을 태워 화상을 입힌다.')`).catch(() => {});
+    // 마법사: 보호막 (shield)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('마력 보호막', '마법사', 'buff', 0, 'shield', 60, 3, 16, 3, '마력으로 보호막을 생성한다.')`).catch(() => {});
+    // 도사: 봉인 (seal)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('영력 봉인', '도사', 'debuff', 0, 'seal', 0, 2, 14, 3, '적의 영력을 봉인하여 스킬을 막는다.')`).catch(() => {});
+    // 치유사: 보호막 (shield)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('성스러운 보호막', '치유사', 'buff', 0, 'shield', 70, 3, 18, 3, '성스러운 빛으로 보호막을 씌운다.')`).catch(() => {});
+    // 창병: 출혈 (bleed)
+    await pool.query(`INSERT IGNORE INTO mercenary_skills (name, class_type, type, damage_multiplier, buff_stat, buff_value, buff_duration, mp_cost, cooldown, description)
+      VALUES ('관통 출혈', '창병', 'attack', 2.8, 'bleed', 6, 3, 16, 2, '창으로 관통하여 출혈을 일으킨다.')`).catch(() => {});
+
+    // ── 소환수 스킬: 새 상태이상 추가 ──
+    // 몬스터형: 출혈
+    await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
+      VALUES ('야수의 이빨', '몬스터', '날카로운 이빨로 출혈을 일으킨다.', 'attack', 8, 2.0, 'bleed', 6, 3, 2)`).catch(() => {});
+    // 정령형: 화상
+    await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
+      VALUES ('원소 작열', '정령', '원소의 불꽃으로 화상을 입힌다.', 'attack', 10, 2.2, 'burn', 6, 3, 2)`).catch(() => {});
+    // 귀신형: 봉인
+    await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
+      VALUES ('혼백 봉인', '귀신', '원혼의 힘으로 적의 스킬을 봉인한다.', 'debuff', 12, 0, 'seal', 0, 2, 3)`).catch(() => {});
+    // 언데드형: 기절
+    await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
+      VALUES ('뼈 강타', '언데드', '뼈로 강타하여 기절시킨다.', 'attack', 8, 1.8, 'stun', 0, 1, 3)`).catch(() => {});
+    // 신수형: 보호막
+    await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
+      VALUES ('신수의 결계', '신수', '신수의 힘으로 보호막을 생성한다.', 'buff', 20, 0, 'shield', 80, 3, 4)`).catch(() => {});
+    // 용형: 화상 AOE
+    await pool.query(`INSERT IGNORE INTO summon_skills (name, summon_type, description, type, mp_cost, damage_multiplier, buff_stat, buff_value, buff_duration, cooldown)
+      VALUES ('용염', '용', '용의 불꽃으로 전체를 태운다.', 'aoe', 30, 4.0, 'burn', 8, 2, 4)`).catch(() => {});
+
+    // ── 몬스터에 새 스킬 할당 (ai_type/이름 기반) ──
+    const skillAssignments = [
+      // 출혈 할퀴기 → 공격형 야수 (곰, 늑대, 호랑이 등)
+      { skill: '출혈 할퀴기', where: "ai_type='aggressive' AND (name LIKE '%곰%' OR name LIKE '%늑대%' OR name LIKE '%호랑이%' OR name LIKE '%설표%' OR name LIKE '%삼두견%' OR name LIKE '%사마귀%')" },
+      // 출혈 돌진 → 멧돼지, 코뿔소
+      { skill: '출혈 돌진', where: "name LIKE '%멧돼지%' OR name LIKE '%코뿔소%'" },
+      // 화염 폭주 → 불 관련 몬스터
+      { skill: '화염 폭주', where: "name LIKE '%불%' AND ai_type='ranged'" },
+      // 지옥불 → 화룡, 발록
+      { skill: '지옥불', where: "name LIKE '%화룡%' OR name LIKE '%발록%'" },
+      // 충격파 → 보스/방어형 대형
+      { skill: '충격파', where: "ai_type IN ('boss','defensive') AND (name LIKE '%골렘%' OR name LIKE '%깨비대왕%' OR name LIKE '%히드라%' OR name LIKE '%크라켄%')" },
+      // 마력 봉인 → 마법형 보스
+      { skill: '마력 봉인', where: "ai_type='boss' AND (name LIKE '%마왕%' OR name LIKE '%리치왕%' OR name LIKE '%세라핌%' OR name LIKE '%정령왕%')" },
+      // 마력 방벽 → 방어형 몬스터
+      { skill: '마력 방벽', where: "ai_type='defensive' AND (name LIKE '%골렘%' OR name LIKE '%가디언%' OR name LIKE '%트렌트%')" },
+      // 위협 포효 → 방어형
+      { skill: '위협 포효', where: "ai_type='defensive' AND (name LIKE '%불가사리%' OR name LIKE '%갑옷%')" },
+    ];
+    for (const { skill, where } of skillAssignments) {
+      const [[skillRow]] = await pool.query("SELECT id FROM monster_skills WHERE name=?", [skill]).catch(() => [[null]]);
+      if (!skillRow) continue;
+      const [monsters] = await pool.query(`SELECT id FROM monsters WHERE ${where}`).catch(() => [[]]);
+      for (const m of monsters) {
+        await pool.query("INSERT IGNORE INTO monster_skill_map (monster_id, skill_id) VALUES (?,?)", [m.id, skillRow.id]).catch(() => {});
+      }
+    }
+
+    console.log('새 상태이상 스킬 추가 완료 (stun/seal/bleed/burn/taunt/shield)');
   }
 
   // ========== 스페셜 던전 난이도 상향 + 레벨 제한 (v4) ==========
@@ -7103,7 +7716,8 @@ async function initialize() {
     // 무당: 밸런스형 유지, 크리/회피 소폭 상향
     await pool.query("UPDATE class_growth_rates SET crit_per_10level = 0.25, evasion_per_10level = 0.2 WHERE class_type = '무당'").catch(() => {});
     // 승려: 탱커, 물방 약간 하향 (기존 너무 높음)
-    await pool.query("UPDATE class_growth_rates SET phys_defense_per_level = 2.2, defense_per_level = 2.2 WHERE class_type = '승려'").catch(() => {});
+    // 승려: 법사형으로 리밸런스 (HP/물방 하향, MP/마공/마방 상향)
+    await pool.query("UPDATE class_growth_rates SET hp_per_level=10, mp_per_level=7, attack_per_level=2.0, defense_per_level=1.8, phys_attack_per_level=0.6, phys_defense_per_level=1.0, mag_attack_per_level=2.5, mag_defense_per_level=2.0, crit_rate_per_10level=0.12, evasion_per_10level=0.1 WHERE class_type = '승려'").catch(() => {});
     // 저승사자: 어쌔신, 크리 소폭 하향 (기존 0.3 → 0.25)
     await pool.query("UPDATE class_growth_rates SET crit_per_10level = 0.25, evasion_per_10level = 0.22 WHERE class_type = '저승사자'").catch(() => {});
 
@@ -7920,6 +8534,9 @@ async function initialize() {
     await pool.query("UPDATE summon_templates SET intro_message = ? WHERE name = ? AND (intro_message IS NULL OR intro_message = '')", [msg, name]).catch(() => {});
   }
 
+  // 특정 무사 용병 weapon_type을 axe로 오버라이드 (힘형 캐릭터)
+  await pool.query("UPDATE mercenary_templates SET weapon_type='axe' WHERE name IN ('장정 쇠돌','호위무사 태산','천하장군 대호','환웅의 후예','치우천왕')").catch(() => {});
+
   // ========== 용병/소환수 강화(성급) 시스템 + 강화권 아이템 + 가챠 확률 수정 (balance_v10) ==========
   await pool.query("ALTER TABLE character_mercenaries ADD COLUMN star_level INT DEFAULT 0").catch(() => {});
   await pool.query("ALTER TABLE character_summons ADD COLUMN star_level INT DEFAULT 0").catch(() => {});
@@ -7979,6 +8596,228 @@ async function initialize() {
   await pool.query("UPDATE shard_exchange_recipes SET target_grades = '고급:40,영웅:56,전설:5.5,신화:0.5' WHERE ticket_name = '고급용병소환권'").catch(() => {});
   await pool.query("UPDATE shard_exchange_recipes SET target_grades = '일반:40,고급:56,영웅:5.5,전설:0.5' WHERE ticket_name = '소환수소환권'").catch(() => {});
   await pool.query("UPDATE shard_exchange_recipes SET target_grades = '고급:40,영웅:56,전설:5.5,신화:0.5' WHERE ticket_name = '고급소환수소환권'").catch(() => {});
+
+  // ========== 무기 25종 완성 패치 (모든 weapon_subtype × 25 레벨) ==========
+  const weaponFillItems = [
+    // ===== sword (검, 1h, NULL) - 필요: 2,4,18,24,32,42,55,72,88 =====
+    "('철화 검', 'weapon', 'weapon', '1h', '철과 불로 벼린 검.', 200, 100, 0, 0, 10, 0, 2, NULL)",
+    "('현월 검', 'weapon', 'weapon', '1h', '달빛을 머금은 검.', 680, 340, 0, 0, 19, 0, 4, NULL)",
+    "('화랑도', 'weapon', 'weapon', '1h', '화랑의 기개가 깃든 도.', 3000, 1500, 0, 0, 34, 0, 18, NULL)",
+    "('삼한도', 'weapon', 'weapon', '1h', '삼한시대의 명도.', 3200, 1600, 0, 0, 35, 0, 24, NULL)",
+    "('풍뢰검', 'weapon', 'weapon', '1h', '바람과 번개가 깃든 검.', 4500, 2250, 0, 0, 40, 0, 32, NULL)",
+    "('천우검', 'weapon', 'weapon', '1h', '하늘의 비가 깃든 검.', 7500, 3750, 0, 0, 52, 0, 42, NULL)",
+    "('비천검', 'weapon', 'weapon', '1h', '하늘을 가르는 검.', 13000, 6500, 0, 0, 68, 0, 55, NULL)",
+    "('용천검', 'weapon', 'weapon', '1h', '용이 승천하는 검.', 22000, 11000, 0, 0, 95, 0, 72, NULL)",
+    "('파천검', 'weapon', 'weapon', '1h', '하늘을 깨뜨리는 검.', 38000, 19000, 0, 0, 125, 0, 88, NULL)",
+
+    // ===== axe (도끼, 2h, NULL) - 필요: 2,5,18,24,32,42,55,72,88 =====
+    "('돌 도끼', 'weapon', 'weapon', '2h', '돌로 만든 도끼. 횡베기.', 210, 105, 0, 0, 11, 0, 2, NULL)",
+    "('화강 도끼', 'weapon', 'weapon', '2h', '화강암으로 만든 도끼. 횡베기.', 700, 350, 0, 0, 20, 0, 5, NULL)",
+    "('화랑 도끼', 'weapon', 'weapon', '2h', '화랑이 사용하던 도끼. 횡베기.', 3100, 1550, 0, 0, 36, 0, 18, NULL)",
+    "('삼한 도끼', 'weapon', 'weapon', '2h', '삼한시대의 전투 도끼. 횡베기.', 3300, 1650, 0, 0, 37, 0, 24, NULL)",
+    "('풍뢰 도끼', 'weapon', 'weapon', '2h', '바람과 번개의 도끼. 횡베기.', 4600, 2300, 0, 0, 42, 0, 32, NULL)",
+    "('천우 도끼', 'weapon', 'weapon', '2h', '하늘의 비가 깃든 도끼. 횡베기.', 7700, 3850, 0, 0, 54, 0, 42, NULL)",
+    "('비천 도끼', 'weapon', 'weapon', '2h', '하늘을 가르는 도끼. 횡베기.', 13500, 6750, 0, 0, 72, 0, 55, NULL)",
+    "('용천 도끼', 'weapon', 'weapon', '2h', '용의 힘이 깃든 도끼. 횡베기.', 22500, 11250, 0, 0, 98, 0, 72, NULL)",
+    "('파천 도끼', 'weapon', 'weapon', '2h', '천지를 가르는 도끼. 횡베기.', 39000, 19500, 0, 0, 130, 0, 88, NULL)",
+
+    // ===== bow (활, 2h, NULL) - 필요: 2,5,18,24,32,42,55,72,88 =====
+    "('단궁', 'weapon', 'weapon', '2h', '짧은 활. 범위4 직선.', 200, 100, 0, 0, 10, 0, 2, NULL)",
+    "('각궁', 'weapon', 'weapon', '2h', '뿔로 만든 활. 범위4 직선.', 680, 340, 0, 0, 19, 0, 5, NULL)",
+    "('화랑궁', 'weapon', 'weapon', '2h', '화랑이 쓰던 활. 범위4 직선.', 2900, 1450, 0, 0, 33, 0, 18, NULL)",
+    "('삼한궁', 'weapon', 'weapon', '2h', '삼한시대의 명궁. 범위4 직선.', 3100, 1550, 0, 0, 34, 0, 24, NULL)",
+    "('풍뢰궁', 'weapon', 'weapon', '2h', '번개를 쏘는 활. 범위4 직선.', 4400, 2200, 0, 0, 39, 0, 32, NULL)",
+    "('천우궁', 'weapon', 'weapon', '2h', '하늘의 비를 내리는 활. 범위4 직선.', 7300, 3650, 0, 0, 50, 0, 42, NULL)",
+    "('비천궁', 'weapon', 'weapon', '2h', '하늘을 가르는 활. 범위4 직선.', 12500, 6250, 0, 0, 65, 0, 55, NULL)",
+    "('용천궁', 'weapon', 'weapon', '2h', '용의 기운이 깃든 활. 범위4 직선.', 21500, 10750, 0, 0, 92, 0, 72, NULL)",
+    "('멸천궁', 'weapon', 'weapon', '2h', '하늘마저 멸하는 궁극의 활. 범위4 직선.', 37000, 18500, 0, 0, 120, 0, 88, NULL)",
+
+    // ===== spear (창, 2h, NULL) - 필요: 18,24,32,42,55,72,88 =====
+    "('화랑 창', 'weapon', 'weapon', '2h', '화랑이 사용하던 창. 관통 공격.', 3000, 1500, 0, 0, 34, 9, 18, NULL)",
+    "('삼한 창', 'weapon', 'weapon', '2h', '삼한시대의 전투 창. 관통 공격.', 3200, 1600, 0, 0, 35, 9, 24, NULL)",
+    "('풍뢰 창', 'weapon', 'weapon', '2h', '바람과 번개의 창. 관통 공격.', 4500, 2250, 0, 0, 40, 11, 32, NULL)",
+    "('천우 창', 'weapon', 'weapon', '2h', '하늘의 비가 깃든 창. 관통 공격.', 7500, 3750, 0, 0, 52, 15, 42, NULL)",
+    "('비천 창', 'weapon', 'weapon', '2h', '하늘을 가르는 창. 관통 공격.', 13000, 6500, 0, 0, 67, 20, 55, NULL)",
+    "('용천 창', 'weapon', 'weapon', '2h', '용이 승천하는 창. 관통 공격.', 22000, 11000, 0, 0, 93, 26, 72, NULL)",
+    "('파천 창', 'weapon', 'weapon', '2h', '천지를 가르는 창. 관통 공격.', 38000, 19000, 0, 0, 122, 34, 88, NULL)",
+
+    // ===== talisman (부적, 2h, 풍수사) - 필요: 2,4,18,24,32,42,55,72,88 =====
+    "('기문 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 기문둔갑의 부적.', 200, 100, 0, 12, 6, 0, 2, '풍수사')",
+    "('용맥 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 용맥의 기운이 깃든 부적.', 680, 340, 0, 32, 14, 0, 4, '풍수사')",
+    "('태양 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 태양의 기운이 깃든 부적.', 3000, 1500, 0, 50, 32, 0, 18, '풍수사')",
+    "('칠성 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 북두칠성의 기운이 깃든 부적.', 3200, 1600, 0, 55, 33, 0, 24, '풍수사')",
+    "('팔괘 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 팔괘의 힘이 담긴 부적.', 4500, 2250, 0, 62, 38, 0, 32, '풍수사')",
+    "('하도 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 하도낙서의 비밀이 담긴 부적.', 7500, 3750, 0, 78, 50, 0, 42, '풍수사')",
+    "('삼재 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 삼재를 막는 부적.', 13000, 6500, 0, 95, 65, 0, 55, '풍수사')",
+    "('천기 대부적', 'weapon', 'weapon', '2h', '풍수사 전용. 천기를 읽는 대부적.', 22000, 11000, 0, 130, 90, 0, 72, '풍수사')",
+    "('옥황 부적', 'weapon', 'weapon', '2h', '풍수사 전용. 옥황상제의 부적.', 38000, 19000, 0, 170, 118, 0, 88, '풍수사')",
+
+    // ===== bell (방울, 2h, 무당) - 필요: 2,5,18,24,32,42,55,72,88 =====
+    "('청동 방울', 'weapon', 'weapon', '2h', '무당 전용. 청동으로 만든 방울.', 200, 100, 0, 8, 6, 2, 2, '무당')",
+    "('주술 방울', 'weapon', 'weapon', '2h', '무당 전용. 주술의 힘이 깃든 방울.', 680, 340, 0, 22, 13, 5, 5, '무당')",
+    "('무악 방울', 'weapon', 'weapon', '2h', '무당 전용. 무악의 선율이 깃든 방울.', 3000, 1500, 0, 42, 30, 11, 18, '무당')",
+    "('산왕 방울', 'weapon', 'weapon', '2h', '무당 전용. 산왕신의 축복을 받은 방울.', 3200, 1600, 0, 46, 31, 12, 24, '무당')",
+    "('용왕 방울', 'weapon', 'weapon', '2h', '무당 전용. 용왕의 기운이 깃든 방울.', 4500, 2250, 0, 55, 36, 14, 32, '무당')",
+    "('대신 방울', 'weapon', 'weapon', '2h', '무당 전용. 대신령이 깃든 방울.', 7500, 3750, 0, 70, 47, 20, 42, '무당')",
+    "('선관 방울', 'weapon', 'weapon', '2h', '무당 전용. 선관의 기운이 깃든 방울.', 13000, 6500, 0, 88, 60, 28, 55, '무당')",
+    "('천왕 방울', 'weapon', 'weapon', '2h', '무당 전용. 천왕의 축복을 받은 방울.', 22000, 11000, 0, 120, 82, 38, 72, '무당')",
+    "('태초 방울', 'weapon', 'weapon', '2h', '무당 전용. 태초의 울림이 깃든 방울.', 38000, 19000, 0, 155, 108, 48, 88, '무당')",
+
+    // ===== moktak (목탁, 2h, 승려) - 필요: 2,5,18,24,32,42,55,72,88 =====
+    "('청동 목탁', 'weapon', 'weapon', '2h', '승려 전용. 청동으로 만든 목탁.', 200, 100, 15, 0, 5, 6, 2, '승려')",
+    "('마니 목탁', 'weapon', 'weapon', '2h', '승려 전용. 마니주의 힘이 깃든 목탁.', 680, 340, 40, 0, 14, 14, 5, '승려')",
+    "('보현 목탁', 'weapon', 'weapon', '2h', '승려 전용. 보현보살의 가호가 깃든 목탁.', 3000, 1500, 62, 0, 24, 26, 18, '승려')",
+    "('관음 목탁', 'weapon', 'weapon', '2h', '승려 전용. 관음보살의 자비가 깃든 목탁.', 3200, 1600, 65, 0, 25, 27, 24, '승려')",
+    "('문수 목탁', 'weapon', 'weapon', '2h', '승려 전용. 문수보살의 지혜가 깃든 목탁.', 4500, 2250, 78, 0, 30, 32, 32, '승려')",
+    "('미륵 목탁', 'weapon', 'weapon', '2h', '승려 전용. 미륵의 자비가 깃든 목탁.', 7500, 3750, 100, 0, 40, 45, 42, '승려')",
+    "('지장 목탁', 'weapon', 'weapon', '2h', '승려 전용. 지장보살의 원력이 깃든 목탁.', 13000, 6500, 135, 0, 52, 58, 55, '승려')",
+    "('비로자나 목탁', 'weapon', 'weapon', '2h', '승려 전용. 비로자나불의 빛이 깃든 목탁.', 22000, 11000, 178, 0, 70, 76, 72, '승려')",
+    "('아미타 목탁', 'weapon', 'weapon', '2h', '승려 전용. 아미타불의 서원이 깃든 목탁.', 38000, 19000, 222, 0, 90, 96, 88, '승려')",
+
+    // ===== scythe (낫, 2h, 저승사자) - 필요: 2,4,18,24,32,42,55,72,88 =====
+    "('저주의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 저주가 깃든 낫.', 200, 100, 0, 8, 8, 0, 2, '저승사자')",
+    "('어둠의 낫', 'weapon', 'weapon', '1h', '저승사자 전용. 어둠이 깃든 낫.', 680, 340, 0, 18, 17, 0, 4, '저승사자')",
+    "('혈월의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 붉은 달빛이 깃든 대낫.', 3000, 1500, 0, 35, 35, 0, 18, '저승사자')",
+    "('귀곡의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 귀곡의 한이 깃든 대낫.', 3200, 1600, 0, 38, 36, 0, 24, '저승사자')",
+    "('명왕의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 명왕의 기운이 깃든 대낫.', 4500, 2250, 0, 45, 42, 0, 32, '저승사자')",
+    "('혼돈의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 혼돈의 기운이 깃든 대낫.', 7500, 3750, 0, 58, 54, 0, 42, '저승사자')",
+    "('심연의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 심연의 어둠이 깃든 대낫.', 13000, 6500, 0, 75, 72, 0, 55, '저승사자')",
+    "('황천왕의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 황천을 지배하는 대낫.', 22000, 11000, 0, 100, 98, 0, 72, '저승사자')",
+    "('종말의 낫', 'weapon', 'weapon', '2h', '저승사자 전용. 종말을 고하는 궁극의 대낫.', 38000, 19000, 0, 120, 128, 0, 88, '저승사자')",
+
+    // ===== mace (법구/법륜, 2h, NULL) - 필요: 1,2,3,4,6,7,8,10,13,15,18,20,24,28,32,42,50,55,72,88 =====
+    "('나무 법구', 'weapon', 'weapon', '2h', '나무로 깎은 법구.', 55, 27, 10, 0, 3, 4, 1, NULL)",
+    "('돌 법구', 'weapon', 'weapon', '2h', '돌로 만든 법구.', 160, 80, 15, 0, 6, 5, 2, NULL)",
+    "('청동 법구', 'weapon', 'weapon', '2h', '청동으로 만든 법구.', 350, 175, 22, 0, 9, 8, 3, NULL)",
+    "('철제 법구', 'weapon', 'weapon', '2h', '철로 만든 법구.', 650, 325, 30, 0, 12, 10, 4, NULL)",
+    "('용린 법구', 'weapon', 'weapon', '2h', '용의 비늘로 만든 법구.', 1100, 550, 45, 0, 20, 16, 6, NULL)",
+    "('영맥 법구', 'weapon', 'weapon', '2h', '영맥의 기운이 깃든 법구.', 1250, 625, 48, 0, 22, 18, 7, NULL)",
+    "('백은 법구', 'weapon', 'weapon', '2h', '백은으로 만든 법구.', 5100, 2550, 75, 0, 32, 30, 8, NULL)",
+    "('황금 법구', 'weapon', 'weapon', '2h', '황금빛 법구.', 2600, 1300, 58, 0, 28, 24, 10, NULL)",
+    "('신룡 법구', 'weapon', 'weapon', '2h', '신룡의 기운이 깃든 법구.', 15500, 7750, 140, 0, 55, 55, 13, NULL)",
+    "('현무 법구', 'weapon', 'weapon', '2h', '현무의 힘이 깃든 법구.', 3700, 1850, 70, 0, 30, 26, 15, NULL)",
+    "('화랑 법구', 'weapon', 'weapon', '2h', '화랑의 정신이 깃든 법구.', 3100, 1550, 64, 0, 27, 24, 18, NULL)",
+    "('비룡 법구', 'weapon', 'weapon', '2h', '비룡의 기운이 깃든 법구.', 2100, 1050, 62, 0, 26, 22, 20, NULL)",
+    "('월광 법구', 'weapon', 'weapon', '2h', '달빛이 깃든 법구.', 3300, 1650, 66, 0, 28, 25, 24, NULL)",
+    "('백호 법구', 'weapon', 'weapon', '2h', '백호의 기운이 깃든 법구.', 3700, 1850, 72, 0, 32, 28, 28, NULL)",
+    "('풍뢰 법구', 'weapon', 'weapon', '2h', '바람과 번개의 법구.', 4600, 2300, 82, 0, 36, 34, 32, NULL)",
+    "('천우 법구', 'weapon', 'weapon', '2h', '하늘의 비가 깃든 법구.', 7700, 3850, 105, 0, 42, 42, 42, NULL)",
+    "('봉황 법구', 'weapon', 'weapon', '2h', '봉황의 불꽃이 깃든 법구.', 10800, 5400, 125, 0, 50, 48, 50, NULL)",
+    "('비천 법구', 'weapon', 'weapon', '2h', '하늘을 가르는 법구.', 13500, 6750, 140, 0, 56, 55, 55, NULL)",
+    "('용천 법구', 'weapon', 'weapon', '2h', '용이 승천하는 법구.', 22500, 11250, 185, 0, 72, 72, 72, NULL)",
+    "('파천 법구', 'weapon', 'weapon', '2h', '천지를 가르는 법구.', 39000, 19500, 230, 0, 92, 92, 88, NULL)",
+  ];
+  for (const v of weaponFillItems) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+
+  // 신규 무기 weapon_subtype 설정
+  await pool.query("UPDATE items SET weapon_subtype='sword' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('철화 검','현월 검','화랑도','삼한도','풍뢰검','천우검','비천검','용천검','파천검')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='axe' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('돌 도끼','화강 도끼','화랑 도끼','삼한 도끼','풍뢰 도끼','천우 도끼','비천 도끼','용천 도끼','파천 도끼')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='bow' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('단궁','각궁','화랑궁','삼한궁','풍뢰궁','천우궁','비천궁','용천궁','멸천궁')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='spear' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('화랑 창','삼한 창','풍뢰 창','천우 창','비천 창','용천 창','파천 창')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='talisman' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('기문 부적','용맥 부적','태양 부적','칠성 부적','팔괘 부적','하도 부적','삼재 부적','천기 대부적','옥황 부적')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='bell' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('청동 방울','주술 방울','무악 방울','산왕 방울','용왕 방울','대신 방울','선관 방울','천왕 방울','태초 방울')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='moktak' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('청동 목탁','마니 목탁','보현 목탁','관음 목탁','문수 목탁','미륵 목탁','지장 목탁','비로자나 목탁','아미타 목탁')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='scythe' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('저주의 낫','어둠의 낫','혈월의 낫','귀곡의 낫','명왕의 낫','혼돈의 낫','심연의 낫','종말의 낫')").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='scythe' WHERE type='weapon' AND weapon_subtype IS NULL AND name = '황천왕의 낫'").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='mace' WHERE type='weapon' AND weapon_subtype IS NULL AND name IN ('나무 법구','돌 법구','청동 법구','철제 법구','용린 법구','영맥 법구','백은 법구','황금 법구','신룡 법구','현무 법구','화랑 법구','비룡 법구','월광 법구','백호 법구','풍뢰 법구','천우 법구','봉황 법구','비천 법구','용천 법구','파천 법구')").catch(() => {});
+
+  // ===== 북채비 전용 무기: greatshield (거대방패, 2h) =====
+  const greatshieldItems = [
+    "('나무 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 나무로 깎은 거대방패.', 100, 50, 15, 0, 4, 5, 1, '북채비')",
+    "('돌 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 돌로 만든 거대방패.', 180, 90, 20, 0, 6, 7, 2, '북채비')",
+    "('청동 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 청동 거대방패.', 350, 175, 28, 0, 8, 9, 3, '북채비')",
+    "('철제 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 철로 만든 거대방패.', 650, 325, 35, 0, 10, 12, 4, '북채비')",
+    "('강철 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 강철 거대방패.', 900, 450, 40, 0, 13, 15, 5, '북채비')",
+    "('화강 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 화강암으로 만든 거대방패.', 1100, 550, 45, 0, 15, 17, 6, '북채비')",
+    "('용린 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 용의 비늘로 만든 거대방패.', 1300, 650, 48, 0, 17, 18, 7, '북채비')",
+    "('백은 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 백은으로 만든 거대방패.', 1800, 900, 52, 0, 18, 20, 8, '북채비')",
+    "('영맥 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 영맥의 기운이 깃든 거대방패.', 2500, 1250, 55, 0, 20, 22, 10, '북채비')",
+    "('신룡 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 신룡의 비늘로 강화한 거대방패.', 5000, 2500, 68, 0, 28, 30, 13, '북채비')",
+    "('현무 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 현무의 등껍질로 만든 거대방패.', 3500, 1750, 72, 0, 30, 32, 15, '북채비')",
+    "('화랑 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 화랑의 의지가 깃든 거대방패.', 3000, 1500, 78, 0, 32, 35, 18, '북채비')",
+    "('비룡 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 비룡의 기운이 깃든 거대방패.', 2500, 1250, 82, 0, 33, 37, 20, '북채비')",
+    "('월광 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 달빛이 깃든 거대방패.', 3500, 1750, 88, 0, 36, 40, 24, '북채비')",
+    "('백호 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 백호의 기운이 깃든 거대방패.', 4000, 2000, 95, 0, 38, 42, 28, '북채비')",
+    "('풍뢰 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 바람과 번개를 막는 거대방패.', 5000, 2500, 100, 0, 40, 45, 32, '북채비')",
+    "('천우 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 하늘의 비를 막는 거대방패.', 7500, 3750, 108, 0, 42, 48, 38, '북채비')",
+    "('봉황 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 봉황의 불꽃을 막는 거대방패.', 10000, 5000, 115, 0, 45, 50, 42, '북채비')",
+    "('대각 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 대각의 경지에 이른 거대방패.', 10000, 5000, 120, 0, 45, 52, 50, '북채비')",
+    "('비천 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 하늘을 가르는 거대방패.', 15000, 7500, 140, 0, 52, 58, 55, '북채비')",
+    "('보리 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 깨달음의 거대방패.', 18000, 9000, 160, 0, 60, 68, 65, '북채비')",
+    "('용천 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 용이 승천하는 거대방패.', 22000, 11000, 185, 0, 72, 78, 72, '북채비')",
+    "('해탈 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 해탈의 경지에 이른 거대방패.', 30000, 15000, 210, 0, 82, 90, 80, '북채비')",
+    "('이무기 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 이무기의 비늘로 만든 거대방패.', 38000, 19000, 230, 0, 92, 100, 88, '북채비')",
+    "('천제 거대방패', 'weapon', 'weapon', '2h', '북채비 전용. 천제의 수호가 깃든 궁극의 거대방패.', 50000, 25000, 250, 0, 100, 110, 95, '북채비')",
+  ];
+  for (const v of greatshieldItems) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+
+  // ===== 강신무 전용 무기: sinkal (신칼, 1h) =====
+  const sinkalItems = [
+    "('견습 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 수련용 신칼.', 100, 50, 0, 5, 7, 0, 1, '강신무')",
+    "('무쇠 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 무쇠로 만든 신칼.', 180, 90, 0, 7, 10, 0, 2, '강신무')",
+    "('청동 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 청동 신칼.', 350, 175, 0, 8, 13, 0, 3, '강신무')",
+    "('철제 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 철로 만든 신칼.', 650, 325, 0, 10, 16, 0, 4, '강신무')",
+    "('강철 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 강철 신칼.', 900, 450, 0, 12, 20, 0, 5, '강신무')",
+    "('화강 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 화강석의 기운이 깃든 신칼.', 1100, 550, 0, 13, 22, 0, 6, '강신무')",
+    "('용린 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 용의 비늘로 강화한 신칼.', 1300, 650, 0, 14, 25, 0, 7, '강신무')",
+    "('백은 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 백은으로 만든 신칼.', 1800, 900, 0, 14, 28, 0, 8, '강신무')",
+    "('영맥 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 영맥의 기운이 깃든 신칼.', 2500, 1250, 0, 15, 30, 0, 10, '강신무')",
+    "('신룡 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 신룡의 기운이 깃든 신칼.', 5000, 2500, 0, 22, 38, 0, 13, '강신무')",
+    "('현무 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 현무의 기운이 깃든 신칼.', 3500, 1750, 0, 25, 40, 0, 15, '강신무')",
+    "('화랑 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 화랑의 혼이 깃든 신칼.', 3000, 1500, 0, 28, 42, 0, 18, '강신무')",
+    "('비룡 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 비룡의 기운이 깃든 신칼.', 2500, 1250, 0, 30, 44, 0, 20, '강신무')",
+    "('월광 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 달빛이 깃든 신칼.', 3500, 1750, 0, 32, 48, 0, 24, '강신무')",
+    "('백호 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 백호의 기운이 깃든 신칼.', 4000, 2000, 0, 35, 52, 0, 28, '강신무')",
+    "('풍뢰 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 바람과 번개가 깃든 신칼.', 5000, 2500, 0, 36, 55, 0, 32, '강신무')",
+    "('천우 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 하늘의 비가 깃든 신칼.', 7500, 3750, 0, 38, 58, 0, 38, '강신무')",
+    "('봉황 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 봉황의 불꽃이 깃든 신칼.', 10000, 5000, 0, 40, 62, 0, 42, '강신무')",
+    "('대각 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 대각의 경지에 이른 신칼.', 10000, 5000, 0, 40, 64, 0, 50, '강신무')",
+    "('비천 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 하늘을 가르는 신칼.', 15000, 7500, 0, 50, 78, 0, 55, '강신무')",
+    "('보리 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 깨달음의 신칼.', 18000, 9000, 0, 55, 88, 0, 65, '강신무')",
+    "('용천 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 용이 승천하는 신칼.', 22000, 11000, 0, 62, 100, 0, 72, '강신무')",
+    "('해탈 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 해탈의 경지에 이른 신칼.', 30000, 15000, 0, 68, 118, 0, 80, '강신무')",
+    "('이무기 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 이무기의 이빨로 만든 신칼.', 38000, 19000, 0, 72, 130, 0, 88, '강신무')",
+    "('천제 신칼', 'weapon', 'weapon', '1h', '강신무 전용. 천제의 힘이 깃든 궁극의 신칼.', 50000, 25000, 0, 80, 148, 0, 95, '강신무')",
+  ];
+  for (const v of sinkalItems) {
+    await pool.query(`INSERT IGNORE INTO items (name, type, slot, weapon_hand, description, price, sell_price, effect_hp, effect_mp, effect_attack, effect_defense, required_level, class_restriction) VALUES ${v}`).catch(() => {});
+  }
+
+  // 거대방패/신칼 weapon_subtype 설정
+  await pool.query("UPDATE items SET weapon_subtype='greatshield' WHERE type='weapon' AND weapon_subtype IS NULL AND name LIKE '%거대방패%'").catch(() => {});
+  await pool.query("UPDATE items SET weapon_subtype='sinkal' WHERE type='weapon' AND weapon_subtype IS NULL AND name LIKE '%신칼%'").catch(() => {});
+
+  // 신규 무기 등급 설정
+  const newWeaponGrades = {
+    '고급': ['철화 검','돌 도끼','단궁','기문 부적','청동 방울','청동 목탁','저주의 낫','돌 법구',
+             '현월 검','화강 도끼','각궁','용맥 부적','주술 방울','마니 목탁','어둠의 낫','철제 법구',
+             '화랑도','화랑 도끼','화랑궁','태양 부적','무악 방울','보현 목탁','혈월의 낫','화랑 법구',
+             '삼한도','삼한 도끼','삼한궁','삼한 창','칠성 부적','산왕 방울','관음 목탁','귀곡의 낫','월광 법구',
+             '돌 거대방패','철제 거대방패','화강 거대방패','화랑 거대방패','월광 거대방패',
+             '무쇠 신칼','철제 신칼','화강 신칼','화랑 신칼','월광 신칼'],
+    '희귀': ['풍뢰검','풍뢰 도끼','풍뢰궁','풍뢰 창','팔괘 부적','용왕 방울','문수 목탁','명왕의 낫','풍뢰 법구',
+             '풍뢰 거대방패','풍뢰 신칼'],
+    '영웅': ['천우검','천우 도끼','천우궁','천우 창','하도 부적','대신 방울','미륵 목탁','혼돈의 낫','천우 법구',
+             '천우 거대방패','천우 신칼'],
+    '전설': ['비천검','비천 도끼','비천궁','비천 창','삼재 부적','선관 방울','지장 목탁','심연의 낫','비천 법구',
+             '비천 거대방패','비천 신칼'],
+    '신화': ['용천검','용천 도끼','용천궁','용천 창','천기 대부적','천왕 방울','비로자나 목탁','황천왕의 낫','용천 법구',
+             '용천 거대방패','용천 신칼'],
+    '초월': ['파천검','파천 도끼','멸천궁','파천 창','옥황 부적','태초 방울','아미타 목탁','종말의 낫','파천 법구',
+             '천제 거대방패','천제 신칼'],
+  };
+  // 황천왕의 낫 Lv72 → 신화
+  await pool.query("UPDATE items SET grade='신화', max_enhance=20 WHERE name='황천왕의 낫' AND grade='일반'").catch(() => {});
+  for (const [grade, names] of Object.entries(newWeaponGrades)) {
+    const maxEnhance = grade === '초월' ? 25 : grade === '신화' ? 20 : grade === '전설' ? 15 : grade === '영웅' ? 12 : grade === '희귀' ? 10 : 8;
+    for (const nm of names) {
+      await pool.query("UPDATE items SET grade = ?, max_enhance = ? WHERE name = ? AND grade = '일반'", [grade, maxEnhance, nm]).catch(() => {});
+    }
+  }
 
   console.log('Database initialized (balance v10 applied)');
 }

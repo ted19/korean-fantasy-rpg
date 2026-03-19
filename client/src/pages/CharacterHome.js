@@ -18,6 +18,8 @@ const CLASS_IMAGES = {
   '무당': '/characters/mudang_full.png',
   '승려': '/characters/monk_full.png',
   '저승사자': '/characters/reaper_full.png',
+  '북채비': '/characters/bukchaebi_full.png',
+  '강신무': '/characters/gangsinmu_full.png',
 };
 
 const SKILL_TYPE_ICONS = { attack: '⚔️', heal: '💚', buff: '🔺', debuff: '🔻' };
@@ -146,6 +148,8 @@ const CLASS_RANGE_TYPE = {
   '무당': { type: '마법형', icon: '🔮', color: '#a78bfa' },
   '승려': { type: '근거리', icon: '👊', color: '#fb923c' },
   '저승사자': { type: '근거리', icon: '💀', color: '#c084fc' },
+  '북채비': { type: '근거리', icon: '🛡️', color: '#8bc34a' },
+  '강신무': { type: '근거리', icon: '🗡️', color: '#ff6b35' },
 };
 
 function SummonImg({ src, fallback, className }) {

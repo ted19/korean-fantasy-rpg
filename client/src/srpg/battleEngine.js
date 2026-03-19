@@ -10,14 +10,19 @@ const WEAPON_TYPES = {
   staff:    { range: 2, pattern: 'cross',   label: '지팡이' },
   // 무당: 방울(bell) → 원형 범위
   bell:     { range: 2, pattern: 'diamond', label: '방울' },
-  // 승려: 목탁(mace) → 근접, 금강장(spear) → 직선
-  mace:     { range: 1, pattern: 'diamond', label: '목탁' },
+  // 승려: 목탁(moktak) → 마법, 법륜/법구(mace) → 근접, 금강장(spear) → 직선
+  moktak:   { range: 2, pattern: 'diamond', label: '목탁' },
+  mace:     { range: 1, pattern: 'diamond', label: '법구' },
   spear:    { range: 3, pattern: 'line',    label: '창' },
   // 공용
   bow:      { range: 4, pattern: 'line',    label: '활' },
   sword:    { range: 1, pattern: 'diamond', label: '검' },
-  dagger:   { range: 1, pattern: 'diamond', label: '단검' },
-  default:  { range: 1, pattern: 'diamond', label: '맨손' },
+  axe:      { range: 1, pattern: 'cross',   label: '도끼' },
+  scythe:      { range: 1, pattern: 'cross',   label: '낫' },
+  dagger:      { range: 1, pattern: 'diamond', label: '단검' },
+  greatshield: { range: 1, pattern: 'cross',   label: '거대방패' },
+  sinkal:      { range: 1, pattern: 'diamond', label: '신칼' },
+  default:     { range: 1, pattern: 'diamond', label: '맨손' },
 };
 
 // 무기 이름으로 무기 타입 판별
@@ -28,7 +33,12 @@ export function getWeaponType(weaponName) {
   if (weaponName.includes('창') || weaponName.includes('금강장')) return 'spear';
   if (weaponName.includes('부적')) return 'talisman';
   if (weaponName.includes('방울')) return 'bell';
-  if (weaponName.includes('목탁')) return 'mace';
+  if (weaponName.includes('목탁')) return 'moktak';
+  if (weaponName.includes('법륜') || weaponName.includes('법구')) return 'mace';
+  if (weaponName.includes('도끼')) return 'axe';
+  if (weaponName.includes('낫') || weaponName.includes('수확자') || weaponName.includes('심판자')) return 'scythe';
+  if (weaponName.includes('거대방패')) return 'greatshield';
+  if (weaponName.includes('신칼')) return 'sinkal';
   if (weaponName.includes('검') || weaponName.includes('도')) return 'sword';
   if (weaponName.includes('단검') || weaponName.includes('비수')) return 'dagger';
   return 'default';
@@ -165,8 +175,8 @@ export function createPlayerUnit(char, skills, spawnPos, equippedWeapon, passive
     z: spawnPos.z,
     acted: false,
     moved: false,
-    icon: { '풍수사': '🧙', '무당': '🔮', '승려': '📿', '저승사자': '💀' }[char.class_type] || '📿',
-    imageUrl: `/characters/${{ '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper' }[char.class_type] || 'monk'}_icon.png`,
+    icon: { '풍수사': '🧙', '무당': '🔮', '승려': '📿', '저승사자': '💀', '북채비': '🛡️', '강신무': '🗡️' }[char.class_type] || '📿',
+    imageUrl: `/characters/${{ '풍수사': 'pungsu', '무당': 'mudang', '승려': 'monk', '저승사자': 'reaper', '북채비': 'bukchaebi', '강신무': 'gangsinmu' }[char.class_type] || 'monk'}_icon.png`,
     color: '#4fc3f7',
     weaponType,
     weaponName: equippedWeapon?.name || null,

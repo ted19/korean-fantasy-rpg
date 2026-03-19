@@ -114,6 +114,7 @@ router.get('/info', auth, async (req, res) => {
         enhance_level: e.enhance_level || 0,
         max_enhance: e.max_enhance || 0,
         grade: e.grade || '일반',
+        weapon_subtype: e.weapon_subtype || null,
       };
     });
 

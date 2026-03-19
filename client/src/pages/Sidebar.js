@@ -6,6 +6,8 @@ const CLASS_ICONS = {
   '무당': '🌙',
   '승려': '☸️',
   '저승사자': '💀',
+  '북채비': '🛡️',
+  '강신무': '🗡️',
 };
 
 const CLASS_IMAGES = {
@@ -13,6 +15,8 @@ const CLASS_IMAGES = {
   '무당': '/characters/mudang_icon.png',
   '승려': '/characters/monk_icon.png',
   '저승사자': '/characters/reaper_icon.png',
+  '북채비': '/characters/bukchaebi_icon.png',
+  '강신무': '/characters/gangsinmu_icon.png',
 };
 
 const MENU_ITEMS = [

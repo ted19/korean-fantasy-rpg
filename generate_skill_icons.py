@@ -414,14 +414,23 @@ if __name__ == "__main__":
     summon_skills = cursor.fetchall()
     cursor.execute("SELECT id, name, type, cooldown as required_level FROM monster_skills ORDER BY id")
     monster_skills = cursor.fetchall()
+    # 캐릭터 스킬 트리 (active 노드만)
+    cursor.execute("SELECT id, name, IFNULL(skill_type,'buff') as type, required_level FROM skill_tree_nodes WHERE node_type='active' ORDER BY id")
+    tree_skills = cursor.fetchall()
+    # 기본 스킬 (skills 테이블)
+    cursor.execute("SELECT id, name, type, required_level FROM skills ORDER BY id")
+    basic_skills = cursor.fetchall()
     conn.close()
+
+    SKILL_DIR = "F:/project/game/client/public/skills"
+    os.makedirs(SKILL_DIR, exist_ok=True)
 
     generated = 0
     skipped = 0
 
     print(f"\n{'='*50}")
     print(f"  Skill Icon Generator (Original Pillow Style)")
-    print(f"  용병 {len(merc_skills)} / 소환수 {len(summon_skills)} / 몬스터 {len(monster_skills)}")
+    print(f"  스킬트리 {len(tree_skills)} / 기본스킬 {len(basic_skills)} / 용병 {len(merc_skills)} / 소환수 {len(summon_skills)} / 몬스터 {len(monster_skills)}")
     print(f"{'='*50}\n")
 
     for s in merc_skills:
@@ -458,6 +467,30 @@ if __name__ == "__main__":
         img.save(path2)  # monster_skills/ 폴더에도 저장
         generated += 1
         print(f"  [monster] {s['id']} {s['name']} ({s['type']}, T{tier})")
+
+    # 캐릭터 스킬 트리 아이콘
+    for s in tree_skills:
+        path = os.path.join(SKILL_DIR, f"{s['id']}_icon.png")
+        if os.path.exists(path):
+            skipped += 1; continue
+        colors, style = get_style_and_colors(s['type'], s['name'], s['id'] * 17 + 71)
+        tier = level_to_tier(s['required_level'] or 1)
+        img = draw_skill_icon(colors, style, tier, hash(f"tree_{s['id']}_{s['name']}"))
+        img.save(path)
+        generated += 1
+        print(f"  [tree] {s['id']} {s['name']} ({s['type']}, T{tier})")
+
+    # 기본 스킬 아이콘
+    for s in basic_skills:
+        path = os.path.join(SKILL_DIR, f"{s['id']}_icon.png")
+        if os.path.exists(path):
+            skipped += 1; continue
+        colors, style = get_style_and_colors(s['type'], s['name'], s['id'] * 19 + 83)
+        tier = level_to_tier(s['required_level'] or 1)
+        img = draw_skill_icon(colors, style, tier, hash(f"basic_{s['id']}_{s['name']}"))
+        img.save(path)
+        generated += 1
+        print(f"  [basic] {s['id']} {s['name']} ({s['type']}, T{tier})")
 
     print(f"\n{'='*50}")
     print(f"  완료! 생성: {generated}장, 스킵: {skipped}장")
